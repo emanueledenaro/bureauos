@@ -125,8 +125,9 @@ Goal: a local-first kernel that can initialize a workspace, hold company state, 
 
 - [x] Implement an append-only JSONL audit log at `.bureauos/audit/audit.log`.
 - [x] Event shape: timestamp, actor, action, target, capability, policy result, approval id, artifact id, result, error.
-- [ ] Wire every kernel API call that produces a side effect to write one audit event (`workspace.init` is wired; the rest follow as registries/runs/policy land).
-- [ ] Implement `bureau audit tail` and `bureau audit search` CLI commands.
+- [x] Wire audit events for client/project/opportunity create, every run.* transition, approval.*, workspace.init, agent.stub_execute.
+- [x] Implement `bureau audit tail [-n N]` CLI command.
+- [ ] Implement `bureau audit search <query>` CLI command.
 - [ ] Add a tamper-evidence check: rotate the file daily and store a hash of the previous segment in the header of the next one.
 
 ### 1.8 Run Engine (local-only)
@@ -140,14 +141,14 @@ Goal: a local-first kernel that can initialize a workspace, hold company state, 
 
 ### 1.9 Minimum Viable Kernel Acceptance
 
-- [ ] `bureau init` creates a clean workspace.
-- [ ] A client can be created via CLI.
-- [ ] A project can be created via CLI and linked to the client.
-- [ ] An opportunity can be created via CLI.
-- [ ] A run can be started and produces an artifact and a run report.
-- [ ] Policy allows, denies, or requires approval as configured.
-- [ ] Audit log contains one entry per side effect.
-- [ ] All of the above is covered by tests in CI.
+- [x] `bureau init` creates a clean workspace.
+- [x] A client can be created via CLI.
+- [x] A project can be created via CLI and linked to the client.
+- [x] An opportunity can be created via CLI.
+- [x] A run can be started and produces an artifact and a run report.
+- [x] Policy allows, denies, or requires approval as configured.
+- [x] Audit log contains one entry per side effect.
+- [x] All of the above is covered by tests in CI (`mvk.e2e.test.ts`).
 
 ## Phase 2 — Provider Router
 
@@ -170,11 +171,12 @@ Goal: BureauOS can read and write GitHub state under policy.
 
 - [x] Define the `GitHubClient` contract in `@bureauos/capabilities`.
 - [x] Ship a `StubGitHubClient` so the kernel and CLI can type-check against the contract.
-- [ ] Implement a real Octokit-backed client behind the same interface.
-- [ ] Implement issue read/list/create.
-- [ ] Implement label management (idempotent ensure-labels).
-- [ ] Implement comment write with the `bureauos:artifact` marker.
-- [ ] Implement PR read/create (branch + commit + push + open PR).
+- [x] Implement a real Octokit-backed client (`OctokitGitHubClient`).
+- [x] Implement issue read/list/create.
+- [x] Implement label management (`GITHUB_LABEL_TAXONOMY` + `ensureLabels`).
+- [x] Implement comment write (`commentOnIssue`).
+- [x] Implement PR read/list/create.
+- [x] Add a `bureau github ensure-labels` CLI command.
 - [ ] Implement check parsing and webhook ingestion.
 - [ ] Add a `bureau github sync` CLI command.
 - [ ] Add tests with `nock` or equivalent HTTP recording.
