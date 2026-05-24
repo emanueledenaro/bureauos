@@ -1,5 +1,4 @@
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import {
   ApprovalRegistry,
   ArtifactStore,
@@ -30,10 +29,7 @@ import {
   OpenRouterAdapter,
   ProviderRouter,
 } from "@bureauos/providers";
-import {
-  GITHUB_LABEL_TAXONOMY,
-  OctokitGitHubClient,
-} from "@bureauos/capabilities";
+import { GITHUB_LABEL_TAXONOMY, OctokitGitHubClient } from "@bureauos/capabilities";
 
 const HELP = `bureau ${VERSION}
 
@@ -157,7 +153,9 @@ const handleInit: Handler = async (args) => {
   });
   if (typeof flags === "string") return err(`init: ${flags}`);
   if (flags.help) {
-    process.stdout.write("bureau init [--preset freelancer|agency|startup|operator] [--name <n>] [--force]\n");
+    process.stdout.write(
+      "bureau init [--preset freelancer|agency|startup|operator] [--name <n>] [--force]\n",
+    );
     return 0;
   }
   if (typeof flags.preset === "string" && !PRESETS.has(flags.preset as Preset)) {
@@ -215,7 +213,9 @@ const handleConfigValidate: Handler = async (args) => {
   const path = args[0] ?? workspacePaths(process.cwd()).configFile;
   try {
     const config = await loadConfig(path);
-    process.stdout.write(`bureau: config OK (${config.organization.name}, preset ${config.setup.preset})\n`);
+    process.stdout.write(
+      `bureau: config OK (${config.organization.name}, preset ${config.setup.preset})\n`,
+    );
     return 0;
   } catch (e) {
     return err(`config validate: ${(e as Error).message}`);
@@ -249,7 +249,9 @@ const handleClientCreate: Handler = async (args) => {
   const registry = new ClientRegistry(process.cwd());
   const record = await registry.create({
     name: flags.name,
-    ...(typeof flags.status === "string" ? { status: flags.status as "lead" | "active" | "paused" | "churned" } : {}),
+    ...(typeof flags.status === "string"
+      ? { status: flags.status as "lead" | "active" | "paused" | "churned" }
+      : {}),
     ...(typeof flags.industry === "string" ? { industry: flags.industry } : {}),
   });
   await new AuditLog(workspacePaths(process.cwd()).auditLog).append({
@@ -293,7 +295,18 @@ const handleProjectCreate: Handler = async (args) => {
   const record = await registry.create({
     name: flags.name,
     clientId: client.id,
-    ...(typeof flags.status === "string" ? { status: flags.status as "intake" | "proposal" | "approved" | "in_progress" | "blocked" | "delivered" | "cancelled" } : {}),
+    ...(typeof flags.status === "string"
+      ? {
+          status: flags.status as
+            | "intake"
+            | "proposal"
+            | "approved"
+            | "in_progress"
+            | "blocked"
+            | "delivered"
+            | "cancelled",
+        }
+      : {}),
     ...(typeof flags.repo === "string" ? { repository: flags.repo } : {}),
     ...(typeof flags.stack === "string" ? { stack: flags.stack } : {}),
   });
@@ -303,7 +316,9 @@ const handleProjectCreate: Handler = async (args) => {
     target: record.id,
     result: "ok",
   });
-  process.stdout.write(`bureau: created project ${record.id} (${record.slug}) for client ${client.id}\n`);
+  process.stdout.write(
+    `bureau: created project ${record.id} (${record.slug}) for client ${client.id}\n`,
+  );
   return 0;
 };
 
@@ -331,7 +346,8 @@ const handleOpportunityCreate: Handler = async (args) => {
   if (typeof flags === "string") return err(`opportunity create: ${flags}`);
   if (typeof flags.title !== "string") return err("opportunity create: --title is required");
   if (typeof flags.source !== "string") return err("opportunity create: --source is required");
-  if (typeof flags.client !== "string") return err("opportunity create: --client <slug> is required");
+  if (typeof flags.client !== "string")
+    return err("opportunity create: --client <slug> is required");
   const clientRegistry = new ClientRegistry(process.cwd());
   const client = await clientRegistry.get(flags.client);
   if (!client) return err(`opportunity create: client "${flags.client}" not found`);
@@ -440,8 +456,16 @@ const handleAuditTail: Handler = async (args) => {
     const lines = content.trim().split("\n").filter(Boolean).slice(-limit);
     for (const l of lines) {
       try {
-        const e = JSON.parse(l) as { timestamp: string; actor: string; action: string; target?: string; result: string };
-        process.stdout.write(`${e.timestamp}  ${e.actor.padEnd(18)}  ${e.action.padEnd(28)}  ${e.target ?? ""}  [${e.result}]\n`);
+        const e = JSON.parse(l) as {
+          timestamp: string;
+          actor: string;
+          action: string;
+          target?: string;
+          result: string;
+        };
+        process.stdout.write(
+          `${e.timestamp}  ${e.actor.padEnd(18)}  ${e.action.padEnd(28)}  ${e.target ?? ""}  [${e.result}]\n`,
+        );
       } catch {
         process.stdout.write(`${l}\n`);
       }
@@ -493,23 +517,30 @@ const handleApprovalsList: Handler = async () => {
   return 0;
 };
 
-const handleApprovalsResolve = (status: "approved" | "rejected"): Handler => async (args) => {
-  const id = args[0];
-  if (!id) return err(`approvals ${status}: missing <id>`);
-  const rest = args.slice(1);
-  const flags = parseFlags(rest, { reason: { type: "string" } });
-  if (typeof flags === "string") return err(`approvals ${status}: ${flags}`);
-  const registry = new ApprovalRegistry(process.cwd());
-  await registry.resolve(id, status, "owner", typeof flags.reason === "string" ? flags.reason : "");
-  await new AuditLog(workspacePaths(process.cwd()).auditLog).append({
-    actor: "owner",
-    action: `approval.${status}`,
-    target: id,
-    result: "ok",
-  });
-  process.stdout.write(`bureau: ${status} ${id}\n`);
-  return 0;
-};
+const handleApprovalsResolve =
+  (status: "approved" | "rejected"): Handler =>
+  async (args) => {
+    const id = args[0];
+    if (!id) return err(`approvals ${status}: missing <id>`);
+    const rest = args.slice(1);
+    const flags = parseFlags(rest, { reason: { type: "string" } });
+    if (typeof flags === "string") return err(`approvals ${status}: ${flags}`);
+    const registry = new ApprovalRegistry(process.cwd());
+    await registry.resolve(
+      id,
+      status,
+      "owner",
+      typeof flags.reason === "string" ? flags.reason : "",
+    );
+    await new AuditLog(workspacePaths(process.cwd()).auditLog).append({
+      actor: "owner",
+      action: `approval.${status}`,
+      target: id,
+      result: "ok",
+    });
+    process.stdout.write(`bureau: ${status} ${id}\n`);
+    return 0;
+  };
 
 const handleServe: Handler = async (args) => {
   const flags = parseFlags(args, { port: { type: "number", alias: "p" } });
@@ -531,12 +562,18 @@ const handleProvidersList: Handler = async () => {
   const config = await loadWorkspaceConfig(process.cwd()).catch(() => defaultConfig("freelancer"));
   const router = new ProviderRouter();
   router.register(new OpenAIAdapter("openai-default", { apiKey: process.env["OPENAI_API_KEY"] }));
-  router.register(new AnthropicAdapter("anthropic-default", { apiKey: process.env["ANTHROPIC_API_KEY"] }));
+  router.register(
+    new AnthropicAdapter("anthropic-default", { apiKey: process.env["ANTHROPIC_API_KEY"] }),
+  );
   router.register(new GoogleAdapter("google-default", { apiKey: process.env["GOOGLE_API_KEY"] }));
-  router.register(new OpenRouterAdapter("openrouter-default", { apiKey: process.env["OPENROUTER_API_KEY"] }));
+  router.register(
+    new OpenRouterAdapter("openrouter-default", { apiKey: process.env["OPENROUTER_API_KEY"] }),
+  );
   router.register(new LocalAdapter("local-default", { baseUrl: process.env["LOCAL_MODEL_URL"] }));
   const validations = await router.validate();
-  process.stdout.write(`Configured for: ${config.supreme_coordinator.provider} (${config.supreme_coordinator.model})\n\n`);
+  process.stdout.write(
+    `Configured for: ${config.supreme_coordinator.provider} (${config.supreme_coordinator.model})\n\n`,
+  );
   for (const adapter of router.list()) {
     const v = validations.get(adapter.id);
     const status = v?.ok ? "OK" : `MISSING (${v?.reason ?? ""})`;
@@ -578,7 +615,9 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
       if (!token) return err("github ensure-labels: provide --token or set GITHUB_TOKEN");
       const gh = new OctokitGitHubClient({ token });
       await gh.ensureLabels(flags.owner, flags.repo, GITHUB_LABEL_TAXONOMY);
-      process.stdout.write(`bureau: ensured ${GITHUB_LABEL_TAXONOMY.length} labels on ${flags.owner}/${flags.repo}\n`);
+      process.stdout.write(
+        `bureau: ensured ${GITHUB_LABEL_TAXONOMY.length} labels on ${flags.owner}/${flags.repo}\n`,
+      );
       return 0;
     },
   },

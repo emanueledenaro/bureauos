@@ -27,7 +27,10 @@ describe("PolicyEngine", () => {
 
   it("requires approval for actions disabled by autonomy defaults", async () => {
     const engine = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
-    const d = await engine.evaluate({ action: "merge_pull_requests", actor: "supreme_coordinator" });
+    const d = await engine.evaluate({
+      action: "merge_pull_requests",
+      actor: "supreme_coordinator",
+    });
     expect(d.allowed).toBe(false);
     expect(d.outcome).toBe("require_approval");
   });

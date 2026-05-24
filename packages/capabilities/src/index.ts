@@ -10,7 +10,11 @@ export type {
   GitHubPullRequestRef,
 } from "./github/client.js";
 
-export const GITHUB_LABEL_TAXONOMY: ReadonlyArray<{ name: string; color: string; description: string }> = [
+export const GITHUB_LABEL_TAXONOMY: ReadonlyArray<{
+  name: string;
+  color: string;
+  description: string;
+}> = [
   { name: "type:feature", color: "0e8a16", description: "New feature or capability" },
   { name: "type:bug", color: "d73a4a", description: "Bug or regression" },
   { name: "type:refactor", color: "fbca04", description: "Refactor without behavior change" },

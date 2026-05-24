@@ -163,11 +163,7 @@ export const AGENT_ROLES: readonly AgentDefinition[] = [
     category: "delivery",
     scope: "project",
     description: "Reviews code and delivery artifacts.",
-    responsibilities: [
-      "inspect PR scope",
-      "check test coverage",
-      "verify reviewability",
-    ],
+    responsibilities: ["inspect PR scope", "check test coverage", "verify reviewability"],
     outputs: ["review report", "findings with severity", "merge readiness recommendation"],
     mustNot: ["rubber-stamp generated code", "treat passing tests as sufficient by itself"],
     default_capabilities: ["github", "memory_search", "artifacts"],
@@ -193,11 +189,7 @@ export const AGENT_ROLES: readonly AgentDefinition[] = [
     category: "growth",
     scope: "global",
     description: "Owns the public visibility of the owner and company.",
-    responsibilities: [
-      "define positioning",
-      "maintain brand narrative",
-      "identify proof of work",
-    ],
+    responsibilities: ["define positioning", "maintain brand narrative", "identify proof of work"],
     outputs: ["brand brief", "visibility report", "proof asset list"],
     mustNot: [
       "publish public content without explicit owner request or policy",
@@ -211,13 +203,12 @@ export const AGENT_ROLES: readonly AgentDefinition[] = [
     category: "growth",
     scope: "global",
     description: "Turns company activity into content assets.",
-    responsibilities: [
-      "content strategy and calendar",
-      "founder-led updates",
-      "case study drafts",
-    ],
+    responsibilities: ["content strategy and calendar", "founder-led updates", "case study drafts"],
     outputs: ["content plan", "content draft", "distribution plan"],
-    mustNot: ["publish without explicit owner request or policy", "expose private client information"],
+    mustNot: [
+      "publish without explicit owner request or policy",
+      "expose private client information",
+    ],
     default_capabilities: ["memory_search", "artifacts"],
   },
   {
@@ -226,11 +217,7 @@ export const AGENT_ROLES: readonly AgentDefinition[] = [
     category: "growth",
     scope: "global",
     description: "Manages social distribution.",
-    responsibilities: [
-      "draft X/LinkedIn posts",
-      "publication calendars",
-      "engagement detection",
-    ],
+    responsibilities: ["draft X/LinkedIn posts", "publication calendars", "engagement detection"],
     outputs: ["social post brief", "social draft", "publishing plan"],
     mustNot: ["publish without explicit owner request or channel policy"],
     default_capabilities: ["memory_search", "artifacts"],
@@ -241,11 +228,7 @@ export const AGENT_ROLES: readonly AgentDefinition[] = [
     category: "growth",
     scope: "global",
     description: "Creates visual direction and image-generation briefs.",
-    responsibilities: [
-      "product visual concepts",
-      "ad creative briefs",
-      "image prompt drafts",
-    ],
+    responsibilities: ["product visual concepts", "ad creative briefs", "image prompt drafts"],
     outputs: ["creative brief", "ad visual brief", "image prompt set"],
     mustNot: ["use copyrighted or client-owned assets without permission"],
     default_capabilities: ["memory_search", "artifacts"],
@@ -263,10 +246,7 @@ export const AGENT_ROLES: readonly AgentDefinition[] = [
       "performance monitoring",
     ],
     outputs: ["ad campaign brief", "ad creative brief", "campaign report"],
-    mustNot: [
-      "launch ads without owner request or policy",
-      "change budgets without approval",
-    ],
+    mustNot: ["launch ads without owner request or policy", "change budgets without approval"],
     default_capabilities: ["memory_search", "artifacts"],
   },
   {
@@ -275,11 +255,7 @@ export const AGENT_ROLES: readonly AgentDefinition[] = [
     category: "growth",
     scope: "global",
     description: "Turns offers and positioning into campaigns.",
-    responsibilities: [
-      "campaign planning",
-      "channel selection",
-      "audience segmentation",
-    ],
+    responsibilities: ["campaign planning", "channel selection", "audience segmentation"],
     outputs: ["campaign brief", "channel plan", "landing page brief"],
     mustNot: ["spend money without owner request or policy"],
     default_capabilities: ["memory_search", "artifacts"],
@@ -290,11 +266,7 @@ export const AGENT_ROLES: readonly AgentDefinition[] = [
     category: "growth",
     scope: "global",
     description: "Improves the path from attention to qualified opportunity.",
-    responsibilities: [
-      "funnel analysis",
-      "lead capture review",
-      "objection mapping",
-    ],
+    responsibilities: ["funnel analysis", "lead capture review", "objection mapping"],
     outputs: ["conversion audit", "funnel improvement plan", "lead qualification rules"],
     mustNot: ["change pricing or commercial terms without authority"],
     default_capabilities: ["memory_search", "artifacts"],
@@ -305,15 +277,9 @@ export const AGENT_ROLES: readonly AgentDefinition[] = [
     category: "growth",
     scope: "global",
     description: "Supports opportunity creation and deal progression.",
-    responsibilities: [
-      "lead research",
-      "outreach drafts",
-      "follow-up drafts",
-    ],
+    responsibilities: ["lead research", "outreach drafts", "follow-up drafts"],
     outputs: ["lead qualification report", "outreach draft", "proposal brief"],
-    mustNot: [
-      "contact leads or clients directly without owner request or policy",
-    ],
+    mustNot: ["contact leads or clients directly without owner request or policy"],
     default_capabilities: ["memory_search", "artifacts"],
   },
   {
@@ -359,11 +325,7 @@ export const AGENT_ROLES: readonly AgentDefinition[] = [
     scope: "global",
     description:
       "Classifies and gates legal, privacy, financial, advertising, and client-commitment risk.",
-    responsibilities: [
-      "classify risk",
-      "enforce approval gates",
-      "preserve approval records",
-    ],
+    responsibilities: ["classify risk", "enforce approval gates", "preserve approval records"],
     outputs: ["compliance review", "approval checklist", "risk classification"],
     mustNot: [
       "approve legal, financial, or client commitments by itself",

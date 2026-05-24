@@ -36,14 +36,34 @@ export interface GitHubClientOptions {
 
 export interface GitHubClient {
   readIssue(owner: string, repo: string, number: number): Promise<GitHubIssueRef>;
-  listIssues(owner: string, repo: string, filter?: { state?: "open" | "closed" | "all" }): Promise<readonly GitHubIssueRef[]>;
-  createIssue(owner: string, repo: string, input: { title: string; body: string; labels?: readonly string[] }): Promise<GitHubIssueRef>;
-  ensureLabels(owner: string, repo: string, labels: readonly { name: string; color?: string; description?: string }[]): Promise<void>;
+  listIssues(
+    owner: string,
+    repo: string,
+    filter?: { state?: "open" | "closed" | "all" },
+  ): Promise<readonly GitHubIssueRef[]>;
+  createIssue(
+    owner: string,
+    repo: string,
+    input: { title: string; body: string; labels?: readonly string[] },
+  ): Promise<GitHubIssueRef>;
+  ensureLabels(
+    owner: string,
+    repo: string,
+    labels: readonly { name: string; color?: string; description?: string }[],
+  ): Promise<void>;
   commentOnIssue(owner: string, repo: string, number: number, body: string): Promise<void>;
 
   readPullRequest(owner: string, repo: string, number: number): Promise<GitHubPullRequestRef>;
-  listPullRequests(owner: string, repo: string, filter?: { state?: "open" | "closed" | "all" }): Promise<readonly GitHubPullRequestRef[]>;
-  createPullRequest(owner: string, repo: string, input: { title: string; body: string; head: string; base: string }): Promise<GitHubPullRequestRef>;
+  listPullRequests(
+    owner: string,
+    repo: string,
+    filter?: { state?: "open" | "closed" | "all" },
+  ): Promise<readonly GitHubPullRequestRef[]>;
+  createPullRequest(
+    owner: string,
+    repo: string,
+    input: { title: string; body: string; head: string; base: string },
+  ): Promise<GitHubPullRequestRef>;
 }
 
 /**
@@ -59,12 +79,28 @@ export class StubGitHubClient implements GitHubClient {
     throw new Error("GitHub client is a stub. BACKLOG Phase 3.");
   }
 
-  async readIssue(): Promise<GitHubIssueRef> { return this.notWired(); }
-  async listIssues(): Promise<readonly GitHubIssueRef[]> { return this.notWired(); }
-  async createIssue(): Promise<GitHubIssueRef> { return this.notWired(); }
-  async ensureLabels(): Promise<void> { return this.notWired(); }
-  async commentOnIssue(): Promise<void> { return this.notWired(); }
-  async readPullRequest(): Promise<GitHubPullRequestRef> { return this.notWired(); }
-  async listPullRequests(): Promise<readonly GitHubPullRequestRef[]> { return this.notWired(); }
-  async createPullRequest(): Promise<GitHubPullRequestRef> { return this.notWired(); }
+  async readIssue(): Promise<GitHubIssueRef> {
+    return this.notWired();
+  }
+  async listIssues(): Promise<readonly GitHubIssueRef[]> {
+    return this.notWired();
+  }
+  async createIssue(): Promise<GitHubIssueRef> {
+    return this.notWired();
+  }
+  async ensureLabels(): Promise<void> {
+    return this.notWired();
+  }
+  async commentOnIssue(): Promise<void> {
+    return this.notWired();
+  }
+  async readPullRequest(): Promise<GitHubPullRequestRef> {
+    return this.notWired();
+  }
+  async listPullRequests(): Promise<readonly GitHubPullRequestRef[]> {
+    return this.notWired();
+  }
+  async createPullRequest(): Promise<GitHubPullRequestRef> {
+    return this.notWired();
+  }
 }

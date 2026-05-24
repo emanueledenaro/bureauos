@@ -1,9 +1,4 @@
-import type {
-  RuntimeAdapter,
-  RuntimeContext,
-  RuntimeResult,
-  RuntimeTask,
-} from "../types.js";
+import type { RuntimeAdapter, RuntimeContext, RuntimeResult, RuntimeTask } from "../types.js";
 
 /**
  * Codex runtime adapter.

@@ -151,7 +151,14 @@ export class RunEngine {
         actor: record.created_by,
         action: "run.policy_blocked",
         target: id,
-        policy_result: policyDecision.outcome === "allow" ? "allow" : policyDecision.outcome === "deny" ? "deny" : policyDecision.outcome === "escalate" ? "escalate" : "require_approval",
+        policy_result:
+          policyDecision.outcome === "allow"
+            ? "allow"
+            : policyDecision.outcome === "deny"
+              ? "deny"
+              : policyDecision.outcome === "escalate"
+                ? "escalate"
+                : "require_approval",
         result: "ok",
       });
       return record;
@@ -171,7 +178,10 @@ export class RunEngine {
       body: `# Run Report\n\n- Run: ${id}\n- Type: ${input.type}\n- Trigger: ${input.triggerType} (${input.triggerSource})\n- Scope: ${input.scope}\n\n## Status\n\nStub dispatch completed. No model calls were made. Phase 8 will wire the real development runtime.\n`,
     });
     record.artifacts = [...record.artifacts, artifact.id];
-    await this.persist(record, `# Run ${id}\n\nScope: ${input.scope}\n\nArtifacts: ${record.artifacts.join(", ")}\n`);
+    await this.persist(
+      record,
+      `# Run ${id}\n\nScope: ${input.scope}\n\nArtifacts: ${record.artifacts.join(", ")}\n`,
+    );
     await this.deps.audit.append({
       actor: record.created_by,
       action: "run.artifact_written",
@@ -183,7 +193,10 @@ export class RunEngine {
     record = await this.transition(record, "verifying");
     record = await this.transition(record, "completed");
     record.completed = new Date().toISOString();
-    await this.persist(record, `# Run ${id}\n\nScope: ${input.scope}\n\nArtifacts: ${record.artifacts.join(", ")}\nCompleted: ${record.completed}\n`);
+    await this.persist(
+      record,
+      `# Run ${id}\n\nScope: ${input.scope}\n\nArtifacts: ${record.artifacts.join(", ")}\nCompleted: ${record.completed}\n`,
+    );
     await this.deps.audit.append({
       actor: record.created_by,
       action: "run.completed",
@@ -214,7 +227,10 @@ export class RunEngine {
 
   private async transition(record: RunRecord, status: RunStatus): Promise<RunRecord> {
     const updated: RunRecord = { ...record, status, updated: new Date().toISOString() };
-    await this.persist(updated, `# Run ${record.id}\n\nScope: ${record.scope}\nStatus: ${status}\n`);
+    await this.persist(
+      updated,
+      `# Run ${record.id}\n\nScope: ${record.scope}\nStatus: ${status}\n`,
+    );
     await this.deps.audit.append({
       actor: record.created_by,
       action: `run.${status}`,

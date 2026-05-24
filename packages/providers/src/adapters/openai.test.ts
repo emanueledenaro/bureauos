@@ -17,9 +17,9 @@ describe("OpenAIAdapter", () => {
 
   it("throws NotConfiguredError when generating without a key", async () => {
     const a = new OpenAIAdapter("openai-test", {});
-    await expect(
-      a.generateText({ model: "gpt-5", prompt: "hello" }),
-    ).rejects.toBeInstanceOf(NotConfiguredError);
+    await expect(a.generateText({ model: "gpt-5", prompt: "hello" })).rejects.toBeInstanceOf(
+      NotConfiguredError,
+    );
   });
 
   it("lists default model identifiers", async () => {

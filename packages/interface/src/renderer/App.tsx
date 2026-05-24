@@ -64,16 +64,17 @@ function useDashboard(): {
 
   const refresh = async (): Promise<void> => {
     try {
-      const [pulse, clients, projects, opportunities, approvals, runs, agents, audit] = await Promise.all([
-        Api.pulse(),
-        Api.clients(),
-        Api.projects(),
-        Api.opportunities(),
-        Api.approvals(),
-        Api.runs(),
-        Api.agents(),
-        Api.audit(20),
-      ]);
+      const [pulse, clients, projects, opportunities, approvals, runs, agents, audit] =
+        await Promise.all([
+          Api.pulse(),
+          Api.clients(),
+          Api.projects(),
+          Api.opportunities(),
+          Api.approvals(),
+          Api.runs(),
+          Api.agents(),
+          Api.audit(20),
+        ]);
       setState({
         pulse,
         clients,
@@ -98,7 +99,9 @@ function useDashboard(): {
     let cancelled = false;
     (async () => {
       try {
-        const base = await (window.bureau ? window.bureau.apiUrl() : Promise.resolve("http://127.0.0.1:3737"));
+        const base = await (window.bureau
+          ? window.bureau.apiUrl()
+          : Promise.resolve("http://127.0.0.1:3737"));
         if (cancelled || !base) return;
         es = new EventSource(`${base}/events`);
         es.addEventListener("audit", (ev) => {
@@ -122,7 +125,6 @@ function useDashboard(): {
       clearInterval(t);
       es?.close();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return { state, refresh };
@@ -130,7 +132,15 @@ function useDashboard(): {
 
 // ---------- header ----------
 
-function StatusPill({ tone, label, value }: { tone: "ok" | "warn" | "bad"; label: string; value: string }) {
+function StatusPill({
+  tone,
+  label,
+  value,
+}: {
+  tone: "ok" | "warn" | "bad";
+  label: string;
+  value: string;
+}) {
   const dot = tone === "ok" ? "bg-ok-500" : tone === "warn" ? "bg-warn-500" : "bg-bad-500";
   return (
     <div className="flex flex-col items-start rounded-md border border-neutral-200 bg-white px-3 py-1.5">
@@ -155,7 +165,11 @@ function Header({
   onModeChange: (m: AdaptiveMode) => void;
 }) {
   const now = new Date();
-  const date = now.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  const date = now.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
   const time = now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   const modes: AdaptiveMode[] = ["portfolio", "today", "goals"];
   return (
@@ -175,7 +189,9 @@ function Header({
                   : "text-neutral-400 hover:text-neutral-600",
               )}
             >
-              {m[0]?.toUpperCase()}{m.slice(1)}{i < modes.length - 1 ? " /" : ""}
+              {m[0]?.toUpperCase()}
+              {m.slice(1)}
+              {i < modes.length - 1 ? " /" : ""}
             </button>
           ))}
         </div>
@@ -200,17 +216,29 @@ function Header({
 
 // ---------- sidebar ----------
 
-function SidebarLink({ label, badge, active }: { label: string; badge?: number; active?: boolean }) {
+function SidebarLink({
+  label,
+  badge,
+  active,
+}: {
+  label: string;
+  badge?: number;
+  active?: boolean;
+}) {
   return (
     <div
       className={classes(
         "flex items-center justify-between rounded-md px-3 py-2 text-sm",
-        active ? "bg-neutral-100 font-medium text-neutral-900" : "text-neutral-600 hover:bg-neutral-100",
+        active
+          ? "bg-neutral-100 font-medium text-neutral-900"
+          : "text-neutral-600 hover:bg-neutral-100",
       )}
     >
       <span>{label}</span>
       {badge !== undefined && badge > 0 ? (
-        <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-xs text-neutral-700">{badge}</span>
+        <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-xs text-neutral-700">
+          {badge}
+        </span>
       ) : null}
     </div>
   );
@@ -271,7 +299,9 @@ function ProjectCard({ p }: { p: ProjectRecord }) {
         </span>
       </div>
       <div className="mt-1 flex items-center gap-2 text-[11px] text-neutral-500">
-        <span className={classes("h-1.5 w-1.5 rounded-full", statusTone[p.status] ?? "bg-neutral-300")} />
+        <span
+          className={classes("h-1.5 w-1.5 rounded-full", statusTone[p.status] ?? "bg-neutral-300")}
+        />
         {p.stack || "stack tbd"} {p.repository ? `- ${p.repository}` : ""}
       </div>
       <div className="mt-2 h-1.5 w-full rounded bg-neutral-100">
@@ -293,7 +323,9 @@ function PortfolioMap({ state }: { state: DashboardState }) {
     return map;
   }, [state.clients, state.projects]);
 
-  const columns = Array.from(byClient.entries()).filter(([, v]) => v.projects.length > 0 || v.client);
+  const columns = Array.from(byClient.entries()).filter(
+    ([, v]) => v.projects.length > 0 || v.client,
+  );
   const hasContent = columns.some(([, v]) => v.projects.length > 0);
 
   return (
@@ -301,7 +333,9 @@ function PortfolioMap({ state }: { state: DashboardState }) {
       <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
         <div>
           <h2 className="text-sm font-semibold text-neutral-900">Portfolio Operating Room</h2>
-          <p className="text-xs text-neutral-500">Live portfolio view of workstreams, projects, and autonomous execution.</p>
+          <p className="text-xs text-neutral-500">
+            Live portfolio view of workstreams, projects, and autonomous execution.
+          </p>
         </div>
         <div className="flex gap-1 text-xs">
           {["Portfolio Map", "Workload", "Gantt", "Kanban"].map((t, i) => (
@@ -320,8 +354,10 @@ function PortfolioMap({ state }: { state: DashboardState }) {
       <div className="p-4">
         {!hasContent ? (
           <div className="rounded-md border border-dashed border-neutral-200 p-6 text-center text-sm text-neutral-500">
-            No projects yet. Run <code className="rounded bg-neutral-100 px-1">bureau client create</code> and{" "}
-            <code className="rounded bg-neutral-100 px-1">bureau project create</code> to populate the portfolio.
+            No projects yet. Run{" "}
+            <code className="rounded bg-neutral-100 px-1">bureau client create</code> and{" "}
+            <code className="rounded bg-neutral-100 px-1">bureau project create</code> to populate
+            the portfolio.
           </div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -333,7 +369,9 @@ function PortfolioMap({ state }: { state: DashboardState }) {
                   </div>
                   <div className="text-[10px] text-neutral-500">{projects.length} projects</div>
                 </div>
-                {projects.map((p) => <ProjectCard key={p.id} p={p} />)}
+                {projects.map((p) => (
+                  <ProjectCard key={p.id} p={p} />
+                ))}
               </div>
             ))}
           </div>
@@ -370,23 +408,37 @@ function OperationsTimeline({ events }: { events: AuditEvent[] }) {
       <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
         <div>
           <h2 className="text-sm font-semibold text-neutral-900">Live Operations Timeline</h2>
-          <p className="text-xs text-neutral-500">Real-time autonomous activity across the company.</p>
+          <p className="text-xs text-neutral-500">
+            Real-time autonomous activity across the company.
+          </p>
         </div>
         <span className="text-xs text-neutral-500">View all activity</span>
       </div>
       <ol className="divide-y divide-neutral-100 px-4 py-2">
         {events.length === 0 ? (
-          <li className="py-3 text-xs text-neutral-500">No events yet. Run <code>bureau init</code> in the workspace.</li>
+          <li className="py-3 text-xs text-neutral-500">
+            No events yet. Run <code>bureau init</code> in the workspace.
+          </li>
         ) : (
-          events.slice(-10).reverse().map((e, i) => (
-            <li key={i} className="flex items-center gap-3 py-2 text-xs">
-              <span className="text-neutral-500">{timeAgo(e.timestamp)}</span>
-              <span className={classes("h-1.5 w-1.5 rounded-full", e.result === "ok" ? "bg-ok-500" : "bg-bad-500")} />
-              <span className="font-medium text-neutral-900">{e.action}</span>
-              <span className="text-neutral-500">{e.target ?? ""}</span>
-              <span className="ml-auto rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] text-neutral-600">{e.actor}</span>
-            </li>
-          ))
+          events
+            .slice(-10)
+            .reverse()
+            .map((e, i) => (
+              <li key={i} className="flex items-center gap-3 py-2 text-xs">
+                <span className="text-neutral-500">{timeAgo(e.timestamp)}</span>
+                <span
+                  className={classes(
+                    "h-1.5 w-1.5 rounded-full",
+                    e.result === "ok" ? "bg-ok-500" : "bg-bad-500",
+                  )}
+                />
+                <span className="font-medium text-neutral-900">{e.action}</span>
+                <span className="text-neutral-500">{e.target ?? ""}</span>
+                <span className="ml-auto rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] text-neutral-600">
+                  {e.actor}
+                </span>
+              </li>
+            ))
         )}
       </ol>
     </section>
@@ -411,15 +463,21 @@ function CoordinatorChat() {
         </div>
         <div className="space-y-2 rounded-md border border-neutral-200 p-3">
           <div className="text-neutral-900">
-            Opportunity intake will be implemented in Phase 9 (Supreme Coordinator agent).
-            For now, the kernel writes structured intake artifacts when you run{" "}
+            Opportunity intake will be implemented in Phase 9 (Supreme Coordinator agent). For now,
+            the kernel writes structured intake artifacts when you run{" "}
             <code className="rounded bg-neutral-100 px-1">bureau opportunity create</code>.
           </div>
         </div>
         <div className="flex gap-2">
-          <button className="rounded-md border border-neutral-200 px-2 py-1 text-[11px] text-neutral-700">Create proposal</button>
-          <button className="rounded-md border border-neutral-200 px-2 py-1 text-[11px] text-neutral-700">Launch discovery</button>
-          <button className="rounded-md border border-neutral-200 px-2 py-1 text-[11px] text-neutral-700">Prepare estimate</button>
+          <button className="rounded-md border border-neutral-200 px-2 py-1 text-[11px] text-neutral-700">
+            Create proposal
+          </button>
+          <button className="rounded-md border border-neutral-200 px-2 py-1 text-[11px] text-neutral-700">
+            Launch discovery
+          </button>
+          <button className="rounded-md border border-neutral-200 px-2 py-1 text-[11px] text-neutral-700">
+            Prepare estimate
+          </button>
         </div>
       </div>
     </section>
@@ -436,7 +494,9 @@ function PendingApprovals({
   return (
     <section className="rounded-lg border border-neutral-200 bg-white">
       <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
-        <div className="text-sm font-semibold text-neutral-900">Pending Approvals ({approvals.length})</div>
+        <div className="text-sm font-semibold text-neutral-900">
+          Pending Approvals ({approvals.length})
+        </div>
         <span className="text-xs text-neutral-500">View all</span>
       </div>
       <div className="divide-y divide-neutral-100">
@@ -446,7 +506,9 @@ function PendingApprovals({
           approvals.map((a) => (
             <div key={a.id} className="space-y-2 px-4 py-3 text-xs">
               <div className="font-medium text-neutral-900">{a.action}</div>
-              <div className="text-neutral-500">{a.target} - {a.scope}</div>
+              <div className="text-neutral-500">
+                {a.target} - {a.scope}
+              </div>
               <div className="flex gap-2">
                 <button
                   className="rounded-md bg-ok-500 px-2 py-1 text-[11px] font-medium text-white hover:bg-ok-600"
@@ -484,7 +546,13 @@ function KpiCard({ label, value, delta }: { label: string; value: string; delta?
   );
 }
 
-function RevenuePulse({ pulse, opportunities }: { pulse?: CompanyPulse; opportunities: OpportunityRecord[] }) {
+function RevenuePulse({
+  pulse,
+  opportunities,
+}: {
+  pulse?: CompanyPulse;
+  opportunities: OpportunityRecord[];
+}) {
   const pipeline = pulse?.revenue.pipeline_value ?? 0;
   const active = pulse?.revenue.active_opportunities ?? 0;
   const margin = opportunities.length
@@ -521,7 +589,9 @@ function AgentLayer({ agents }: { agents: AgentDefinition[] }) {
       <div className="flex items-center justify-between px-4 py-2">
         <div>
           <div className="text-sm font-semibold text-neutral-900">Agent Layer</div>
-          <div className="text-[10px] text-neutral-500">Autonomous teams executing across functions.</div>
+          <div className="text-[10px] text-neutral-500">
+            Autonomous teams executing across functions.
+          </div>
         </div>
         <span className="text-xs text-neutral-500">Manage Agents</span>
       </div>
@@ -551,8 +621,12 @@ function AgentLayer({ agents }: { agents: AgentDefinition[] }) {
 function GoalsView({ state }: { state: DashboardState }) {
   const opps = state.opportunities;
   const totalValue = opps.reduce((acc, o) => acc + (o.expected_value || 0), 0);
-  const wonValue = opps.filter((o) => o.status === "won").reduce((acc, o) => acc + (o.expected_value || 0), 0);
-  const margin = opps.length ? opps.reduce((acc, o) => acc + (o.expected_margin || 0), 0) / opps.length : 0;
+  const wonValue = opps
+    .filter((o) => o.status === "won")
+    .reduce((acc, o) => acc + (o.expected_value || 0), 0);
+  const margin = opps.length
+    ? opps.reduce((acc, o) => acc + (o.expected_margin || 0), 0) / opps.length
+    : 0;
 
   return (
     <section className="rounded-lg border border-neutral-200 bg-white">
@@ -563,12 +637,20 @@ function GoalsView({ state }: { state: DashboardState }) {
       <div className="grid gap-4 p-4 md:grid-cols-2">
         <div className="rounded-md border border-neutral-200 p-3">
           <div className="text-[11px] uppercase tracking-wide text-neutral-500">Pipeline</div>
-          <div className="mt-1 font-mono text-2xl font-semibold text-neutral-900">{formatMoney(totalValue)}</div>
-          <div className="text-xs text-neutral-500">{opps.length} opportunities across {state.clients.length} clients</div>
+          <div className="mt-1 font-mono text-2xl font-semibold text-neutral-900">
+            {formatMoney(totalValue)}
+          </div>
+          <div className="text-xs text-neutral-500">
+            {opps.length} opportunities across {state.clients.length} clients
+          </div>
         </div>
         <div className="rounded-md border border-neutral-200 p-3">
-          <div className="text-[11px] uppercase tracking-wide text-neutral-500">Won (cumulative)</div>
-          <div className="mt-1 font-mono text-2xl font-semibold text-neutral-900">{formatMoney(wonValue)}</div>
+          <div className="text-[11px] uppercase tracking-wide text-neutral-500">
+            Won (cumulative)
+          </div>
+          <div className="mt-1 font-mono text-2xl font-semibold text-neutral-900">
+            {formatMoney(wonValue)}
+          </div>
           <div className="text-xs text-neutral-500">Expected margin {Math.round(margin)}%</div>
         </div>
       </div>
@@ -581,7 +663,9 @@ function GoalsView({ state }: { state: DashboardState }) {
             opps.map((o) => (
               <li key={o.id} className="flex justify-between rounded bg-neutral-50 px-2 py-1">
                 <span>{o.title}</span>
-                <span className="text-neutral-500">{o.status} - {formatMoney(o.expected_value || 0)}</span>
+                <span className="text-neutral-500">
+                  {o.status} - {formatMoney(o.expected_value || 0)}
+                </span>
               </li>
             ))
           )}
@@ -592,7 +676,9 @@ function GoalsView({ state }: { state: DashboardState }) {
 }
 
 function TodayView({ state }: { state: DashboardState }) {
-  const blockedRuns = state.runs.filter((r) => r.status === "blocked" || r.status === "needs_human");
+  const blockedRuns = state.runs.filter(
+    (r) => r.status === "blocked" || r.status === "needs_human",
+  );
   const blockedProjects = state.projects.filter((p) => p.status === "blocked");
   return (
     <section className="rounded-lg border border-neutral-200 bg-white">
@@ -602,7 +688,9 @@ function TodayView({ state }: { state: DashboardState }) {
       </div>
       <div className="space-y-4 p-4 text-xs">
         <div>
-          <div className="font-medium text-neutral-700">Approvals waiting ({state.approvals.length})</div>
+          <div className="font-medium text-neutral-700">
+            Approvals waiting ({state.approvals.length})
+          </div>
           {state.approvals.length === 0 ? (
             <div className="mt-1 text-neutral-500">Nothing waiting.</div>
           ) : (
@@ -616,16 +704,22 @@ function TodayView({ state }: { state: DashboardState }) {
           )}
         </div>
         <div>
-          <div className="font-medium text-neutral-700">Blocked work ({blockedRuns.length + blockedProjects.length})</div>
+          <div className="font-medium text-neutral-700">
+            Blocked work ({blockedRuns.length + blockedProjects.length})
+          </div>
           {blockedRuns.length + blockedProjects.length === 0 ? (
             <div className="mt-1 text-neutral-500">No blockers.</div>
           ) : (
             <ul className="mt-1 space-y-1">
               {blockedRuns.map((r) => (
-                <li key={r.id} className="rounded bg-neutral-50 px-2 py-1">Run {r.id} - {r.status}: {r.scope}</li>
+                <li key={r.id} className="rounded bg-neutral-50 px-2 py-1">
+                  Run {r.id} - {r.status}: {r.scope}
+                </li>
               ))}
               {blockedProjects.map((p) => (
-                <li key={p.id} className="rounded bg-neutral-50 px-2 py-1">Project {p.name} blocked</li>
+                <li key={p.id} className="rounded bg-neutral-50 px-2 py-1">
+                  Project {p.name} blocked
+                </li>
               ))}
             </ul>
           )}
@@ -669,7 +763,8 @@ export function App() {
         <AgentLayer agents={state.agents} />
         {state.error && (
           <div className="border-t border-bad-500 bg-bad-500/10 px-4 py-2 text-xs text-bad-600">
-            API server unreachable: {state.error} - start it with <code>bureau serve</code> or launch the desktop app.
+            API server unreachable: {state.error} - start it with <code>bureau serve</code> or
+            launch the desktop app.
           </div>
         )}
       </div>

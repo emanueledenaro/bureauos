@@ -68,10 +68,16 @@ function unauthorized(res: ServerResponse): void {
 async function readJson(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
     let raw = "";
-    req.on("data", (chunk: Buffer) => { raw += chunk.toString("utf8"); });
+    req.on("data", (chunk: Buffer) => {
+      raw += chunk.toString("utf8");
+    });
     req.on("end", () => {
       if (!raw) return resolve({});
-      try { resolve(JSON.parse(raw)); } catch (e) { reject(e); }
+      try {
+        resolve(JSON.parse(raw));
+      } catch (e) {
+        reject(e);
+      }
     });
     req.on("error", reject);
   });
@@ -120,16 +126,20 @@ const ROUTES: Record<string, RouteHandler> = {
       },
       revenue: {
         pipeline_value: pipelineValue,
-        active_opportunities: opportunities.filter((o) => o.status !== "won" && o.status !== "lost").length,
+        active_opportunities: opportunities.filter((o) => o.status !== "won" && o.status !== "lost")
+          .length,
       },
     });
   },
 
   "GET /clients": async ({ res, options }) => ok(res, await deps(options).clients.list()),
   "GET /projects": async ({ res, options }) => ok(res, await deps(options).projects.list()),
-  "GET /opportunities": async ({ res, options }) => ok(res, await deps(options).opportunities.list()),
-  "GET /approvals": async ({ res, options }) => ok(res, await deps(options).approvals.listPending()),
-  "GET /approvals/resolved": async ({ res, options }) => ok(res, await deps(options).approvals.listResolved()),
+  "GET /opportunities": async ({ res, options }) =>
+    ok(res, await deps(options).opportunities.list()),
+  "GET /approvals": async ({ res, options }) =>
+    ok(res, await deps(options).approvals.listPending()),
+  "GET /approvals/resolved": async ({ res, options }) =>
+    ok(res, await deps(options).approvals.listResolved()),
   "GET /runs": async ({ res, options }) => ok(res, await deps(options).runs.list()),
   "GET /artifacts": async ({ res, options }) => ok(res, await deps(options).artifacts.list()),
   "GET /agents": ({ res }) => ok(res, AGENT_ROLES),
@@ -139,9 +149,16 @@ const ROUTES: Record<string, RouteHandler> = {
     try {
       const content = await readFile(workspacePaths(options.workspaceRoot).auditLog, "utf8");
       const lines = content.trim().split("\n").filter(Boolean).slice(-n);
-      ok(res, lines.map((l) => {
-        try { return JSON.parse(l); } catch { return { raw: l }; }
-      }));
+      ok(
+        res,
+        lines.map((l) => {
+          try {
+            return JSON.parse(l);
+          } catch {
+            return { raw: l };
+          }
+        }),
+      );
     } catch {
       ok(res, []);
     }
@@ -207,7 +224,11 @@ const ROUTES: Record<string, RouteHandler> = {
   },
 
   "POST /approvals/resolve": async ({ res, options, req }) => {
-    const body = (await readJson(req)) as { id?: string; status?: "approved" | "rejected"; reason?: string };
+    const body = (await readJson(req)) as {
+      id?: string;
+      status?: "approved" | "rejected";
+      reason?: string;
+    };
     if (!body.id || !body.status) {
       res.statusCode = 400;
       ok(res, { error: "id and status required" }, 400);

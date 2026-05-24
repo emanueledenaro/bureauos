@@ -27,7 +27,10 @@ export class LocalAdapter implements ProviderAdapter {
 
   async validateCredentials(): Promise<ValidationResult> {
     if (!this.options.baseUrl) {
-      return { ok: false, reason: "local adapter requires a baseUrl (e.g. http://localhost:11434)" };
+      return {
+        ok: false,
+        reason: "local adapter requires a baseUrl (e.g. http://localhost:11434)",
+      };
     }
     return { ok: true };
   }

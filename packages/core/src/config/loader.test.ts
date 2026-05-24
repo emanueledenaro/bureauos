@@ -27,19 +27,13 @@ describe("loadConfig", () => {
 
   it("loads a full preset choice", async () => {
     const path = join(dir, "bureauos.yaml");
-    await writeFile(
-      path,
-      `organization:\n  name: "Acme"\nsetup:\n  preset: "startup"\n`,
-      "utf8",
-    );
+    await writeFile(path, `organization:\n  name: "Acme"\nsetup:\n  preset: "startup"\n`, "utf8");
     const config = await loadConfig(path);
     expect(config.setup.preset).toBe("startup");
   });
 
   it("throws ConfigError when the file does not exist", async () => {
-    await expect(loadConfig(join(dir, "missing.yaml"))).rejects.toBeInstanceOf(
-      ConfigError,
-    );
+    await expect(loadConfig(join(dir, "missing.yaml"))).rejects.toBeInstanceOf(ConfigError);
   });
 
   it("throws ConfigError when the YAML is structurally invalid", async () => {
@@ -56,11 +50,7 @@ describe("loadConfig", () => {
 
   it("throws ConfigError when a field has the wrong type", async () => {
     const path = join(dir, "bureauos.yaml");
-    await writeFile(
-      path,
-      `autonomy:\n  merge_pull_requests: "yes"\n`,
-      "utf8",
-    );
+    await writeFile(path, `autonomy:\n  merge_pull_requests: "yes"\n`, "utf8");
     await expect(loadConfig(path)).rejects.toBeInstanceOf(ConfigError);
   });
 });

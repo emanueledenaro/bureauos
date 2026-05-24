@@ -1,7 +1,12 @@
 import type { BureauConfig } from "../config/schema.js";
 import { ApprovalRegistry } from "../registries/approval.js";
 
-export type PolicyOutcome = "allow" | "deny" | "require_approval" | "require_more_context" | "escalate";
+export type PolicyOutcome =
+  | "allow"
+  | "deny"
+  | "require_approval"
+  | "require_more_context"
+  | "escalate";
 
 export type RiskClass = "low" | "medium" | "high" | "critical";
 
@@ -127,7 +132,8 @@ export class PolicyEngine {
     }
 
     if (GROWTH_ACTIONS.has(input.action)) {
-      const allowed = (this.config.growth_autonomy as Record<string, boolean>)[input.action] === true;
+      const allowed =
+        (this.config.growth_autonomy as Record<string, boolean>)[input.action] === true;
       if (allowed) {
         return {
           ...base,

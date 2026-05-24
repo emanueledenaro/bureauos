@@ -17,14 +17,15 @@ export interface DecisionInput {
  * Append a structured decision record to `DECISIONS.md`. Cross-links to the
  * originating run when present.
  */
-export async function appendDecision(
-  workspaceRoot: string,
-  input: DecisionInput,
-): Promise<string> {
+export async function appendDecision(workspaceRoot: string, input: DecisionInput): Promise<string> {
   const path = workspacePaths(workspaceRoot).decisionsLog;
   const exists = await fileExists(path);
   if (!exists) {
-    await appendFile(path, "# Decisions\n\nDurable decision records. Append-only by convention.\n\n", "utf8");
+    await appendFile(
+      path,
+      "# Decisions\n\nDurable decision records. Append-only by convention.\n\n",
+      "utf8",
+    );
   }
   const ts = new Date().toISOString();
   const lines = [

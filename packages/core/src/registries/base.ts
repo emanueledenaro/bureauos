@@ -21,7 +21,9 @@ export interface ParsedDocument<T extends FrontMatter = FrontMatter> {
 
 const FM_RE = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/;
 
-export function parseFrontMatter<T extends FrontMatter = FrontMatter>(raw: string): ParsedDocument<T> {
+export function parseFrontMatter<T extends FrontMatter = FrontMatter>(
+  raw: string,
+): ParsedDocument<T> {
   const m = FM_RE.exec(raw);
   if (!m) {
     return { front: {} as T, body: raw };
@@ -92,9 +94,7 @@ export async function readDoc<T extends FrontMatter = FrontMatter>(
 export async function listDocs(dir: string, suffix = ".md"): Promise<string[]> {
   if (!(await fileExists(dir))) return [];
   const entries = await readdir(dir, { withFileTypes: true });
-  return entries
-    .filter((e) => e.isFile() && e.name.endsWith(suffix))
-    .map((e) => join(dir, e.name));
+  return entries.filter((e) => e.isFile() && e.name.endsWith(suffix)).map((e) => join(dir, e.name));
 }
 
 export async function listDirs(dir: string): Promise<string[]> {

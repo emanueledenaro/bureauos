@@ -1,0 +1,20 @@
+node_modules
+dist
+out
+out-main
+out-renderer
+.bureauos
+pnpm-lock.yaml
+coverage
+*.webp
+*.png
+
+# Authored Markdown — keep as-is so Prettier doesn't touch wrapping or links.
+docs
+templates
+README.md
+BACKLOG.md
+CONTRIBUTING.md
+SECURITY.md
+CLAUDE.md
+**/README.md

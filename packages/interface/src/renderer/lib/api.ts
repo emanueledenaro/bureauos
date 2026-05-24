@@ -21,7 +21,8 @@ async function getBase(): Promise<string> {
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const base = await getBase();
-  if (!base) throw new Error("API server is not running. Run `bureau serve` or start the desktop app.");
+  if (!base)
+    throw new Error("API server is not running. Run `bureau serve` or start the desktop app.");
   const res = await fetch(`${base}${path}`, {
     ...init,
     headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
@@ -48,25 +49,57 @@ export interface CompanyPulse {
 }
 
 export interface ClientRecord {
-  id: string; slug: string; name: string; status: string; industry: string;
+  id: string;
+  slug: string;
+  name: string;
+  status: string;
+  industry: string;
 }
 export interface ProjectRecord {
-  id: string; slug: string; name: string; client_id: string; status: string; repository: string; stack: string;
+  id: string;
+  slug: string;
+  name: string;
+  client_id: string;
+  status: string;
+  repository: string;
+  stack: string;
 }
 export interface OpportunityRecord {
-  id: string; title: string; client_id: string; status: string; expected_value: number; expected_margin: number;
+  id: string;
+  title: string;
+  client_id: string;
+  status: string;
+  expected_value: number;
+  expected_margin: number;
 }
 export interface ApprovalRecord {
-  id: string; action: string; actor: string; target: string; scope: string; status: string;
+  id: string;
+  action: string;
+  actor: string;
+  target: string;
+  scope: string;
+  status: string;
 }
 export interface RunRecord {
-  id: string; type: string; status: string; scope: string; created: string;
+  id: string;
+  type: string;
+  status: string;
+  scope: string;
+  created: string;
 }
 export interface AuditEvent {
-  timestamp: string; actor: string; action: string; target?: string; result: string;
+  timestamp: string;
+  actor: string;
+  action: string;
+  target?: string;
+  result: string;
 }
 export interface AgentDefinition {
-  id: string; role: string; category: string; scope: string; description: string;
+  id: string;
+  role: string;
+  category: string;
+  scope: string;
+  description: string;
 }
 
 export const Api = {

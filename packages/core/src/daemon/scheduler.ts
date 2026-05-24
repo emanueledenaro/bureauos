@@ -94,7 +94,9 @@ export class Scheduler {
             run,
             scope: job.scope,
           });
-          this.log(`scheduler: ran ${job.name} -> ${run.id} (${run.status}, ${result.steps.length} steps)`);
+          this.log(
+            `scheduler: ran ${job.name} -> ${run.id} (${run.status}, ${result.steps.length} steps)`,
+          );
         } else {
           this.log(`scheduler: ran ${job.name} -> ${run.id} (${run.status})`);
         }

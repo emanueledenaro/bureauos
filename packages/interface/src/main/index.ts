@@ -6,7 +6,7 @@ import { startApiServer, loadConfig, workspacePaths, type ApiServer } from "@bur
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-let mainWindow: BrowserWindow | null = null;
+let _mainWindow: BrowserWindow | null = null;
 let apiServer: ApiServer | null = null;
 
 async function bootApiServer(): Promise<void> {
@@ -60,11 +60,11 @@ ipcMain.handle("bureau:open-external", (_e, url: string) => shell.openExternal(u
 
 app.whenReady().then(async () => {
   await bootApiServer();
-  mainWindow = createWindow();
+  _mainWindow = createWindow();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      mainWindow = createWindow();
+      _mainWindow = createWindow();
     }
   });
 });

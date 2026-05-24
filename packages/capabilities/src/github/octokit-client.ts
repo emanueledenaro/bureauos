@@ -78,7 +78,11 @@ export class OctokitGitHubClient implements GitHubClient {
     await this.octokit.issues.createComment({ owner, repo, issue_number: number, body });
   }
 
-  async readPullRequest(owner: string, repo: string, number: number): Promise<GitHubPullRequestRef> {
+  async readPullRequest(
+    owner: string,
+    repo: string,
+    number: number,
+  ): Promise<GitHubPullRequestRef> {
     const r = await this.octokit.pulls.get({ owner, repo, pull_number: number });
     return mapPullRequest(owner, repo, r.data as unknown as RawPull);
   }
@@ -133,7 +137,7 @@ function mapIssue(owner: string, repo: string, raw: RawIssue): GitHubIssueRef {
     title: raw.title,
     url: raw.html_url,
     state: raw.state === "closed" ? "closed" : "open",
-    labels: raw.labels.map((l) => (typeof l === "string" ? l : l.name ?? "")).filter(Boolean),
+    labels: raw.labels.map((l) => (typeof l === "string" ? l : (l.name ?? ""))).filter(Boolean),
   };
 }
 

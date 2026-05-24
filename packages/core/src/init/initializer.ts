@@ -49,11 +49,7 @@ async function ensureDir(path: string): Promise<void> {
   await mkdir(path, { recursive: true });
 }
 
-async function writeFileFresh(
-  path: string,
-  content: string,
-  created: string[],
-): Promise<void> {
+async function writeFileFresh(path: string, content: string, created: string[]): Promise<void> {
   await ensureDir(dirname(path));
   await writeFile(path, content, "utf8");
   created.push(path);
@@ -97,10 +93,22 @@ export async function initWorkspace(options: InitOptions): Promise<InitResult> {
   await writeFileFresh(paths.policiesMemory, policies(config), created);
 
   const indexFiles: ReadonlyArray<readonly [string, string, string]> = [
-    [paths.clientsIndex, "Clients Index", "List of active clients. Profiles live in `clients/<slug>/CLIENT.md`."],
-    [paths.projectsIndex, "Projects Index", "List of active projects. Project memory lives in `projects/<slug>/`."],
+    [
+      paths.clientsIndex,
+      "Clients Index",
+      "List of active clients. Profiles live in `clients/<slug>/CLIENT.md`.",
+    ],
+    [
+      paths.projectsIndex,
+      "Projects Index",
+      "List of active projects. Project memory lives in `projects/<slug>/`.",
+    ],
     [paths.decisionsLog, "Decisions", "Durable decision records. Append-only by convention."],
-    [paths.activeWorkLog, "Active Work", "Snapshot of work in progress. Updated by the coordinator."],
+    [
+      paths.activeWorkLog,
+      "Active Work",
+      "Snapshot of work in progress. Updated by the coordinator.",
+    ],
     [paths.risksLog, "Risks", "Open risks at company, client, and project level."],
     [paths.brandMemory, "Brand", "Owner and company positioning."],
     [paths.offersMemory, "Offers", "Active offers and packages."],

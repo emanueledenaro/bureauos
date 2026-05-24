@@ -81,7 +81,10 @@ describe("initWorkspace", () => {
     await initWorkspace({ root: dir });
     const paths = workspacePaths(dir);
     const log = await readFile(paths.auditLog, "utf8");
-    const entries = log.trim().split("\n").map((l) => JSON.parse(l));
+    const entries = log
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l));
     expect(entries).toHaveLength(1);
     expect(entries[0].action).toBe("workspace.init");
     expect(entries[0].result).toBe("ok");

@@ -1,14 +1,7 @@
 import { join } from "node:path";
 import { newId } from "../ids.js";
 import { workspacePaths } from "../paths.js";
-import {
-  ensureDir,
-  fileExists,
-  listDocs,
-  readDoc,
-  writeDoc,
-  type FrontMatter,
-} from "./base.js";
+import { ensureDir, fileExists, listDocs, readDoc, writeDoc, type FrontMatter } from "./base.js";
 
 export type OpportunityStatus =
   | "intake"

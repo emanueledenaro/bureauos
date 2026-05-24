@@ -1,12 +1,10 @@
 ## Summary
 
-
 ## Linked Issue
-
 
 ## What Changed
 
-- 
+-
 
 ## Verification
 
@@ -27,4 +25,3 @@
 - [ ] Tests or verification notes are included.
 - [ ] Any policy or autonomy impact is documented.
 - [ ] Any decision worth preserving has a decision record.
-

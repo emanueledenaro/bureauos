@@ -98,7 +98,9 @@ export class ArtifactStore {
     return { record: doc.front, body: doc.body };
   }
 
-  async list(filter: Partial<Pick<ArtifactRecord, "type" | "run_id" | "client_id" | "project_id">> = {}): Promise<ArtifactRecord[]> {
+  async list(
+    filter: Partial<Pick<ArtifactRecord, "type" | "run_id" | "client_id" | "project_id">> = {},
+  ): Promise<ArtifactRecord[]> {
     const files = await listDocs(this.paths().artifactsDir);
     const out: ArtifactRecord[] = [];
     for (const f of files) {

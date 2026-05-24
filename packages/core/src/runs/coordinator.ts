@@ -4,11 +4,7 @@ import type { ArtifactStore } from "../artifacts/store.js";
 import type { AuditLog } from "../audit/log.js";
 import type { PolicyEngine } from "../policy/engine.js";
 import { workspacePaths } from "../paths.js";
-import {
-  ensureDir,
-  writeDoc,
-  type FrontMatter,
-} from "../registries/base.js";
+import { ensureDir, writeDoc, type FrontMatter } from "../registries/base.js";
 import { join } from "node:path";
 import { newId } from "../ids.js";
 import type { RunRecord, RunType } from "./engine.js";
@@ -75,17 +71,16 @@ export async function dispatchRun(
   deps: CoordinatorDeps,
   input: DispatchInput,
 ): Promise<DispatchOutput> {
-  const registry = deps.registry ?? buildDefaultAgentRegistry({
-    artifacts: deps.artifacts,
-    audit: deps.audit,
-    policy: deps.policy,
-  });
+  const registry =
+    deps.registry ??
+    buildDefaultAgentRegistry({
+      artifacts: deps.artifacts,
+      audit: deps.audit,
+      policy: deps.policy,
+    });
   const pipeline = PIPELINES[input.run.type] ?? ["supreme_coordinator"];
   const briefingId = newId("brief");
-  const briefingPath = join(
-    workspacePaths(input.workspaceRoot).artifactsDir,
-    `${briefingId}.md`,
-  );
+  const briefingPath = join(workspacePaths(input.workspaceRoot).artifactsDir, `${briefingId}.md`);
   await ensureDir(workspacePaths(input.workspaceRoot).artifactsDir);
   const briefingFront: BriefingFrontMatter = {
     id: briefingId,

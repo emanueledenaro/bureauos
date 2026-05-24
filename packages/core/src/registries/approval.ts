@@ -2,14 +2,7 @@ import { rename } from "node:fs/promises";
 import { join } from "node:path";
 import { newId } from "../ids.js";
 import { workspacePaths } from "../paths.js";
-import {
-  ensureDir,
-  fileExists,
-  listDocs,
-  readDoc,
-  writeDoc,
-  type FrontMatter,
-} from "./base.js";
+import { ensureDir, fileExists, listDocs, readDoc, writeDoc, type FrontMatter } from "./base.js";
 
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "expired";
 
@@ -135,10 +128,19 @@ export class ApprovalRegistry {
    * Look up a standing or one-off approval matching the requested action and target.
    * Returns the most recent matching approval that is still valid (not expired).
    */
-  async match(action: string, target: string, now = new Date()): Promise<ApprovalRecord | undefined> {
+  async match(
+    action: string,
+    target: string,
+    now = new Date(),
+  ): Promise<ApprovalRecord | undefined> {
     const resolved = await this.listResolved();
     const candidates = resolved
-      .filter((r) => r.status === "approved" && r.action === action && (r.target === target || r.target === "*"))
+      .filter(
+        (r) =>
+          r.status === "approved" &&
+          r.action === action &&
+          (r.target === target || r.target === "*"),
+      )
       .filter((r) => !r.expires_at || new Date(r.expires_at).getTime() > now.getTime())
       .sort((a, b) => (a.resolved_at > b.resolved_at ? -1 : 1));
     return candidates[0];

@@ -72,8 +72,12 @@ export class OpenAIAdapter implements ProviderAdapter {
       text: choice.message.content,
       model: response.model,
       usage: {
-        ...(response.usage?.prompt_tokens !== undefined ? { inputTokens: response.usage.prompt_tokens } : {}),
-        ...(response.usage?.completion_tokens !== undefined ? { outputTokens: response.usage.completion_tokens } : {}),
+        ...(response.usage?.prompt_tokens !== undefined
+          ? { inputTokens: response.usage.prompt_tokens }
+          : {}),
+        ...(response.usage?.completion_tokens !== undefined
+          ? { outputTokens: response.usage.completion_tokens }
+          : {}),
       },
     };
   }

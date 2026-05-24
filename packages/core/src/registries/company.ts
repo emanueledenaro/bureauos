@@ -45,7 +45,9 @@ export class CompanyRegistry {
       ...patch,
       updated: new Date().toISOString(),
     };
-    const doc = (await fileExists(this.path())) ? await readDoc<CompanyRecord>(this.path()) : { front: {}, body: "" };
+    const doc = (await fileExists(this.path()))
+      ? await readDoc<CompanyRecord>(this.path())
+      : { front: {}, body: "" };
     await writeDoc(this.path(), updated, body ?? doc.body);
     return updated;
   }

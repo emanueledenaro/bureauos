@@ -38,7 +38,12 @@ describe("Supreme Coordinator dispatch", () => {
 
     const result = await dispatchRun(
       { audit, artifacts, policy },
-      { workspaceRoot: dir, run, scope: "Q3 plan", briefing: "Aim for 4 active clients by end of quarter." },
+      {
+        workspaceRoot: dir,
+        run,
+        scope: "Q3 plan",
+        briefing: "Aim for 4 active clients by end of quarter.",
+      },
     );
 
     expect(result.steps.map((s) => s.role)).toEqual(["project_manager", "product"]);

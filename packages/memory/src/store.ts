@@ -71,7 +71,7 @@ export class LocalMemoryStore {
         });
       }
     }
-    hits.sort((a, b) => (b.score - a.score) || a.path.localeCompare(b.path));
+    hits.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
     return hits.slice(0, limit);
   }
 

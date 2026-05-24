@@ -13,8 +13,5 @@
     }
   },
   "include": ["src/main/**/*", "src/preload/**/*", "electron.vite.config.ts"],
-  "references": [
-    { "path": "../core" },
-    { "path": "../memory" }
-  ]
+  "references": [{ "path": "../core" }, { "path": "../memory" }]
 }
