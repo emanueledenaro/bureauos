@@ -106,6 +106,13 @@ export interface ArtifactRecord {
   type: string;
   status: string;
 }
+export interface CoordinatorAttachmentInput {
+  name: string;
+  type: string;
+  size: number;
+  text?: string;
+  dataUrl?: string;
+}
 export interface CoordinatorIntakeResult {
   summary: string;
   next_actions: string[];
@@ -206,6 +213,7 @@ export const Api = {
     clientName?: string;
     projectName?: string;
     expectedValue?: number;
+    attachments?: CoordinatorAttachmentInput[];
   }) =>
     api<CoordinatorIntakeResult>("/coordinator/intake", {
       method: "POST",

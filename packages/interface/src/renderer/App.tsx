@@ -5,6 +5,7 @@ import {
   type ApprovalRecord,
   type AuditEvent,
   type BusinessReportResult,
+  type CoordinatorAttachmentInput,
   type ClientRecord,
   type CompanyPulse,
   type CoordinatorIntakeResult,
@@ -58,7 +59,53 @@ interface ChatAttachment {
   name: string;
   type: string;
   size: number;
+  file: File;
   previewUrl?: string;
+}
+
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+
+function isTextAttachment(file: File): boolean {
+  return (
+    file.type.startsWith("text/") ||
+    ["application/json", "application/xml", "application/javascript"].includes(file.type) ||
+    /\.(csv|json|md|txt|log|xml|yaml|yml)$/i.test(file.name)
+  );
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error ?? new Error("Could not read attachment"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error ?? new Error("Could not read attachment"));
+    reader.readAsText(file);
+  });
+}
+
+async function toCoordinatorAttachment(file: File): Promise<CoordinatorAttachmentInput> {
+  if (file.size > MAX_ATTACHMENT_BYTES) {
+    throw new Error(`${file.name} is larger than 10 MB`);
+  }
+
+  const base = {
+    name: file.name,
+    type: file.type || "application/octet-stream",
+    size: file.size,
+  };
+
+  if (isTextAttachment(file)) {
+    return { ...base, text: await readFileAsText(file) };
+  }
+  return { ...base, dataUrl: await readFileAsDataUrl(file) };
 }
 
 const emptyState: DashboardState = {
@@ -652,7 +699,11 @@ function PortfolioOperatingRoom({ state }: { state: DashboardState }) {
 function CoordinatorPanel({
   onIntake,
 }: {
-  onIntake: (message: string, clientName?: string) => Promise<CoordinatorIntakeResult>;
+  onIntake: (
+    message: string,
+    clientName?: string,
+    attachments?: CoordinatorAttachmentInput[],
+  ) => Promise<CoordinatorIntakeResult>;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const attachmentsRef = useRef<ChatAttachment[]>([]);
@@ -682,6 +733,7 @@ function CoordinatorPanel({
       name: file.name,
       type: file.type || "application/octet-stream",
       size: file.size,
+      file,
       ...(file.type.startsWith("image/") ? { previewUrl: URL.createObjectURL(file) } : {}),
     }));
     setAttachments((current) => [...current, ...added]);
@@ -701,12 +753,15 @@ function CoordinatorPanel({
     setBusy(true);
     setError(undefined);
     try {
+      const payload = await Promise.all(
+        attachments.map((attachment) => toCoordinatorAttachment(attachment.file)),
+      );
       const attachmentSummary = attachments.length
         ? `\n\nAttached files:\n${attachments
             .map((item) => `- ${item.name} (${item.type}, ${formatBytes(item.size)})`)
             .join("\n")}`
         : "";
-      setResult(await onIntake(`${draft.trim()}${attachmentSummary}`, "GreenField Co."));
+      setResult(await onIntake(`${draft.trim()}${attachmentSummary}`, undefined, payload));
       setDraft("");
       setAttachments((current) => {
         current.forEach((item) => {
@@ -1253,10 +1308,12 @@ export function App() {
   const onCoordinatorIntake = async (
     message: string,
     clientName?: string,
+    attachments?: CoordinatorAttachmentInput[],
   ): Promise<CoordinatorIntakeResult> => {
     const result = await Api.coordinatorIntake({
       message,
       ...(clientName ? { clientName } : {}),
+      ...(attachments?.length ? { attachments } : {}),
     });
     await refresh();
     return result;

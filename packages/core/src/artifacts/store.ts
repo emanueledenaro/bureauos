@@ -42,7 +42,8 @@ export type ArtifactType =
   | "client-account-plan"
   | "github-issue-draft"
   | "github-issue-publish-report"
-  | "client-profile";
+  | "client-profile"
+  | "owner-attachment";
 
 export interface ArtifactRecord extends FrontMatter {
   id: string;

@@ -1,10 +1,10 @@
-import { appendFile } from "node:fs/promises";
+import { appendFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ArtifactStore, type ArtifactRecord } from "../artifacts/store.js";
 import { AuditLog } from "../audit/log.js";
 import type { BureauConfig } from "../config/schema.js";
 import { defaultConfig } from "../config/loader.js";
-import { slugify } from "../ids.js";
+import { newId, slugify } from "../ids.js";
 import { appendDailyNote } from "../memory/daily.js";
 import { appendDecision } from "../memory/decisions.js";
 import { workspacePaths } from "../paths.js";
@@ -13,7 +13,16 @@ import { ApprovalRegistry, type ApprovalRecord } from "../registries/approval.js
 import { ClientRegistry, type ClientRecord } from "../registries/client.js";
 import { OpportunityRegistry, type OpportunityRecord } from "../registries/opportunity.js";
 import { ProjectRegistry, type ProjectRecord } from "../registries/project.js";
+import { ensureDir } from "../registries/base.js";
 import { RunEngine, type RunRecord } from "../runs/engine.js";
+
+export interface CoordinatorAttachmentInput {
+  name: string;
+  type?: string;
+  size?: number;
+  text?: string;
+  dataUrl?: string;
+}
 
 export interface CoordinatorIntakeInput {
   message: string;
@@ -23,6 +32,7 @@ export interface CoordinatorIntakeInput {
   projectName?: string;
   expectedValue?: number;
   expectedMargin?: number;
+  attachments?: CoordinatorAttachmentInput[];
 }
 
 export interface IntakeClassification {
@@ -78,8 +88,42 @@ function titleCase(input: string): string {
     .join(" ");
 }
 
+function sanitizeAttachmentName(input: string): string {
+  const cleaned = input
+    .trim()
+    .replace(/[/\\?%*:|"<>]/g, "-")
+    .replace(/\s+/g, " ")
+    .slice(0, 120);
+  return cleaned || "attachment";
+}
+
+function parseDataUrl(value: string): { mimeType: string; buffer: Buffer } | undefined {
+  const match = /^data:([^;,]+)?(;base64)?,([\s\S]*)$/.exec(value);
+  if (!match) return undefined;
+  const mimeType = match[1] || "application/octet-stream";
+  const isBase64 = Boolean(match[2]);
+  const payload = match[3] ?? "";
+  const buffer = isBase64
+    ? Buffer.from(payload, "base64")
+    : Buffer.from(decodeURIComponent(payload), "utf8");
+  return { mimeType, buffer };
+}
+
+function attachmentSummary(attachments: readonly CoordinatorAttachmentInput[]): string {
+  if (attachments.length === 0) return "- None";
+  return attachments
+    .map((item) => {
+      const name = sanitizeAttachmentName(item.name);
+      const type = item.type || "application/octet-stream";
+      const size = typeof item.size === "number" ? `${item.size} bytes` : "unknown size";
+      return `- ${name} (${type}, ${size})`;
+    })
+    .join("\n");
+}
+
 function extractNamedBusiness(message: string): string | undefined {
   const patterns = [
+    /\b(?:ho parlato con|parlato con|cliente incontrato)\s+(?:la\s+|il\s+|lo\s+|l')?([A-ZÀ-Ý][A-Za-z0-9À-ÿ&'. -]{2,60}?)(?=[:;,]|\s+(?:vuole|vogliono|mi|ha|hanno|chiede|chiedono)\b|$)/,
     /\b(?:cliente|client|azienda|business|brand|ristorante|pizzeria|salone|studio)\s+(?:si chiama|chiamata|chiamato|called|named)\s+["']?([A-Za-z0-9À-ÿ&'. -]{2,60})["']?/i,
     /\b(?:cliente|client|azienda|business|brand|ristorante|pizzeria|salone|studio)\s+["']([A-Za-z0-9À-ÿ&'. -]{2,60})["']/i,
     /\b(?:per|for)\s+["']([A-Za-z0-9À-ÿ&'. -]{2,60})["']/i,
@@ -250,6 +294,10 @@ function artifactBodies(args: {
 ## Owner Message
 
 ${input.message}
+
+## Owner Attachments
+
+${attachmentSummary(input.attachments ?? [])}
 
 ## Classification
 
@@ -513,6 +561,7 @@ export class CoordinatorIntakeService {
   async process(input: CoordinatorIntakeInput): Promise<CoordinatorIntakeResult> {
     const message = input.message.trim();
     if (!message) throw new Error("coordinator intake requires a message");
+    const attachments = input.attachments ?? [];
 
     const classification = classify({ ...input, message });
     const client = await getOrCreateClient(this.clients, { ...input, message }, classification);
@@ -542,8 +591,17 @@ export class CoordinatorIntakeService {
     });
 
     const artifacts: ArtifactRecord[] = [];
+    for (const attachment of attachments) {
+      artifacts.push(
+        await this.persistAttachment(attachment, {
+          runId: run.id,
+          clientId: client.id,
+          projectId: project.id,
+        }),
+      );
+    }
     for (const item of artifactBodies({
-      input: { ...input, message },
+      input: { ...input, message, attachments },
       classification,
       client,
       project,
@@ -585,7 +643,7 @@ export class CoordinatorIntakeService {
     await appendMemory(
       join(paths.clientsDir, client.slug, "COMMUNICATION.md"),
       `Owner intake ${now}`,
-      message,
+      `${message}\n\nAttachments:\n${attachmentSummary(attachments)}`,
     );
     await appendMemory(
       join(paths.clientsDir, client.slug, "OPPORTUNITIES.md"),
@@ -603,6 +661,13 @@ export class CoordinatorIntakeService {
         "- Prepare proposal and pricing for owner approval.",
       ].join("\n"),
     );
+    if (attachments.length) {
+      await appendMemory(
+        join(paths.projectsDir, project.slug, "ASSETS.md"),
+        `Owner attachments from ${run.id}`,
+        attachmentSummary(attachments),
+      );
+    }
 
     await appendDailyNote(
       this.workspaceRoot,
@@ -640,5 +705,69 @@ export class CoordinatorIntakeService {
       artifacts,
       approvals,
     };
+  }
+
+  private async persistAttachment(
+    attachment: CoordinatorAttachmentInput,
+    context: { runId: string; clientId: string; projectId: string },
+  ): Promise<ArtifactRecord> {
+    const safeName = sanitizeAttachmentName(attachment.name);
+    const attachmentId = newId("att");
+    const paths = workspacePaths(this.workspaceRoot);
+    const storageDir = join(paths.artifactsDir, "attachments", context.runId);
+    const storagePath = join(storageDir, `${attachmentId}-${safeName}`);
+    const relativeStoragePath = `.bureauos/memory/artifacts/attachments/${context.runId}/${attachmentId}-${safeName}`;
+    const type = attachment.type || "application/octet-stream";
+
+    await ensureDir(storageDir);
+
+    let bytes = 0;
+    let source = "metadata_only";
+    if (typeof attachment.text === "string") {
+      const buffer = Buffer.from(attachment.text, "utf8");
+      bytes = buffer.byteLength;
+      source = "text";
+      await writeFile(storagePath, buffer);
+    } else if (attachment.dataUrl) {
+      const parsed = parseDataUrl(attachment.dataUrl);
+      if (parsed) {
+        bytes = parsed.buffer.byteLength;
+        source = "data_url";
+        await writeFile(storagePath, parsed.buffer);
+      }
+    }
+
+    const declaredBytes = typeof attachment.size === "number" ? attachment.size : bytes;
+    const body = `# Owner Attachment
+
+## File
+
+- Name: ${safeName}
+- Type: ${type}
+- Declared size: ${declaredBytes} bytes
+- Stored bytes: ${bytes}
+- Storage path: ${relativeStoragePath}
+- Source: ${source}
+
+## Coordinator Usage
+
+Treat this file as owner-provided client/project context. It can inform product scope, design direction, compliance review, pricing, proposal drafts, and delivery planning. External use still requires the normal approval gates.
+`;
+
+    return this.artifacts.write({
+      type: "owner-attachment",
+      createdBy: "owner",
+      runId: context.runId,
+      clientId: context.clientId,
+      projectId: context.projectId,
+      status: "submitted",
+      metadata: {
+        attachment_name: safeName,
+        attachment_type: type,
+        attachment_size: declaredBytes,
+        storage_path: relativeStoragePath,
+      },
+      body,
+    });
   }
 }

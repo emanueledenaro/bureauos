@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -73,6 +73,63 @@ describe("API server", () => {
 
     const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(audit).toContain("coordinator.intake.completed");
+  });
+
+  it("persists coordinator chat attachments as project artifacts", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const response = await fetch(`${server.url}/coordinator/intake`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        message:
+          "Ho parlato con Pizzeria Aurora: cliente ha mandato logo e brief per sito prenotazioni.",
+        attachments: [
+          {
+            name: "brand-brief.md",
+            type: "text/markdown",
+            size: 22,
+            text: "# Brand\n\nRosso e nero.",
+          },
+          {
+            name: "logo.png",
+            type: "image/png",
+            size: 5,
+            dataUrl: "data:image/png;base64,aGVsbG8=",
+          },
+        ],
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as {
+      client: { slug: string };
+      run: { id: string };
+      project: { slug: string };
+      artifacts: Array<{ type: string }>;
+    };
+    expect(body.client.slug).toBe("pizzeria-aurora");
+    expect(body.project.slug).toBe("pizzeria-aurora-booking-website");
+    expect(body.artifacts.filter((artifact) => artifact.type === "owner-attachment")).toHaveLength(
+      2,
+    );
+
+    const files = await readdir(
+      join(dir, ".bureauos", "memory", "artifacts", "attachments", body.run.id),
+    );
+    expect(files).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("brand-brief.md"),
+        expect.stringContaining("logo.png"),
+      ]),
+    );
+
+    const assets = await readFile(
+      join(dir, ".bureauos", "memory", "projects", body.project.slug, "ASSETS.md"),
+      "utf8",
+    );
+    expect(assets).toContain("brand-brief.md");
+    expect(assets).toContain("logo.png");
   });
 
   it("generates reports for the ElectronJS reports surface", async () => {

@@ -12,7 +12,10 @@ import { AuditLog } from "../audit/log.js";
 import { PolicyEngine } from "../policy/engine.js";
 import { RunEngine } from "../runs/engine.js";
 import { AGENT_ROLES } from "../agents/roles.js";
-import { CoordinatorIntakeService } from "../coordinator/intake.js";
+import {
+  CoordinatorIntakeService,
+  type CoordinatorAttachmentInput,
+} from "../coordinator/intake.js";
 import { ProjectDispatchService } from "../dispatch/project-dispatch.js";
 import { GitHubIssueDraftService } from "../github/issue-drafts.js";
 import {
@@ -136,6 +139,25 @@ function parseProvider(value: unknown): ProviderType | undefined {
 
 function defaultProviderId(provider: ProviderType): string {
   return `${provider}-default`;
+}
+
+function parseAttachments(value: unknown): CoordinatorAttachmentInput[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): CoordinatorAttachmentInput[] => {
+    if (!item || typeof item !== "object") return [];
+    const source = item as Record<string, unknown>;
+    const name = source["name"];
+    if (typeof name !== "string" || !name.trim()) return [];
+    return [
+      {
+        name,
+        ...(typeof source["type"] === "string" ? { type: source["type"] } : {}),
+        ...(typeof source["size"] === "number" ? { size: source["size"] } : {}),
+        ...(typeof source["text"] === "string" ? { text: source["text"] } : {}),
+        ...(typeof source["dataUrl"] === "string" ? { dataUrl: source["dataUrl"] } : {}),
+      },
+    ];
+  });
 }
 
 async function providerStatuses(workspaceRoot: string): Promise<ProviderStatus[]> {
@@ -328,6 +350,7 @@ const ROUTES: Record<string, RouteHandler> = {
       industry?: string;
       expectedValue?: number;
       expectedMargin?: number;
+      attachments?: unknown;
     };
     if (!body.message || !body.message.trim()) {
       ok(res, { error: "message required" }, 400);
@@ -344,6 +367,7 @@ const ROUTES: Record<string, RouteHandler> = {
       ...(body.industry ? { industry: body.industry } : {}),
       ...(typeof body.expectedValue === "number" ? { expectedValue: body.expectedValue } : {}),
       ...(typeof body.expectedMargin === "number" ? { expectedMargin: body.expectedMargin } : {}),
+      attachments: parseAttachments(body.attachments),
     });
     ok(res, result, 201);
   },
