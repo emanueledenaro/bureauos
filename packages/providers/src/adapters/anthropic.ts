@@ -29,11 +29,48 @@ export class AnthropicAdapter implements ProviderAdapter {
     return { ok: true };
   }
 
-  async generateText(_options: GenerateTextOptions): Promise<GenerateTextResult> {
-    throw new NotConfiguredError("Anthropic adapter is a stub. BACKLOG Phase 2.");
+  private async client() {
+    if (!this.options.apiKey) {
+      throw new NotConfiguredError("ANTHROPIC_API_KEY is not set");
+    }
+    const { default: Anthropic } = await import("@anthropic-ai/sdk");
+    return new Anthropic({ apiKey: this.options.apiKey });
   }
 
-  async *stream(_options: GenerateTextOptions): AsyncIterable<string> {
-    throw new NotConfiguredError("Anthropic adapter is a stub. BACKLOG Phase 2.");
+  async generateText(options: GenerateTextOptions): Promise<GenerateTextResult> {
+    const client = await this.client();
+    const response = await client.messages.create({
+      model: options.model,
+      max_tokens: options.maxTokens ?? 4096,
+      ...(options.system ? { system: options.system } : {}),
+      ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
+      messages: [{ role: "user", content: options.prompt }],
+    });
+    const first = response.content.find((c) => c.type === "text");
+    const text = first && "text" in first ? first.text : "";
+    return {
+      text,
+      model: response.model,
+      usage: {
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+      },
+    };
+  }
+
+  async *stream(options: GenerateTextOptions): AsyncIterable<string> {
+    const client = await this.client();
+    const stream = client.messages.stream({
+      model: options.model,
+      max_tokens: options.maxTokens ?? 4096,
+      ...(options.system ? { system: options.system } : {}),
+      ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
+      messages: [{ role: "user", content: options.prompt }],
+    });
+    for await (const event of stream) {
+      if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+        yield event.delta.text;
+      }
+    }
   }
 }

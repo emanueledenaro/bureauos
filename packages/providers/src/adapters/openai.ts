@@ -5,12 +5,19 @@ import type {
   ValidationResult,
 } from "../types.js";
 
+export class NotConfiguredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NotConfiguredError";
+  }
+}
+
 /**
  * OpenAI provider adapter.
  *
- * Stub implementation. The real SDK wiring lands in Phase 2 of the backlog.
- * Until then, `generateText` and `stream` throw a `NotConfiguredError` that
- * the run engine treats as "agent has no provider — escalate".
+ * Uses the official `openai` SDK when credentials are present. The kernel
+ * never embeds the key; it is read from `options.apiKey` (typically
+ * sourced from the env var by the caller) at construction time.
  */
 export class OpenAIAdapter implements ProviderAdapter {
   public readonly id: string;
@@ -35,22 +42,57 @@ export class OpenAIAdapter implements ProviderAdapter {
     return { ok: true };
   }
 
-  async generateText(_options: GenerateTextOptions): Promise<GenerateTextResult> {
-    throw new NotConfiguredError(
-      "OpenAI adapter is a stub. Configure credentials and add SDK integration (BACKLOG Phase 2).",
-    );
+  private async client() {
+    if (!this.options.apiKey) {
+      throw new NotConfiguredError("OPENAI_API_KEY is not set");
+    }
+    const { default: OpenAI } = await import("openai");
+    return new OpenAI({
+      apiKey: this.options.apiKey,
+      ...(this.options.baseUrl ? { baseURL: this.options.baseUrl } : {}),
+    });
   }
 
-  async *stream(_options: GenerateTextOptions): AsyncIterable<string> {
-    throw new NotConfiguredError(
-      "OpenAI adapter is a stub. Configure credentials and add SDK integration (BACKLOG Phase 2).",
-    );
+  async generateText(options: GenerateTextOptions): Promise<GenerateTextResult> {
+    const client = await this.client();
+    const response = await client.chat.completions.create({
+      model: options.model,
+      messages: [
+        ...(options.system ? [{ role: "system" as const, content: options.system }] : []),
+        { role: "user" as const, content: options.prompt },
+      ],
+      ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
+      ...(options.maxTokens !== undefined ? { max_tokens: options.maxTokens } : {}),
+    });
+    const choice = response.choices[0];
+    if (!choice?.message?.content) {
+      throw new Error("OpenAI returned no content");
+    }
+    return {
+      text: choice.message.content,
+      model: response.model,
+      usage: {
+        ...(response.usage?.prompt_tokens !== undefined ? { inputTokens: response.usage.prompt_tokens } : {}),
+        ...(response.usage?.completion_tokens !== undefined ? { outputTokens: response.usage.completion_tokens } : {}),
+      },
+    };
   }
-}
 
-export class NotConfiguredError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "NotConfiguredError";
+  async *stream(options: GenerateTextOptions): AsyncIterable<string> {
+    const client = await this.client();
+    const stream = await client.chat.completions.create({
+      model: options.model,
+      messages: [
+        ...(options.system ? [{ role: "system" as const, content: options.system }] : []),
+        { role: "user" as const, content: options.prompt },
+      ],
+      ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
+      ...(options.maxTokens !== undefined ? { max_tokens: options.maxTokens } : {}),
+      stream: true,
+    });
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta?.content;
+      if (delta) yield delta;
+    }
   }
 }

@@ -25,6 +25,8 @@
     "lint": "echo 'lint pending'"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.30.0",
+    "openai": "^4.70.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {
