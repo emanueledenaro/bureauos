@@ -5,7 +5,7 @@ import type {
   ValidationResult,
 } from "@bureauos/providers";
 import type { BureauConfig, ProviderName } from "../config/schema.js";
-import { AGENT_INDEX, AGENT_ROLES, type AgentCategory, type AgentDefinition } from "./roles.js";
+import { AGENT_INDEX, AGENT_ROLES, type AgentDefinition } from "./roles.js";
 
 export const MODEL_PROVIDER_CAPABILITY = "bureauos.capabilities.model_provider";
 
@@ -14,13 +14,6 @@ export interface AgentModelSelection {
   model: string;
   validation: ValidationResult;
 }
-
-const CATEGORY_FALLBACKS: Record<AgentCategory, readonly ProviderType[]> = {
-  executive: ["openai-codex", "anthropic", "openrouter", "google", "local"],
-  delivery: ["openai-codex", "anthropic", "google", "openrouter", "local"],
-  growth: ["openai-codex", "anthropic", "openrouter", "google", "local"],
-  governance: ["openai-codex", "anthropic", "google", "openrouter", "local"],
-};
 
 const PROVIDER_DEFAULT_MODELS: Record<ProviderType, string> = {
   "openai-codex": "gpt-5",
@@ -32,17 +25,13 @@ const PROVIDER_DEFAULT_MODELS: Record<ProviderType, string> = {
   custom: "gpt-5",
 };
 
-function toProviderType(provider: ProviderName): ProviderType | undefined {
-  if (provider === "codex") return undefined;
+function toProviderType(provider: ProviderName): ProviderType {
+  if (provider === "codex") return "openai-codex";
   return provider;
 }
 
 function providerId(provider: ProviderType): string {
   return `${provider}-default`;
-}
-
-function unique<T>(items: readonly T[]): T[] {
-  return [...new Set(items)];
 }
 
 function roleModelPreference(
@@ -70,11 +59,7 @@ export function providerChainForRole(
   role: AgentDefinition,
 ): readonly string[] {
   const preference = roleModelPreference(config, role.id);
-  if (preference.provider === "codex") return [providerId("openai-codex")];
-  const preferred = toProviderType(preference.provider);
-  if (preferred) return [providerId(preferred)];
-  const fallback = CATEGORY_FALLBACKS[role.category];
-  return unique(fallback).map(providerId);
+  return [providerId(toProviderType(preference.provider))];
 }
 
 export function configureAgentProviderRouting(

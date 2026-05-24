@@ -15,7 +15,7 @@ export class ProductAgent implements AgentRuntime {
 
   async execute(input: AgentRunInput): Promise<AgentRunOutput> {
     const briefing = input.context.briefing ?? input.context.scope;
-    const fallbackBody = `# Feature Spec
+    const templateBody = `# Feature Spec
 
 ## Title
 
@@ -57,7 +57,7 @@ and delivery moving.
       artifactTitle: "Feature Spec",
       outputInstructions:
         "Write a product feature spec with background, user story, BDD-style acceptance criteria, scope, non-goals, and open questions.",
-      fallbackBody,
+      templateBody,
     });
     const artifact = await this.deps.artifacts.write({
       type: "feature-spec",

@@ -72,10 +72,10 @@ Every major capability described in the docs must become one of:
 | Documented capability | Runtime surface | Status |
 | --- | --- | --- |
 | Agent role catalog | `AGENT_ROLES` | implemented |
-| PM agent per project | concrete PM agent with provider-backed drafting fallback | partial |
-| Delivery agents | concrete/template agents with provider-backed drafting fallback | partial |
-| Growth agents | template agents with provider-backed drafting fallback | partial |
-| Compliance agent | concrete compliance agent with provider-backed drafting fallback | partial |
+| PM agent per project | concrete PM agent with provider-backed drafting and deterministic local template when selected route is unavailable | partial |
+| Delivery agents | concrete/template agents with provider-backed drafting and deterministic local template when selected route is unavailable | partial |
+| Growth agents | template agents with provider-backed drafting and deterministic local template when selected route is unavailable | partial |
+| Compliance agent | concrete compliance agent with provider-backed drafting and deterministic local template when selected route is unavailable | partial |
 | Agent provider routing | `ProviderRouter`, `configureAgentProviderRouting`, dispatcher model capability | implemented |
 | Codex runtime capability | adapter placeholder | designed |
 | MCP capability bus | config/capability model | designed |

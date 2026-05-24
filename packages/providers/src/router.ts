@@ -8,8 +8,8 @@ export interface ProviderSelection {
 /**
  * Provider router.
  *
- * Selects providers per agent role. Assignments may contain explicit fallback
- * chains, but BureauOS never invents billing-sensitive fallbacks by itself.
+ * Selects providers per agent role. Default BureauOS agent routing assigns one
+ * owner-chosen provider; any longer chain must be built explicitly by policy.
  * Budget-aware routing and capability-aware routing land later in Phase 2.
  */
 export class ProviderRouter {
@@ -22,8 +22,8 @@ export class ProviderRouter {
 
   /**
    * Assign a provider chain to an agent role.
-   * The first one is the route to try first; subsequent entries must be
-   * explicit, policy-approved fallbacks.
+   * The first one is the route to try first; subsequent entries are only for
+   * explicitly approved chains, never implicit API billing fallback.
    */
   assign(agentRole: string, providerIds: readonly string[]): void {
     this.assignments.set(agentRole, [...providerIds]);
@@ -45,9 +45,12 @@ export class ProviderRouter {
   }
 
   async selectForAgent(agentRole: string): Promise<ProviderSelection | undefined> {
+    let openAICodexRouteFailed = false;
     for (const adapter of this.chainForAgent(agentRole)) {
+      if (openAICodexRouteFailed && adapter.type === "openai") continue;
       const validation = await adapter.validateCredentials();
       if (validation.ok) return { adapter, validation };
+      if (adapter.type === "openai-codex") openAICodexRouteFailed = true;
     }
     return undefined;
   }

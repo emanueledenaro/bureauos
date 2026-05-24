@@ -15,7 +15,7 @@ export class DevelopmentAgent implements AgentRuntime {
   constructor(private readonly deps: AgentDeps) {}
 
   async execute(input: AgentRunInput): Promise<AgentRunOutput> {
-    const fallbackBody = `# Technical Plan
+    const templateBody = `# Technical Plan
 
 ## Mental Model
 
@@ -49,7 +49,7 @@ BACKLOG Phase 8.)
       artifactTitle: "Technical Plan",
       outputInstructions:
         "Write a technical plan with mental model, likely files, local changes, tests, risks, and rollback notes. Do not write code unless explicitly requested by the run.",
-      fallbackBody,
+      templateBody,
     });
     const artifact = await this.deps.artifacts.write({
       type: "technical-plan",

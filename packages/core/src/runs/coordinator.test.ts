@@ -119,7 +119,7 @@ describe("Supreme Coordinator dispatch", () => {
     ]);
   });
 
-  it("passes a selected model provider to agents while preserving deterministic fallback", async () => {
+  it("passes a selected model provider to agents while preserving deterministic templates", async () => {
     const audit = new AuditLog(workspacePaths(dir).auditLog);
     const artifacts = new ArtifactStore(dir);
     const config = defaultConfig("freelancer");

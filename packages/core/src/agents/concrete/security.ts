@@ -13,7 +13,7 @@ export class SecurityAgent implements AgentRuntime {
   constructor(private readonly deps: AgentDeps) {}
 
   async execute(input: AgentRunInput): Promise<AgentRunOutput> {
-    const fallbackBody = `# Security Review
+    const templateBody = `# Security Review
 
 ## Risk Level
 
@@ -48,7 +48,7 @@ low (stub default)
       artifactTitle: "Security Review",
       outputInstructions:
         "Write a security review with risk level, attack surface, findings, mitigations, approval recommendation, and evidence gaps.",
-      fallbackBody,
+      templateBody,
     });
     const artifact = await this.deps.artifacts.write({
       type: "security-review",

@@ -14,7 +14,7 @@ export class ComplianceAgent implements AgentRuntime {
   constructor(private readonly deps: AgentDeps) {}
 
   async execute(input: AgentRunInput): Promise<AgentRunOutput> {
-    const fallbackBody = `# Compliance Review
+    const templateBody = `# Compliance Review
 
 ## Legal / Contract Risk
 
@@ -48,7 +48,7 @@ export class ComplianceAgent implements AgentRuntime {
       artifactTitle: "Compliance Review",
       outputInstructions:
         "Write a compliance review covering legal, privacy, financial, public-claim, and approval risks. Keep external actions blocked unless policy allows them.",
-      fallbackBody,
+      templateBody,
     });
     const artifact = await this.deps.artifacts.write({
       type: "compliance-review",

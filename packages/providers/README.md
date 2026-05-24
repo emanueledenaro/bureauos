@@ -12,7 +12,7 @@ Implemented adapter surfaces (see [docs/capabilities-and-integrations.md](../../
 - OpenRouter / gateway
 - Codex runtime (treated as a capability, not a generic provider)
 
-The router selects the owner-chosen provider per agent role. `openai-codex` and `openai` are intentionally different providers, so OAuth never silently falls back to API-key billing. Credentials live in environment variables or the gitignored workspace auth store (`.bureauos/auth/providers.json`), never in the repository. Agent drafting uses authenticated providers when available and falls back to deterministic local templates when the chosen route cannot run.
+The router selects the owner-chosen provider per agent role. `openai-codex` and `openai` are intentionally different providers, so OAuth never falls back to API-key billing. Credentials live in environment variables or the gitignored workspace auth store (`.bureauos/auth/providers.json`), never in the repository. If the selected route cannot run, BureauOS may emit an explicitly marked deterministic local draft, but it does not switch to another provider.
 
 ## Status
 

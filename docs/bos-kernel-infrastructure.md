@@ -339,7 +339,7 @@ The provider router selects models and runtimes.
 It should support:
 
 - default provider per agent
-- fallback providers
+- explicit provider routes, without automatic API fallback
 - local providers
 - provider-specific options
 - custom base URLs
@@ -598,4 +598,3 @@ Interface fourth
 Always-on daemon fifth
 External business actions last
 ```
-

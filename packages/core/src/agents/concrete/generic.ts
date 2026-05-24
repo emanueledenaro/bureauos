@@ -24,7 +24,7 @@ class TemplateAgent implements AgentRuntime {
 
   async execute(input: AgentRunInput): Promise<AgentRunOutput> {
     const def = this.definition;
-    const fallbackBody = `# ${def.role}
+    const templateBody = `# ${def.role}
 
 ## Scope
 
@@ -53,7 +53,7 @@ ${def.mustNot.map((r) => `- ${r}`).join("\n")}
       definition: def,
       artifactTitle: def.role,
       outputInstructions: `Write the ${def.role} artifact for this run. Include applied responsibilities, expected outputs, risks, must-not boundaries, and next actions in Markdown.`,
-      fallbackBody,
+      templateBody,
     });
     const artifact = await this.deps.artifacts.write({
       type: this.artifactType,

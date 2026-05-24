@@ -17,7 +17,7 @@ export interface AgentDraftInput {
   definition: AgentDefinition;
   artifactTitle: string;
   outputInstructions: string;
-  fallbackBody: string;
+  templateBody: string;
 }
 
 function selectionFrom(input: AgentRunInput): AgentModelSelection | undefined {
@@ -77,13 +77,13 @@ function withProviderFooter(
 `;
 }
 
-function fallbackBody(body: string, reason?: string): string {
+function templateBody(body: string, reason?: string): string {
   if (!reason) return body;
   return `${body.trim()}
 
-## Provider Fallback
+## Provider Unavailable
 
-Model generation was unavailable for this run; BureauOS used the deterministic internal template.
+Model generation was unavailable for the selected route; BureauOS used the deterministic internal template without attempting another provider.
 `;
 }
 
@@ -91,7 +91,7 @@ export async function draftAgentArtifact(args: AgentDraftInput): Promise<AgentDr
   const selection = selectionFrom(args.input);
   if (!selection) {
     return {
-      body: args.fallbackBody,
+      body: args.templateBody,
       notes: `${args.definition.role} completed with deterministic template`,
       decisions: [],
       blockers: [],
@@ -117,12 +117,13 @@ export async function draftAgentArtifact(args: AgentDraftInput): Promise<AgentDr
     };
   } catch {
     return {
-      body: fallbackBody(args.fallbackBody, "provider_error"),
-      notes: `${args.definition.role} completed with deterministic fallback`,
+      body: templateBody(args.templateBody, "provider_error"),
+      notes: `${args.definition.role} completed with deterministic template`,
       decisions: [],
       blockers: [],
       capability: `model:${selection.provider.id}`,
-      error: "provider generation failed; deterministic fallback used",
+      error:
+        "provider generation failed; deterministic template used; no alternate provider attempted",
     };
   }
 }

@@ -1,7 +1,41 @@
 import { describe, expect, it } from "vitest";
+import { ProviderRouter, type ProviderAdapter, type ValidationResult } from "@bureauos/providers";
 import { defaultConfig } from "../config/loader.js";
 import { AGENT_INDEX } from "./roles.js";
-import { providerChainForRole } from "./provider-routing.js";
+import {
+  configureAgentProviderRouting,
+  providerChainForRole,
+  selectAgentModel,
+} from "./provider-routing.js";
+
+class FakeProvider implements ProviderAdapter {
+  public readonly name: string;
+  public readonly defaultModel = "test-model";
+
+  constructor(
+    public readonly id: string,
+    public readonly type: ProviderAdapter["type"],
+    private readonly validation: ValidationResult,
+  ) {
+    this.name = id;
+  }
+
+  async listModels(): Promise<readonly string[]> {
+    return ["test-model"];
+  }
+
+  async validateCredentials(): Promise<ValidationResult> {
+    return this.validation;
+  }
+
+  async generateText(): Promise<never> {
+    throw new Error("not used");
+  }
+
+  async *stream(): AsyncIterable<string> {
+    yield "";
+  }
+}
 
 describe("agent provider routing", () => {
   it("keeps OpenAI Codex OAuth separate from the OpenAI API provider", () => {
@@ -29,5 +63,22 @@ describe("agent provider routing", () => {
     expect(product).toBeDefined();
 
     expect(providerChainForRole(config, product!)).toEqual(["openai-codex-default"]);
+  });
+
+  it("does not select the OpenAI API provider when the Codex OAuth route is unavailable", async () => {
+    const config = defaultConfig("freelancer");
+    config.supreme_coordinator.provider = "openai-codex";
+    const router = new ProviderRouter();
+    router.register(
+      new FakeProvider("openai-codex-default", "openai-codex", {
+        ok: false,
+        reason: "OAuth token is missing",
+      }),
+    );
+    router.register(new FakeProvider("openai-default", "openai", { ok: true }));
+
+    configureAgentProviderRouting(router, config, ["product"]);
+
+    await expect(selectAgentModel(router, config, "product")).resolves.toBeUndefined();
   });
 });

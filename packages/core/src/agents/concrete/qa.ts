@@ -14,7 +14,7 @@ export class QaAgent implements AgentRuntime {
   constructor(private readonly deps: AgentDeps) {}
 
   async execute(input: AgentRunInput): Promise<AgentRunOutput> {
-    const fallbackBody = `# Test Plan
+    const templateBody = `# Test Plan
 
 ## Acceptance Criteria Coverage
 
@@ -49,7 +49,7 @@ provider router.)
       artifactTitle: "Test Plan",
       outputInstructions:
         "Write a QA test plan with acceptance coverage, unit tests, integration tests, manual checks, regression checks, and reproducibility notes.",
-      fallbackBody,
+      templateBody,
     });
     const artifact = await this.deps.artifacts.write({
       type: "test-plan",

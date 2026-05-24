@@ -24,7 +24,7 @@ export interface OpenAICodexOAuthOptions {
  *
  * This is intentionally separate from the OpenAI API-key adapter. It never
  * falls back to `OPENAI_API_KEY`; if the OAuth route cannot run, callers must
- * either stop or use deterministic local fallback.
+ * either stop or produce an explicitly marked deterministic local draft.
  */
 export class OpenAICodexOAuthAdapter implements ProviderAdapter {
   public readonly id: string;

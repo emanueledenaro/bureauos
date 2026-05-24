@@ -16,7 +16,7 @@ export class ProjectManagerAgent implements AgentRuntime {
 
   async execute(input: AgentRunInput): Promise<AgentRunOutput> {
     const briefing = input.context.briefing ?? "(no briefing supplied)";
-    const fallbackBody = `# Project Manager Run Report
+    const templateBody = `# Project Manager Run Report
 
 - Run: ${input.context.runId}
 - Project: ${input.context.projectId ?? "(none)"}
@@ -47,7 +47,7 @@ through the provider router.
       artifactTitle: "Project Manager Run Report",
       outputInstructions:
         "Write a project manager report with scope confirmation, specialist routing, memory boundaries, risks, and next actions.",
-      fallbackBody,
+      templateBody,
     });
     const artifact = await this.deps.artifacts.write({
       type: "run-report",

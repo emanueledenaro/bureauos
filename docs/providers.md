@@ -14,7 +14,7 @@ The default local auth file is:
 
 The workspace `.bureauos/` directory is gitignored. The auth file is written with `0600` permissions so only the local user can read it.
 
-Provider identity and auth mode are separate. `openai-codex` is the OAuth/subscription route. `openai` is the API-key route. BureauOS must not silently fall back from `openai-codex` to `openai`; API usage only happens when the owner explicitly configures the API provider.
+Provider identity and auth mode are separate. `openai-codex` is the OAuth/subscription route. `openai` is the API-key route. BureauOS must not fall back from `openai-codex` to `openai`; API usage only happens when the owner explicitly chooses the API provider for that agent or run.
 
 Environment variables still work only for their matching provider:
 
