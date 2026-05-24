@@ -90,6 +90,15 @@ export type {
   AgentContext,
   AgentDeps,
 } from "./agents/runtime.js";
+export {
+  buildDefaultAgentRegistry,
+  ProjectManagerAgent,
+  ProductAgent,
+  DevelopmentAgent,
+  QaAgent,
+  SecurityAgent,
+  ComplianceAgent,
+} from "./agents/concrete/index.js";
 
 // API server
 export { startApiServer } from "./api/server.js";

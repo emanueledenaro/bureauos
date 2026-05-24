@@ -319,13 +319,17 @@ Each task below means "implement the role as a typed agent, with its memory scop
 
 ### Delivery agents
 
+Each role exists as an `AgentRuntime` and is reachable through `buildDefaultAgentRegistry()`.
+Roles marked with [x] have a concrete stub that writes the role's signature artifact; full
+LLM-driven prompts arrive when the provider router is wired end to end.
+
 - [ ] Supreme Executive Coordinator
-- [ ] Project Manager
-- [ ] Product
+- [x] Project Manager
+- [x] Product
 - [ ] UX/UI
-- [ ] Development
-- [ ] QA
-- [ ] Security
+- [x] Development
+- [x] QA
+- [x] Security
 - [ ] Reviewer
 - [ ] Release
 
@@ -341,7 +345,7 @@ Each task below means "implement the role as a typed agent, with its memory scop
 - [ ] Sales
 - [ ] Pricing
 - [ ] Proposal
-- [ ] Compliance
+- [x] Compliance
 - [ ] Client Success
 
 ## Phase 10 — External Integrations (v1.0+)
