@@ -16,6 +16,9 @@ See [BACKLOG.md](../../BACKLOG.md) Phase 1.
 - `bureau run new` — start a new run
 - `bureau audit tail` — tail the audit log
 - `bureau policy explain <a>` — explain a policy decision
+- `bureau auth login --provider <p>` — store provider credentials in the local auth store
+- `bureau auth list` — list stored provider credentials with masked secrets
+- `bureau auth logout --provider <p>` — remove stored provider credentials
 - `bureau providers list` — provider management
 - `bureau github draft-issues --project <slug>` — generate GitHub-ready issue drafts from project artifacts
 - `bureau github create-issues --project <slug> --owner <o> --repo <r>` — create GitHub issues from approved drafts under policy
@@ -25,4 +28,4 @@ See [BACKLOG.md](../../BACKLOG.md) Phase 1.
 
 ## Status
 
-The CLI is an operational local surface for workspace setup, intake, memory, project dispatch, reports, approvals, provider checks, GitHub label setup, GitHub issue draft generation, policy-gated GitHub issue creation, GitHub issue sync, and daemon mode.
+The CLI is an operational local surface for workspace setup, intake, memory, project dispatch, reports, approvals, provider auth and checks, GitHub label setup, GitHub issue draft generation, policy-gated GitHub issue creation, GitHub issue sync, and daemon mode.

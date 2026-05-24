@@ -183,6 +183,38 @@ describe("bureau cli", () => {
     expect(runs).toContain("Pipeline: product, ux, development, qa, security, reviewer");
   });
 
+  it("stores provider auth locally and uses it when listing providers", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+    const code = await main([
+      "node",
+      "bureau",
+      "auth",
+      "login",
+      "--provider",
+      "openai",
+      "--api-key",
+      "sk-test-provider-auth",
+      "--model",
+      "gpt-5",
+    ]);
+
+    expect(code).toBe(0);
+    const authFile = join(dir, ".bureauos", "auth", "providers.json");
+    const stored = await readFile(authFile, "utf8");
+    expect(stored).toContain("openai-default");
+    expect(stored).toContain("sk-test-provider-auth");
+
+    expect(await main(["node", "bureau", "auth", "list"])).toBe(0);
+    expect(await main(["node", "bureau", "providers", "list"])).toBe(0);
+
+    const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
+    expect(audit).toContain("provider.auth.login");
+    expect(audit).not.toContain("sk-test-provider-auth");
+
+    expect(await main(["node", "bureau", "auth", "logout", "--provider", "openai"])).toBe(0);
+    expect(await exists(authFile)).toBe(false);
+  });
+
   it("requires a token before creating real GitHub issues from CLI", async () => {
     await main(["node", "bureau", "init", "--name", "BOS"]);
     const previousToken = process.env["GITHUB_TOKEN"];

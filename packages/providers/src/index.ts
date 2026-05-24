@@ -14,6 +14,8 @@ export type {
 } from "./types.js";
 
 export { ProviderRouter } from "./router.js";
+export { ProviderAuthStore, maskSecret, providerAuthPath } from "./auth-store.js";
+export type { ProviderCredentialInput, ProviderCredentialRecord } from "./auth-store.js";
 
 export { OpenAIAdapter, NotConfiguredError } from "./adapters/openai.js";
 export { AnthropicAdapter } from "./adapters/anthropic.js";

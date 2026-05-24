@@ -160,7 +160,7 @@ Goal: real model calls behind a provider-agnostic interface. The router selects 
 - [x] Implement env-based credential loading.
 - [x] Implement the router with default + fallback chains.
 - [x] Add a `bureau providers list` CLI command.
-- [ ] Add an OpenCode-style auth store and commands (`bureau auth login/list/logout`) for provider credentials.
+- [x] Add an OpenCode-style auth store and commands (`bureau auth login/list/logout`) for provider credentials.
 - [ ] Add provider connection management in ElectronJS Settings.
 - [ ] Wire real SDK calls (`generateText`, `stream`) for each adapter.
 - [ ] Add budget-aware and capability-aware routing.
@@ -392,7 +392,7 @@ Goal: connect BureauOS to the systems where the business actually happens. Each 
 
 - [ ] Quickstart in `README.md` linking to `bureau init`.
 - [ ] CLI reference page under `docs/cli.md`.
-- [ ] Provider configuration guide under `docs/providers.md`.
+- [x] Provider configuration guide under `docs/providers.md`.
 - [ ] Owner interface tour under `docs/owner-interface.md` once the MVP ships.
 - [ ] Troubleshooting page.
 

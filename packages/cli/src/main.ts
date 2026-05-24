@@ -35,7 +35,11 @@ import {
   LocalAdapter,
   OpenAIAdapter,
   OpenRouterAdapter,
+  ProviderAuthStore,
   ProviderRouter,
+  maskSecret,
+  type ProviderCredentialRecord,
+  type ProviderType,
 } from "@bureauos/providers";
 import { GITHUB_LABEL_TAXONOMY, OctokitGitHubClient } from "@bureauos/capabilities";
 
@@ -84,6 +88,9 @@ Approvals:
   approvals reject <id> [--reason r]
 
 Providers:
+  auth login --provider p [--api-key k] [--base-url u] [--model m]
+  auth list
+  auth logout --provider p [--id provider-default]
   providers list
 
 Server:
@@ -105,6 +112,14 @@ Misc:
 type Handler = (args: readonly string[]) => Promise<number>;
 
 const PRESETS: ReadonlySet<Preset> = new Set(["freelancer", "agency", "startup", "operator"]);
+const PROVIDER_TYPES: ReadonlySet<ProviderType> = new Set([
+  "openai",
+  "anthropic",
+  "google",
+  "local",
+  "openrouter",
+  "custom",
+]);
 const RUN_TYPES: ReadonlySet<RunType> = new Set([
   "feature",
   "bug",
@@ -187,6 +202,85 @@ async function loadWorkspaceConfig(cwd: string): Promise<BureauConfig> {
 function githubClientFromEnv(): OctokitGitHubClient | undefined {
   const token = process.env["GITHUB_TOKEN"];
   return token ? new OctokitGitHubClient({ token }) : undefined;
+}
+
+function parseProvider(value: unknown): ProviderType | undefined {
+  if (typeof value !== "string") return undefined;
+  return PROVIDER_TYPES.has(value as ProviderType) ? (value as ProviderType) : undefined;
+}
+
+function defaultProviderId(provider: ProviderType): string {
+  return `${provider}-default`;
+}
+
+function providerAuthStore(): ProviderAuthStore {
+  return ProviderAuthStore.forWorkspace(process.cwd());
+}
+
+async function auditProviderAuth(action: string, target: string): Promise<void> {
+  await new AuditLog(workspacePaths(process.cwd()).auditLog).append({
+    actor: "owner",
+    action,
+    target,
+    result: "ok",
+  });
+}
+
+function registerCredential(router: ProviderRouter, credential: ProviderCredentialRecord): void {
+  const apiKey = credential.apiKey || undefined;
+  const baseUrl = credential.baseUrl || undefined;
+  const defaultModel = credential.defaultModel || undefined;
+  switch (credential.provider) {
+    case "openai":
+      router.register(new OpenAIAdapter(credential.id, { apiKey, baseUrl, defaultModel }));
+      return;
+    case "anthropic":
+      router.register(new AnthropicAdapter(credential.id, { apiKey, defaultModel }));
+      return;
+    case "google":
+      router.register(new GoogleAdapter(credential.id, { apiKey, defaultModel }));
+      return;
+    case "openrouter":
+      router.register(new OpenRouterAdapter(credential.id, { apiKey, defaultModel }));
+      return;
+    case "local":
+      router.register(new LocalAdapter(credential.id, { baseUrl, defaultModel }));
+      return;
+    case "custom":
+      router.register(new OpenAIAdapter(credential.id, { apiKey, baseUrl, defaultModel }));
+      return;
+  }
+}
+
+async function buildProviderRouter(): Promise<{
+  router: ProviderRouter;
+  stored: ProviderCredentialRecord[];
+}> {
+  const stored = await providerAuthStore().list();
+  const router = new ProviderRouter();
+  for (const credential of stored) registerCredential(router, credential);
+  const hasStored = (provider: ProviderType) =>
+    stored.some((credential) => credential.provider === provider);
+  if (!hasStored("openai")) {
+    router.register(new OpenAIAdapter("openai-default", { apiKey: process.env["OPENAI_API_KEY"] }));
+  }
+  if (!hasStored("anthropic")) {
+    router.register(
+      new AnthropicAdapter("anthropic-default", { apiKey: process.env["ANTHROPIC_API_KEY"] }),
+    );
+  }
+  if (!hasStored("google")) {
+    router.register(new GoogleAdapter("google-default", { apiKey: process.env["GOOGLE_API_KEY"] }));
+  }
+  if (!hasStored("openrouter")) {
+    router.register(
+      new OpenRouterAdapter("openrouter-default", { apiKey: process.env["OPENROUTER_API_KEY"] }),
+    );
+  }
+  if (!hasStored("local")) {
+    router.register(new LocalAdapter("local-default", { baseUrl: process.env["LOCAL_MODEL_URL"] }));
+  }
+  return { router, stored };
 }
 
 // --- Handlers ---
@@ -759,18 +853,75 @@ const handleServe: Handler = async (args) => {
   return 0;
 };
 
+const handleAuthLogin: Handler = async (args) => {
+  const flags = parseFlags(args, {
+    provider: { type: "string", alias: "p" },
+    id: { type: "string" },
+    "api-key": { type: "string" },
+    "base-url": { type: "string" },
+    model: { type: "string" },
+  });
+  if (typeof flags === "string") return err(`auth login: ${flags}`);
+  const provider = parseProvider(flags.provider);
+  if (!provider)
+    return err(
+      "auth login: --provider openai|anthropic|google|openrouter|local|custom is required",
+    );
+  try {
+    const record = await providerAuthStore().upsert({
+      provider,
+      ...(typeof flags.id === "string" ? { id: flags.id } : {}),
+      ...(typeof flags["api-key"] === "string" ? { apiKey: flags["api-key"] } : {}),
+      ...(typeof flags["base-url"] === "string" ? { baseUrl: flags["base-url"] } : {}),
+      ...(typeof flags.model === "string" ? { defaultModel: flags.model } : {}),
+    });
+    await auditProviderAuth("provider.auth.login", `${provider}:${record.id}`);
+    process.stdout.write(`bureau: connected ${provider} as ${record.id}\n`);
+    return 0;
+  } catch (e) {
+    return err(`auth login: ${(e as Error).message}`);
+  }
+};
+
+const handleAuthList: Handler = async () => {
+  const records = await providerAuthStore().list();
+  if (records.length === 0) {
+    process.stdout.write("(no provider credentials stored)\n");
+    return 0;
+  }
+  for (const record of records) {
+    const secret = record.apiKey ? maskSecret(record.apiKey) : "(no api key)";
+    const base = record.baseUrl || "(default endpoint)";
+    const model = record.defaultModel || "(model from config)";
+    process.stdout.write(
+      `${record.provider.padEnd(12)}  ${record.id.padEnd(22)}  ${secret.padEnd(14)}  ${base}  ${model}\n`,
+    );
+  }
+  return 0;
+};
+
+const handleAuthLogout: Handler = async (args) => {
+  const flags = parseFlags(args, {
+    provider: { type: "string", alias: "p" },
+    id: { type: "string" },
+  });
+  if (typeof flags === "string") return err(`auth logout: ${flags}`);
+  const provider = parseProvider(flags.provider);
+  if (!provider)
+    return err(
+      "auth logout: --provider openai|anthropic|google|openrouter|local|custom is required",
+    );
+  const id = typeof flags.id === "string" ? flags.id : defaultProviderId(provider);
+  const removed = await providerAuthStore().remove(provider, id);
+  if (!removed) return err(`auth logout: no credential found for ${provider}:${id}`);
+  await auditProviderAuth("provider.auth.logout", `${provider}:${id}`);
+  process.stdout.write(`bureau: disconnected ${provider}:${id}\n`);
+  return 0;
+};
+
 const handleProvidersList: Handler = async () => {
   const config = await loadWorkspaceConfig(process.cwd()).catch(() => defaultConfig("freelancer"));
-  const router = new ProviderRouter();
-  router.register(new OpenAIAdapter("openai-default", { apiKey: process.env["OPENAI_API_KEY"] }));
-  router.register(
-    new AnthropicAdapter("anthropic-default", { apiKey: process.env["ANTHROPIC_API_KEY"] }),
-  );
-  router.register(new GoogleAdapter("google-default", { apiKey: process.env["GOOGLE_API_KEY"] }));
-  router.register(
-    new OpenRouterAdapter("openrouter-default", { apiKey: process.env["OPENROUTER_API_KEY"] }),
-  );
-  router.register(new LocalAdapter("local-default", { baseUrl: process.env["LOCAL_MODEL_URL"] }));
+  const { router, stored } = await buildProviderRouter();
   const validations = await router.validate();
   process.stdout.write(
     `Configured for: ${config.supreme_coordinator.provider} (${config.supreme_coordinator.model})\n\n`,
@@ -778,7 +929,10 @@ const handleProvidersList: Handler = async () => {
   for (const adapter of router.list()) {
     const v = validations.get(adapter.id);
     const status = v?.ok ? "OK" : `MISSING (${v?.reason ?? ""})`;
-    process.stdout.write(`${adapter.type.padEnd(12)}  ${adapter.id.padEnd(22)}  ${status}\n`);
+    const source = stored.some((record) => record.id === adapter.id) ? "auth" : "env";
+    process.stdout.write(
+      `${adapter.type.padEnd(12)}  ${adapter.id.padEnd(22)}  ${source.padEnd(5)}  ${status}\n`,
+    );
   }
   return 0;
 };
@@ -894,6 +1048,11 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
     list: handleApprovalsList,
     approve: handleApprovalsResolve("approved"),
     reject: handleApprovalsResolve("rejected"),
+  },
+  auth: {
+    login: handleAuthLogin,
+    list: handleAuthList,
+    logout: handleAuthLogout,
   },
   providers: { list: handleProvidersList },
   github: {

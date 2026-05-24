@@ -123,6 +123,8 @@ Every major capability described in the docs must become one of:
 | Google provider | provider adapter | partial |
 | OpenRouter provider | provider adapter | partial |
 | Local provider | provider adapter | partial |
+| Provider auth/connect | `ProviderAuthStore`, `bureau auth login/list/logout`, `.bureauos/auth/providers.json` | implemented |
+| Electron provider settings | not implemented | designed |
 | Gmail/Slack/Drive/Calendar | not implemented | designed |
 | Supabase/Stripe/Vercel | not implemented | designed |
 | Ads platforms | draft-only policy, no adapter | designed |
@@ -139,7 +141,7 @@ Every major capability described in the docs must become one of:
 
 ## Current Priority Order
 
-1. Add OpenCode-style provider auth/connect flows for CLI and ElectronJS Settings.
+1. Add ElectronJS Settings for provider auth/connect.
 2. Wire the provider router into concrete agents with role-specific defaults.
 3. Add GitHub check parsing and webhook ingestion.
 4. Add ElectronJS pages for clients, projects, approvals, reports, memory, settings.
