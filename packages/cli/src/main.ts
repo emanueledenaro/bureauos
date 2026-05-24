@@ -167,8 +167,9 @@ const handleInit: Handler = async (args) => {
     process.stdout.write(`bureau: config written to ${result.configFile}\n`);
     return 0;
   } catch (e) {
-    if (e instanceof InitError) return err(`init: ${e.message}`);
-    return err(`init: ${String(e)}`);
+    const message = e instanceof Error ? e.message : String(e);
+    if (e instanceof InitError) return err(`init: ${message}`);
+    return err(`init: ${message}`);
   }
 };
 
