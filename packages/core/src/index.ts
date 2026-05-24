@@ -85,6 +85,15 @@ export type {
   IntakeClassification,
 } from "./coordinator/intake.js";
 
+// Project dispatch
+export { ProjectDispatchService } from "./dispatch/project-dispatch.js";
+export type {
+  AgentHandoff,
+  ProjectDispatchDeps,
+  ProjectDispatchInput,
+  ProjectDispatchResult,
+} from "./dispatch/project-dispatch.js";
+
 // Agents
 export { AGENT_ROLES, AGENT_INDEX, getAgent, agentsByCategory } from "./agents/roles.js";
 export type { AgentDefinition, AgentCategory, AgentScope } from "./agents/roles.js";

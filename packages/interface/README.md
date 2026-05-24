@@ -9,6 +9,7 @@ Layout matches [docs/ui-reference/operating-room.md](../../docs/ui-reference/ope
 - Portfolio Operating Room with client columns and capacity allocation
 - Live Operations Timeline (backed by the kernel audit log)
 - Supreme Coordinator intake
+- Project Manager dispatch from project cards
 - Pending Approvals panel with approve/reject
 - Revenue Pulse KPI strip
 - Agent Layer footer
@@ -42,4 +43,4 @@ pnpm --filter @bureauos/interface run dist
 
 ## Status
 
-The dashboard reads live kernel state and supports coordinator intake, approval resolution, report generation, GitHub issue draft generation, and policy-gated GitHub issue creation when a repository and token are configured. Remaining work is tracked under Phase 4 in the [BACKLOG](../../BACKLOG.md).
+The dashboard reads live kernel state and supports coordinator intake, project dispatch, approval resolution, report generation, GitHub issue draft generation, and policy-gated GitHub issue creation when a repository and token are configured. Remaining work is tracked under Phase 4 in the [BACKLOG](../../BACKLOG.md).

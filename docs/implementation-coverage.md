@@ -127,9 +127,19 @@ Every major capability described in the docs must become one of:
 | Supabase/Stripe/Vercel | not implemented | designed |
 | Ads platforms | draft-only policy, no adapter | designed |
 
+## Project Teams
+
+| Documented capability | Runtime surface | Status |
+| --- | --- | --- |
+| Project Manager dispatch | `project dispatch`, `/projects/dispatch`, Electron project cards | implemented |
+| Project-scoped memory packet | `project-dispatch-packet` artifact | implemented |
+| Per-agent handoff packet | `agent-handoff` artifact | implemented |
+| Runtime-enforced memory isolation | not implemented | designed |
+| Per-project PM ownership config | not implemented | designed |
+
 ## Current Priority Order
 
-1. Add project manager dispatch with project-scoped memory packets.
+1. Enforce project memory isolation at capability/runtime boundaries.
 2. Add GitHub check parsing and webhook ingestion.
 3. Add ElectronJS pages for clients, projects, approvals, reports, memory, settings.
 4. Add always-on scheduler tasks for daily report, project health, growth review, and client review.

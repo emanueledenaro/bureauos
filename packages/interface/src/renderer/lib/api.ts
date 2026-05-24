@@ -164,6 +164,21 @@ export interface GitHubIssuePublishResult {
   source_artifacts: string[];
   report?: ArtifactRecord;
 }
+export interface AgentHandoff {
+  role: string;
+  artifact: ArtifactRecord;
+}
+export interface ProjectDispatchResult {
+  summary: string;
+  next_actions: string[];
+  project: ProjectRecord;
+  client?: ClientRecord;
+  run: RunRecord;
+  pipeline: string[];
+  packet: ArtifactRecord;
+  handoffs: AgentHandoff[];
+  artifacts: ArtifactRecord[];
+}
 
 export const Api = {
   pulse: () => api<CompanyPulse>("/company-pulse"),
@@ -196,6 +211,11 @@ export const Api = {
     }),
   githubCreateIssues: (input: { projectSlug: string; owner: string; repo: string }) =>
     api<GitHubIssuePublishResult>("/github/create-issues", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  dispatchProject: (input: { projectSlug: string; runType?: string; scope?: string }) =>
+    api<ProjectDispatchResult>("/projects/dispatch", {
       method: "POST",
       body: JSON.stringify(input),
     }),

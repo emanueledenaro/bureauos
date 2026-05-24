@@ -13,6 +13,7 @@ import { PolicyEngine } from "../policy/engine.js";
 import { RunEngine } from "../runs/engine.js";
 import { AGENT_ROLES } from "../agents/roles.js";
 import { CoordinatorIntakeService } from "../coordinator/intake.js";
+import { ProjectDispatchService } from "../dispatch/project-dispatch.js";
 import { GitHubIssueDraftService } from "../github/issue-drafts.js";
 import {
   GitHubIssuePublishService,
@@ -241,6 +242,31 @@ const ROUTES: Record<string, RouteHandler> = {
       ...(body.industry ? { industry: body.industry } : {}),
       ...(typeof body.expectedValue === "number" ? { expectedValue: body.expectedValue } : {}),
       ...(typeof body.expectedMargin === "number" ? { expectedMargin: body.expectedMargin } : {}),
+    });
+    ok(res, result, 201);
+  },
+
+  "POST /projects/dispatch": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as {
+      projectSlug?: string;
+      runType?: string;
+      scope?: string;
+      briefing?: string;
+      source?: string;
+    };
+    if (!body.projectSlug || !body.projectSlug.trim()) {
+      ok(res, { error: "projectSlug required" }, 400);
+      return;
+    }
+    const service = new ProjectDispatchService(options.workspaceRoot, {
+      config: options.config,
+    });
+    const result = await service.dispatch({
+      projectSlug: body.projectSlug,
+      ...(body.runType ? { runType: body.runType as never } : {}),
+      ...(body.scope ? { scope: body.scope } : {}),
+      ...(body.briefing ? { briefing: body.briefing } : {}),
+      ...(body.source ? { source: body.source } : {}),
     });
     ok(res, result, 201);
   },

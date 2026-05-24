@@ -12,6 +12,7 @@ See [BACKLOG.md](../../BACKLOG.md) Phase 1.
 - `bureau report generate` — generate executive and business operating reports
 - `bureau config validate` — validate the local config
 - `bureau memory search <q>` — search executive and project memory
+- `bureau project dispatch --project <slug>` — create project-scoped dispatch and agent handoff packets
 - `bureau run new` — start a new run
 - `bureau audit tail` — tail the audit log
 - `bureau policy explain <a>` — explain a policy decision
@@ -24,4 +25,4 @@ See [BACKLOG.md](../../BACKLOG.md) Phase 1.
 
 ## Status
 
-The CLI is an operational local surface for workspace setup, intake, memory, reports, approvals, provider checks, GitHub label setup, GitHub issue draft generation, policy-gated GitHub issue creation, GitHub issue sync, and daemon mode.
+The CLI is an operational local surface for workspace setup, intake, memory, project dispatch, reports, approvals, provider checks, GitHub label setup, GitHub issue draft generation, policy-gated GitHub issue creation, GitHub issue sync, and daemon mode.

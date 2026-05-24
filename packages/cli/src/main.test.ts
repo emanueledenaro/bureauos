@@ -148,6 +148,41 @@ describe("bureau cli", () => {
     expect(await exists(artifactsDir)).toBe(true);
   });
 
+  it("dispatches project-scoped agent handoffs from CLI", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+    await main([
+      "node",
+      "bureau",
+      "intake",
+      "--client",
+      "Pizzeria Aurora",
+      "--message",
+      "Ho parlato con una pizzeria: vuole sito con prenotazioni.",
+    ]);
+
+    const code = await main([
+      "node",
+      "bureau",
+      "project",
+      "dispatch",
+      "--project",
+      "pizzeria-aurora-booking-website",
+      "--type",
+      "feature",
+      "--scope",
+      "Prepare dev-ready work",
+    ]);
+
+    expect(code).toBe(0);
+    const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
+    expect(audit).toContain("project.dispatch.completed");
+    const runs = await readFile(
+      join(dir, ".bureauos", "memory", "projects", "pizzeria-aurora-booking-website", "RUNS.md"),
+      "utf8",
+    );
+    expect(runs).toContain("Pipeline: product, ux, development, qa, security, reviewer");
+  });
+
   it("requires a token before creating real GitHub issues from CLI", async () => {
     await main(["node", "bureau", "init", "--name", "BOS"]);
     const previousToken = process.env["GITHUB_TOKEN"];

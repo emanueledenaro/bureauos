@@ -172,6 +172,42 @@ describe("API server", () => {
     expect(audit).toContain("github.issue_publish.created");
   });
 
+  it("dispatches a project into project-scoped agent handoffs", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    await fetch(`${server.url}/coordinator/intake`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        clientName: "Pizzeria Aurora",
+        message: "Ho parlato con una pizzeria: vuole sito con prenotazioni.",
+      }),
+    });
+
+    const response = await fetch(`${server.url}/projects/dispatch`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        projectSlug: "pizzeria-aurora-booking-website",
+        runType: "feature",
+        scope: "Prepare dev-ready work",
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as {
+      packet: { type: string };
+      handoffs: unknown[];
+      pipeline: string[];
+    };
+    expect(body.packet.type).toBe("project-dispatch-packet");
+    expect(body.handoffs).toHaveLength(6);
+    expect(body.pipeline).toEqual(["product", "ux", "development", "qa", "security", "reviewer"]);
+
+    const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(audit).toContain("project.dispatch.completed");
+  });
+
   it("rejects GitHub issue creation when no API GitHub client is configured", async () => {
     server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
 

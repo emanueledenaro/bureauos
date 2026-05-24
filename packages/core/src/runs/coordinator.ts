@@ -47,6 +47,10 @@ const PIPELINES: Record<RunType, readonly string[]> = {
   health_check: ["project_manager"],
 };
 
+export function pipelineForRunType(type: RunType): readonly string[] {
+  return PIPELINES[type] ?? ["supreme_coordinator"];
+}
+
 export interface DispatchInput {
   workspaceRoot: string;
   run: RunRecord;
@@ -78,7 +82,7 @@ export async function dispatchRun(
       audit: deps.audit,
       policy: deps.policy,
     });
-  const pipeline = PIPELINES[input.run.type] ?? ["supreme_coordinator"];
+  const pipeline = pipelineForRunType(input.run.type);
   const briefingId = newId("brief");
   const briefingPath = join(workspacePaths(input.workspaceRoot).artifactsDir, `${briefingId}.md`);
   await ensureDir(workspacePaths(input.workspaceRoot).artifactsDir);

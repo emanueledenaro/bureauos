@@ -12,6 +12,7 @@ import {
   InitError,
   OpportunityRegistry,
   PolicyEngine,
+  ProjectDispatchService,
   ProjectRegistry,
   RunEngine,
   Scheduler,
@@ -25,6 +26,7 @@ import {
   workspacePaths,
   type BureauConfig,
   type Preset,
+  type RunType,
 } from "@bureauos/core";
 import { LocalMemoryStore } from "@bureauos/memory";
 import {
@@ -55,6 +57,7 @@ Registries:
   client create --name <n> [--status s] [--industry i]
   client list
   project create --name <n> --client <slug> [--status s] [--repo url] [--stack s]
+  project dispatch --project <slug> [--type feature] [--scope s]
   project list
   opportunity create --title <t> --source <s> --client <slug> [--value v] [--margin m]
   opportunity list
@@ -102,6 +105,26 @@ Misc:
 type Handler = (args: readonly string[]) => Promise<number>;
 
 const PRESETS: ReadonlySet<Preset> = new Set(["freelancer", "agency", "startup", "operator"]);
+const RUN_TYPES: ReadonlySet<RunType> = new Set([
+  "feature",
+  "bug",
+  "review",
+  "release",
+  "planning",
+  "retrospective",
+  "visibility",
+  "content",
+  "campaign",
+  "conversion",
+  "sales",
+  "social",
+  "creative",
+  "ads",
+  "compliance",
+  "client_success",
+  "intake",
+  "health_check",
+]);
 
 function parseFlags(
   args: readonly string[],
@@ -390,6 +413,40 @@ const handleProjectList: Handler = async () => {
   for (const p of all) {
     process.stdout.write(`${p.id}  ${p.slug.padEnd(24)}  ${p.status.padEnd(12)}  ${p.name}\n`);
   }
+  return 0;
+};
+
+const handleProjectDispatch: Handler = async (args) => {
+  const flags = parseFlags(args, {
+    project: { type: "string", alias: "p" },
+    type: { type: "string", alias: "t" },
+    scope: { type: "string", alias: "s" },
+    briefing: { type: "string", alias: "b" },
+  });
+  if (typeof flags === "string") return err(`project dispatch: ${flags}`);
+  if (typeof flags.project !== "string") {
+    return err("project dispatch: --project <slug> is required");
+  }
+  const runType = typeof flags.type === "string" ? flags.type : "planning";
+  if (!RUN_TYPES.has(runType as RunType)) {
+    return err(`project dispatch: unknown run type "${runType}"`);
+  }
+  const config = await loadWorkspaceConfig(process.cwd());
+  const result = await new ProjectDispatchService(process.cwd(), { config }).dispatch({
+    projectSlug: flags.project,
+    runType: runType as RunType,
+    ...(typeof flags.scope === "string" ? { scope: flags.scope } : {}),
+    ...(typeof flags.briefing === "string" ? { briefing: flags.briefing } : {}),
+    source: "cli",
+  });
+
+  process.stdout.write(`bureau: ${result.summary}\n`);
+  process.stdout.write(`run:      ${result.run.id}\n`);
+  process.stdout.write(`packet:   ${result.packet.id}\n`);
+  process.stdout.write(`pipeline: ${result.pipeline.join(", ")}\n`);
+  process.stdout.write(
+    `handoffs: ${result.handoffs.map((handoff) => handoff.artifact.id).join(", ")}\n`,
+  );
   return 0;
 };
 
@@ -735,7 +792,11 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
   config: { validate: handleConfigValidate },
   memory: { search: handleMemorySearch },
   client: { create: handleClientCreate, list: handleClientList },
-  project: { create: handleProjectCreate, list: handleProjectList },
+  project: {
+    create: handleProjectCreate,
+    dispatch: handleProjectDispatch,
+    list: handleProjectList,
+  },
   opportunity: { create: handleOpportunityCreate, list: handleOpportunityList },
   run: { new: handleRunNew, list: handleRunList },
   report: { generate: handleReportGenerate },

@@ -11,6 +11,7 @@ import {
   type GitHubIssueDraftResult,
   type GitHubIssuePublishResult,
   type OpportunityRecord,
+  type ProjectDispatchResult,
   type ProjectRecord,
   type RunRecord,
 } from "./lib/api";
@@ -298,14 +299,18 @@ function ProjectCard({
   p,
   drafting,
   publishing,
+  dispatching,
   onDraftIssues,
   onCreateIssues,
+  onDispatchProject,
 }: {
   p: ProjectRecord;
   drafting: boolean;
   publishing: boolean;
+  dispatching: boolean;
   onDraftIssues: (projectSlug: string) => Promise<void>;
   onCreateIssues: (project: ProjectRecord) => Promise<void>;
+  onDispatchProject: (project: ProjectRecord) => Promise<void>;
 }) {
   const statusTone: Record<string, string> = {
     in_progress: "bg-ok-500",
@@ -343,6 +348,13 @@ function ProjectCard({
           {drafting ? "Drafting..." : "Draft issues"}
         </button>
       </div>
+      <button
+        onClick={() => void onDispatchProject(p)}
+        disabled={dispatching}
+        className="mt-2 w-full rounded-md border border-neutral-200 px-2 py-1.5 text-[11px] font-medium text-neutral-700 hover:bg-neutral-100 disabled:text-neutral-400"
+      >
+        {dispatching ? "Dispatching..." : "Dispatch team"}
+      </button>
       {p.repository ? (
         <button
           onClick={() => void onCreateIssues(p)}
@@ -360,6 +372,7 @@ function PortfolioMap({
   state,
   onDraftIssues,
   onCreateIssues,
+  onDispatchProject,
 }: {
   state: DashboardState;
   onDraftIssues: (projectSlug: string) => Promise<GitHubIssueDraftResult>;
@@ -368,11 +381,14 @@ function PortfolioMap({
     owner: string,
     repo: string,
   ) => Promise<GitHubIssuePublishResult>;
+  onDispatchProject: (projectSlug: string) => Promise<ProjectDispatchResult>;
 }) {
   const [busyProject, setBusyProject] = useState<string | undefined>();
   const [publishingProject, setPublishingProject] = useState<string | undefined>();
+  const [dispatchingProject, setDispatchingProject] = useState<string | undefined>();
   const [lastDraft, setLastDraft] = useState<GitHubIssueDraftResult | undefined>();
   const [lastPublish, setLastPublish] = useState<GitHubIssuePublishResult | undefined>();
+  const [lastDispatch, setLastDispatch] = useState<ProjectDispatchResult | undefined>();
   const [error, setError] = useState<string | undefined>();
 
   const byClient = useMemo(() => {
@@ -395,6 +411,8 @@ function PortfolioMap({
     if (busyProject) return;
     setBusyProject(projectSlug);
     setError(undefined);
+    setLastPublish(undefined);
+    setLastDispatch(undefined);
     try {
       setLastDraft(await onDraftIssues(projectSlug));
     } catch (e) {
@@ -413,12 +431,29 @@ function PortfolioMap({
     }
     setPublishingProject(project.slug);
     setError(undefined);
+    setLastDraft(undefined);
+    setLastDispatch(undefined);
     try {
       setLastPublish(await onCreateIssues(project.slug, target.owner, target.repo));
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setPublishingProject(undefined);
+    }
+  };
+
+  const dispatchProject = async (project: ProjectRecord): Promise<void> => {
+    if (dispatchingProject) return;
+    setDispatchingProject(project.slug);
+    setError(undefined);
+    setLastDraft(undefined);
+    setLastPublish(undefined);
+    try {
+      setLastDispatch(await onDispatchProject(project.slug));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setDispatchingProject(undefined);
     }
   };
 
@@ -469,8 +504,10 @@ function PortfolioMap({
                     p={p}
                     drafting={busyProject === p.slug}
                     publishing={publishingProject === p.slug}
+                    dispatching={dispatchingProject === p.slug}
                     onDraftIssues={draftIssues}
                     onCreateIssues={createIssues}
+                    onDispatchProject={dispatchProject}
                   />
                 ))}
               </div>
@@ -493,7 +530,9 @@ function PortfolioMap({
                 ? lastPublish.status === "blocked"
                   ? `Issue creation blocked by policy; approval ${lastPublish.approval?.id ?? "required"} is waiting.`
                   : `Created ${lastPublish.created.length} GitHub issues on ${lastPublish.repository.owner}/${lastPublish.repository.repo}.`
-                : `Generated ${lastDraft?.drafts.length ?? 0} GitHub issue drafts and ${lastDraft?.artifacts.length ?? 0} artifacts for ${lastDraft?.project.name}.`}
+                : lastDispatch
+                  ? `Dispatched ${lastDispatch.project.name} to ${lastDispatch.pipeline.length} roles with packet ${lastDispatch.packet.id}.`
+                  : `Generated ${lastDraft?.drafts.length ?? 0} GitHub issue drafts and ${lastDraft?.artifacts.length ?? 0} artifacts for ${lastDraft?.project.name}.`}
           </div>
         )}
 
@@ -964,6 +1003,16 @@ export function App() {
     return result;
   };
 
+  const onDispatchProject = async (projectSlug: string): Promise<ProjectDispatchResult> => {
+    const result = await Api.dispatchProject({
+      projectSlug,
+      runType: "feature",
+      scope: "Prepare project-scoped delivery handoffs",
+    });
+    await refresh();
+    return result;
+  };
+
   return (
     <div className="flex h-full min-h-screen">
       <Sidebar state={state} />
@@ -976,6 +1025,7 @@ export function App() {
                 state={state}
                 onDraftIssues={onGitHubDraftIssues}
                 onCreateIssues={onGitHubCreateIssues}
+                onDispatchProject={onDispatchProject}
               />
             )}
             {mode === "today" && <TodayView state={state} />}

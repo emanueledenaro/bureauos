@@ -206,12 +206,13 @@ Goal: a local web app that visualizes kernel state, shaped like [docs/ui-referen
 ### 4.2 Local API Server
 
 - [x] Local HTTP server in `@bureauos/core` (node:http) exposing the kernel surfaces.
-- [x] Endpoints: `/company-pulse`, `/clients`, `/projects`, `/opportunities`, `/approvals`, `/runs`, `/agents`, `/audit`, `/approvals/resolve`, `/health`.
+- [x] Endpoints: `/company-pulse`, `/clients`, `/projects`, `/opportunities`, `/approvals`, `/runs`, `/agents`, `/audit`, `/approvals/resolve`, `/reports`, `/health`.
 - [x] CORS open for localhost during development.
 - [x] Token-based auth path (set `token` in options to enable).
 - [x] Implement Server-Sent Events for live timeline streaming.
-- [ ] Add the missing endpoints: `/reports`, `/coordinator/messages`, `/settings`.
+- [ ] Add the missing endpoints: `/coordinator/messages`, `/settings`.
 - [x] Add `POST /coordinator/intake` so the ElectronJS Coordinator panel can create client/project/opportunity work.
+- [x] Add `POST /projects/dispatch` so Project Manager can create scoped packets and specialist handoffs.
 
 ### 4.3 Portfolio Operating Room
 
@@ -273,9 +274,10 @@ Goal: a local web app that visualizes kernel state, shaped like [docs/ui-referen
 
 Goal: real multi-project support with isolated project memory and project-manager agents.
 
-- [ ] Implement the project manager agent role end-to-end (config, memory scope, dispatch).
-- [ ] Implement context-packet generation per agent (bounded context, not full memory).
-- [ ] Implement project memory isolation (a PM cannot see another project's memory unless authorized).
+- [x] Implement Project Manager dispatch with project-scoped memory packet.
+- [x] Implement context-packet generation per agent (bounded context, not full memory).
+- [ ] Add per-project Project Manager configuration and ownership records.
+- [ ] Enforce project memory isolation at capability/runtime boundaries.
 - [ ] Implement the coordinator's global memory access path (with audit).
 - [ ] Implement cross-project executive reports.
 - [ ] Add tests proving isolation cannot be bypassed by accident.

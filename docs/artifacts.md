@@ -350,6 +350,36 @@ Contains:
 - memory paths
 - approvals
 
+### Project Dispatch Packet
+
+Bounded project memory packet produced by the Project Manager before specialist execution.
+
+Contains:
+
+- run mission
+- client context
+- project context
+- allowed memory paths
+- specialist pipeline
+- source artifacts
+- pending approval gates
+- memory boundary rules
+
+### Agent Handoff
+
+Role-specific assignment packet for a specialist agent.
+
+Contains:
+
+- assigned role
+- run and project scope
+- dispatch packet reference
+- required outputs
+- responsibilities
+- source artifacts
+- must-not rules
+- escalation rules
+
 ### GitHub Issue Draft
 
 GitHub-ready work item generated from project artifacts.
@@ -454,6 +484,8 @@ Initial templates are available in:
 - [Creative Brief](../templates/creative-brief.md)
 - [Ad Campaign Brief](../templates/ad-campaign-brief.md)
 - [Repository Provisioning Plan](../templates/repository-provisioning-plan.md)
+- [Project Dispatch Packet](../templates/project-dispatch-packet.md)
+- [Agent Handoff](../templates/agent-handoff.md)
 - [GitHub Issue Draft](../templates/github-issue-draft.md)
 - [GitHub Issue Publish Report](../templates/github-issue-publish-report.md)
 - [Capability Audit](../templates/capability-audit.md)

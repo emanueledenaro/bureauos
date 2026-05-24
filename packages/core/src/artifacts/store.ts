@@ -21,6 +21,8 @@ export type ArtifactType =
   | "pr-review"
   | "decision-record"
   | "run-report"
+  | "project-dispatch-packet"
+  | "agent-handoff"
   | "executive-report"
   | "business-operating-report"
   | "brand-brief"
