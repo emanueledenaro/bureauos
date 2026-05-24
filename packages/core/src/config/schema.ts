@@ -1,0 +1,155 @@
+import { z } from "zod";
+
+/**
+ * Schema for the BureauOS workspace configuration file (`bureauos.yaml`).
+ *
+ * Mirrors the example at `examples/bureauos.example.yaml`. Most fields are
+ * optional with safe defaults so a minimal config still loads.
+ */
+
+const Preset = z.enum(["freelancer", "agency", "startup", "operator"]);
+export type Preset = z.infer<typeof Preset>;
+
+const AutonomyMode = z.enum([
+  "safe_draft",
+  "issue_only",
+  "branch_and_pr",
+  "business_operations",
+  "custom",
+]);
+export type AutonomyMode = z.infer<typeof AutonomyMode>;
+
+const ProviderName = z.enum([
+  "openai",
+  "anthropic",
+  "google",
+  "local",
+  "openrouter",
+  "codex",
+  "custom",
+]);
+export type ProviderName = z.infer<typeof ProviderName>;
+
+const OrganizationConfig = z.object({
+  name: z.string().min(1).default("Untitled BureauOS Workspace"),
+});
+
+const SetupConfig = z
+  .object({
+    preset: Preset.default("freelancer"),
+    mode: AutonomyMode.default("safe_draft"),
+    generated_by: z.string().default("bureau init"),
+    advanced_config_required: z.boolean().default(false),
+  })
+  .default({});
+
+const InterfaceConfig = z
+  .object({
+    enabled: z.boolean().default(true),
+    mode: z.enum(["local_dashboard", "headless"]).default("local_dashboard"),
+    mobile_first: z.boolean().default(true),
+  })
+  .default({});
+
+const AgentConfig = z.object({
+  provider: ProviderName.default("openai"),
+  model: z.string().default("gpt-5"),
+  runtime: z.string().optional(),
+  capabilities: z.array(z.string()).default([]),
+});
+
+const SupremeCoordinatorConfig = z
+  .object({
+    provider: ProviderName.default("openai"),
+    model: z.string().default("gpt-5"),
+    user_facing: z.boolean().default(true),
+    always_on: z.boolean().default(true),
+  })
+  .default({});
+
+const AutonomyConfig = z
+  .object({
+    observe_signals: z.boolean().default(true),
+    start_triage_runs: z.boolean().default(true),
+    create_internal_reports: z.boolean().default(true),
+    create_issues: z.boolean().default(true),
+    comment_on_issues: z.boolean().default(true),
+    create_branches: z.boolean().default(true),
+    push_commits: z.boolean().default(true),
+    open_pull_requests: z.boolean().default(true),
+    merge_pull_requests: z.boolean().default(false),
+    deploy_production: z.boolean().default(false),
+    contact_clients_directly: z.boolean().default(false),
+  })
+  .default({});
+
+const GrowthAutonomyConfig = z
+  .object({
+    draft_content: z.boolean().default(true),
+    draft_campaigns: z.boolean().default(true),
+    draft_replies: z.boolean().default(true),
+    draft_proposals: z.boolean().default(true),
+    update_internal_pipeline: z.boolean().default(true),
+    publish_public_content: z.boolean().default(false),
+    send_client_messages: z.boolean().default(false),
+    run_paid_ads: z.boolean().default(false),
+    change_pricing: z.boolean().default(false),
+    send_final_proposals: z.boolean().default(false),
+    accept_projects: z.boolean().default(false),
+    publish_social_posts: z.boolean().default(false),
+    generate_public_creatives: z.boolean().default(true),
+    launch_ad_campaigns: z.boolean().default(false),
+    change_ad_budget: z.boolean().default(false),
+    allow_one_off_owner_approval: z.boolean().default(true),
+    require_action_sensitive_memory_for_approval: z.boolean().default(true),
+  })
+  .default({});
+
+const LimitsConfig = z
+  .object({
+    max_retries_per_task: z.number().int().positive().default(2),
+    max_files_changed_without_human_review: z.number().int().positive().default(8),
+    require_tests_for_code_changes: z.boolean().default(true),
+    require_security_review_for_auth_changes: z.boolean().default(true),
+    require_security_review_for_payment_changes: z.boolean().default(true),
+    require_human_for_destructive_actions: z.boolean().default(true),
+  })
+  .default({});
+
+const MemoryConfig = z
+  .object({
+    coordinator_has_global_access: z.boolean().default(true),
+    isolate_projects: z.boolean().default(true),
+    write_decision_records: z.boolean().default(true),
+    verify_live_state_when_cheap: z.boolean().default(true),
+    retain_raw_history: z.boolean().default(true),
+    promote_daily_notes_to_durable_memory: z.boolean().default(true),
+    root_memory_always_loaded: z.boolean().default(true),
+  })
+  .default({});
+
+const GitHubConfig = z
+  .object({
+    source_of_truth: z.boolean().default(true),
+    use_issues: z.boolean().default(true),
+    use_labels: z.boolean().default(true),
+    use_comments: z.boolean().default(true),
+    use_pull_requests: z.boolean().default(true),
+    use_checks: z.boolean().default(true),
+  })
+  .default({});
+
+export const BureauConfigSchema = z.object({
+  organization: OrganizationConfig.default({ name: "Untitled BureauOS Workspace" }),
+  setup: SetupConfig,
+  interface: InterfaceConfig,
+  supreme_coordinator: SupremeCoordinatorConfig,
+  agents: z.record(z.string(), AgentConfig).default({}),
+  autonomy: AutonomyConfig,
+  growth_autonomy: GrowthAutonomyConfig,
+  limits: LimitsConfig,
+  memory: MemoryConfig,
+  github: GitHubConfig,
+});
+
+export type BureauConfig = z.infer<typeof BureauConfigSchema>;

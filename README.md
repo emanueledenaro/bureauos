@@ -2,6 +2,26 @@
 
 An always-on autonomous AI agency operating system that runs revenue, software delivery, growth, and client operations.
 
+## Quickstart
+
+The runtime is in early scaffolding. The first useful command — `bureau init` — already works.
+
+```bash
+# requires Node 20 and pnpm 9
+pnpm install
+pnpm -r run build
+node packages/cli/dist/bin/bureau.js init --name "Your Company" --preset freelancer
+```
+
+This creates a local `.bureauos/` workspace with:
+
+- `bureauos.yaml` — the runtime config
+- `memory/` — Markdown-first structured memory (ROOT, COMPANY, CLIENTS, PROJECTS, ...)
+- `audit/audit.log` — append-only audit trail
+- `approvals/` — pending and resolved approval records
+
+See `docs/bos-kernel-infrastructure.md` for the full layout and [`BACKLOG.md`](./BACKLOG.md) for what comes next.
+
 BureauOS is an operating model for autonomous AI agency work. A single supreme executive coordinator speaks with the owner, remembers the whole company through structured persistent memory, manages multiple project teams, grows the owner's visibility, runs marketing and conversion work, creates and manages revenue opportunities, and delegates execution to specialized agents with scoped memory, clear policies, and auditable artifacts.
 
 It is not a prompt dump and it is not a single coding bot.

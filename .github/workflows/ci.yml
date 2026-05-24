@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm -r run typecheck
+
+      - name: Build
+        run: pnpm -r run build
+
+      - name: Test
+        run: pnpm -r run test
+
+      - name: Smoke test bureau init
+        run: |
+          mkdir -p /tmp/bureauos-smoke
+          cd /tmp/bureauos-smoke
+          node $GITHUB_WORKSPACE/packages/cli/dist/bin/bureau.js init --name "CI Smoke" --preset freelancer
+          test -f .bureauos/bureauos.yaml
+          test -f .bureauos/memory/ROOT.md
+          test -f .bureauos/audit/audit.log
+          grep -q "CI Smoke" .bureauos/memory/ROOT.md
