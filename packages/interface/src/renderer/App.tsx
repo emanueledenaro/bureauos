@@ -143,18 +143,41 @@ function StatusPill({ tone, label, value }: { tone: "ok" | "warn" | "bad"; label
   );
 }
 
-function Header({ pulse }: { pulse?: CompanyPulse }) {
+type AdaptiveMode = "portfolio" | "today" | "goals";
+
+function Header({
+  pulse,
+  mode,
+  onModeChange,
+}: {
+  pulse?: CompanyPulse;
+  mode: AdaptiveMode;
+  onModeChange: (m: AdaptiveMode) => void;
+}) {
   const now = new Date();
   const date = now.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
   const time = now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  const modes: AdaptiveMode[] = ["portfolio", "today", "goals"];
   return (
     <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-3">
       <div>
         <div className="flex items-baseline gap-3">
           <h1 className="text-base font-semibold text-neutral-900">Company Pulse</h1>
           <span className="text-xs text-neutral-500">Adaptive:</span>
-          <span className="text-xs font-medium text-neutral-900">Portfolio</span>
-          <span className="text-xs text-neutral-400">/ Today / Goals</span>
+          {modes.map((m, i) => (
+            <button
+              key={m}
+              onClick={() => onModeChange(m)}
+              className={classes(
+                "text-xs",
+                mode === m
+                  ? "font-medium text-neutral-900"
+                  : "text-neutral-400 hover:text-neutral-600",
+              )}
+            >
+              {m[0]?.toUpperCase()}{m.slice(1)}{i < modes.length - 1 ? " /" : ""}
+            </button>
+          ))}
         </div>
         {pulse && (
           <div className="text-xs text-neutral-500">
@@ -525,8 +548,96 @@ function AgentLayer({ agents }: { agents: AgentDefinition[] }) {
 
 // ---------- root ----------
 
+function GoalsView({ state }: { state: DashboardState }) {
+  const opps = state.opportunities;
+  const totalValue = opps.reduce((acc, o) => acc + (o.expected_value || 0), 0);
+  const wonValue = opps.filter((o) => o.status === "won").reduce((acc, o) => acc + (o.expected_value || 0), 0);
+  const margin = opps.length ? opps.reduce((acc, o) => acc + (o.expected_margin || 0), 0) / opps.length : 0;
+
+  return (
+    <section className="rounded-lg border border-neutral-200 bg-white">
+      <div className="border-b border-neutral-200 px-4 py-3">
+        <h2 className="text-sm font-semibold text-neutral-900">Business Goals</h2>
+        <p className="text-xs text-neutral-500">Where the company is heading this quarter.</p>
+      </div>
+      <div className="grid gap-4 p-4 md:grid-cols-2">
+        <div className="rounded-md border border-neutral-200 p-3">
+          <div className="text-[11px] uppercase tracking-wide text-neutral-500">Pipeline</div>
+          <div className="mt-1 font-mono text-2xl font-semibold text-neutral-900">{formatMoney(totalValue)}</div>
+          <div className="text-xs text-neutral-500">{opps.length} opportunities across {state.clients.length} clients</div>
+        </div>
+        <div className="rounded-md border border-neutral-200 p-3">
+          <div className="text-[11px] uppercase tracking-wide text-neutral-500">Won (cumulative)</div>
+          <div className="mt-1 font-mono text-2xl font-semibold text-neutral-900">{formatMoney(wonValue)}</div>
+          <div className="text-xs text-neutral-500">Expected margin {Math.round(margin)}%</div>
+        </div>
+      </div>
+      <div className="border-t border-neutral-200 px-4 py-3">
+        <div className="text-xs font-medium text-neutral-700">Opportunity pipeline</div>
+        <ol className="mt-2 space-y-1 text-xs text-neutral-700">
+          {opps.length === 0 ? (
+            <li className="text-neutral-500">No opportunities yet.</li>
+          ) : (
+            opps.map((o) => (
+              <li key={o.id} className="flex justify-between rounded bg-neutral-50 px-2 py-1">
+                <span>{o.title}</span>
+                <span className="text-neutral-500">{o.status} - {formatMoney(o.expected_value || 0)}</span>
+              </li>
+            ))
+          )}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
+function TodayView({ state }: { state: DashboardState }) {
+  const blockedRuns = state.runs.filter((r) => r.status === "blocked" || r.status === "needs_human");
+  const blockedProjects = state.projects.filter((p) => p.status === "blocked");
+  return (
+    <section className="rounded-lg border border-neutral-200 bg-white">
+      <div className="border-b border-neutral-200 px-4 py-3">
+        <h2 className="text-sm font-semibold text-neutral-900">Today</h2>
+        <p className="text-xs text-neutral-500">What needs your attention right now.</p>
+      </div>
+      <div className="space-y-4 p-4 text-xs">
+        <div>
+          <div className="font-medium text-neutral-700">Approvals waiting ({state.approvals.length})</div>
+          {state.approvals.length === 0 ? (
+            <div className="mt-1 text-neutral-500">Nothing waiting.</div>
+          ) : (
+            <ul className="mt-1 space-y-1">
+              {state.approvals.map((a) => (
+                <li key={a.id} className="rounded bg-neutral-50 px-2 py-1">
+                  {a.action} - {a.target} ({a.scope})
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div>
+          <div className="font-medium text-neutral-700">Blocked work ({blockedRuns.length + blockedProjects.length})</div>
+          {blockedRuns.length + blockedProjects.length === 0 ? (
+            <div className="mt-1 text-neutral-500">No blockers.</div>
+          ) : (
+            <ul className="mt-1 space-y-1">
+              {blockedRuns.map((r) => (
+                <li key={r.id} className="rounded bg-neutral-50 px-2 py-1">Run {r.id} - {r.status}: {r.scope}</li>
+              ))}
+              {blockedProjects.map((p) => (
+                <li key={p.id} className="rounded bg-neutral-50 px-2 py-1">Project {p.name} blocked</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function App() {
   const { state, refresh } = useDashboard();
+  const [mode, setMode] = useState<AdaptiveMode>("portfolio");
 
   const onResolve = async (id: string, status: "approved" | "rejected"): Promise<void> => {
     try {
@@ -541,10 +652,12 @@ export function App() {
     <div className="flex h-full min-h-screen">
       <Sidebar state={state} />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Header pulse={state.pulse} />
+        <Header pulse={state.pulse} mode={mode} onModeChange={setMode} />
         <main className="flex flex-1 gap-4 overflow-auto p-4">
           <div className="flex flex-1 flex-col gap-4">
-            <PortfolioMap state={state} />
+            {mode === "portfolio" && <PortfolioMap state={state} />}
+            {mode === "today" && <TodayView state={state} />}
+            {mode === "goals" && <GoalsView state={state} />}
             <OperationsTimeline events={state.audit} />
             <RevenuePulse pulse={state.pulse} opportunities={state.opportunities} />
           </div>
