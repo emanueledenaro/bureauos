@@ -215,6 +215,58 @@ describe("bureau cli", () => {
     expect(await exists(authFile)).toBe(false);
   });
 
+  it("keeps OpenAI Codex OAuth separate from OpenAI API auth", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+    const oauthCode = await main([
+      "node",
+      "bureau",
+      "auth",
+      "login",
+      "--provider",
+      "openai-codex",
+      "--access-token",
+      "oauth-access-token-cli",
+      "--refresh-token",
+      "oauth-refresh-token-cli",
+      "--model",
+      "gpt-5",
+    ]);
+    const apiCode = await main([
+      "node",
+      "bureau",
+      "auth",
+      "login",
+      "--provider",
+      "openai",
+      "--api-key",
+      "sk-test-provider-auth",
+      "--model",
+      "gpt-5",
+    ]);
+
+    expect(oauthCode).toBe(0);
+    expect(apiCode).toBe(0);
+    const stored = await readFile(join(dir, ".bureauos", "auth", "providers.json"), "utf8");
+    expect(stored).toContain('"provider": "openai-codex"');
+    expect(stored).toContain('"mode": "oauth"');
+    expect(stored).toContain('"provider": "openai"');
+    expect(stored).toContain('"mode": "api-key"');
+
+    const invalid = await main([
+      "node",
+      "bureau",
+      "auth",
+      "login",
+      "--provider",
+      "openai",
+      "--mode",
+      "oauth",
+      "--access-token",
+      "wrong-route",
+    ]);
+    expect(invalid).toBe(1);
+  });
+
   it("requires a token before creating real GitHub issues from CLI", async () => {
     await main(["node", "bureau", "init", "--name", "BOS"]);
     const previousToken = process.env["GITHUB_TOKEN"];

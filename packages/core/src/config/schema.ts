@@ -20,6 +20,7 @@ const AutonomyMode = z.enum([
 export type AutonomyMode = z.infer<typeof AutonomyMode>;
 
 const ProviderName = z.enum([
+  "openai-codex",
   "openai",
   "anthropic",
   "google",
@@ -52,7 +53,7 @@ const InterfaceConfig = z
   .default({});
 
 const AgentConfig = z.object({
-  provider: ProviderName.default("openai"),
+  provider: ProviderName.default("openai-codex"),
   model: z.string().default("gpt-5"),
   runtime: z.string().optional(),
   capabilities: z.array(z.string()).default([]),
@@ -60,7 +61,7 @@ const AgentConfig = z.object({
 
 const SupremeCoordinatorConfig = z
   .object({
-    provider: ProviderName.default("openai"),
+    provider: ProviderName.default("openai-codex"),
     model: z.string().default("gpt-5"),
     user_facing: z.boolean().default(true),
     always_on: z.boolean().default(true),

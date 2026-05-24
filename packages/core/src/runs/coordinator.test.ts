@@ -123,6 +123,7 @@ describe("Supreme Coordinator dispatch", () => {
     const audit = new AuditLog(workspacePaths(dir).auditLog);
     const artifacts = new ArtifactStore(dir);
     const config = defaultConfig("freelancer");
+    config.supreme_coordinator.provider = "openai";
     const policy = new PolicyEngine(config, new ApprovalRegistry(dir));
     const runs = new RunEngine(dir, { audit, artifacts, policy });
     const providerRouter = new ProviderRouter();

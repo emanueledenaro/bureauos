@@ -83,6 +83,7 @@ Approvals:
 
 Providers:
   auth login --provider p [--api-key k] [--base-url u] [--model m]
+  auth login --provider openai-codex --access-token t [--refresh-token t] [--model m]
   auth list
   auth logout --provider p [--id provider-default]
   providers list
@@ -107,6 +108,7 @@ type Handler = (args: readonly string[]) => Promise<number>;
 
 const PRESETS: ReadonlySet<Preset> = new Set(["freelancer", "agency", "startup", "operator"]);
 const PROVIDER_TYPES: ReadonlySet<ProviderType> = new Set([
+  "openai-codex",
   "openai",
   "anthropic",
   "google",
@@ -794,7 +796,11 @@ const handleAuthLogin: Handler = async (args) => {
   const flags = parseFlags(args, {
     provider: { type: "string", alias: "p" },
     id: { type: "string" },
+    mode: { type: "string" },
     "api-key": { type: "string" },
+    "access-token": { type: "string" },
+    "refresh-token": { type: "string" },
+    "expires-at": { type: "string" },
     "base-url": { type: "string" },
     model: { type: "string" },
   });
@@ -802,13 +808,21 @@ const handleAuthLogin: Handler = async (args) => {
   const provider = parseProvider(flags.provider);
   if (!provider)
     return err(
-      "auth login: --provider openai|anthropic|google|openrouter|local|custom is required",
+      "auth login: --provider openai-codex|openai|anthropic|google|openrouter|local|custom is required",
     );
   try {
     const record = await providerAuthStore().upsert({
       provider,
       ...(typeof flags.id === "string" ? { id: flags.id } : {}),
+      ...(typeof flags.mode === "string"
+        ? { mode: flags.mode as "oauth" | "api-key" | "local" }
+        : {}),
       ...(typeof flags["api-key"] === "string" ? { apiKey: flags["api-key"] } : {}),
+      ...(typeof flags["access-token"] === "string" ? { accessToken: flags["access-token"] } : {}),
+      ...(typeof flags["refresh-token"] === "string"
+        ? { refreshToken: flags["refresh-token"] }
+        : {}),
+      ...(typeof flags["expires-at"] === "string" ? { expiresAt: flags["expires-at"] } : {}),
       ...(typeof flags["base-url"] === "string" ? { baseUrl: flags["base-url"] } : {}),
       ...(typeof flags.model === "string" ? { defaultModel: flags.model } : {}),
     });
@@ -828,10 +842,15 @@ const handleAuthList: Handler = async () => {
   }
   for (const record of records) {
     const secret = record.apiKey ? maskSecret(record.apiKey) : "(no api key)";
+    const oauth = record.accessToken
+      ? maskSecret(record.accessToken)
+      : record.refreshToken
+        ? maskSecret(record.refreshToken)
+        : "(no oauth token)";
     const base = record.baseUrl || "(default endpoint)";
     const model = record.defaultModel || "(model from config)";
     process.stdout.write(
-      `${record.provider.padEnd(12)}  ${record.id.padEnd(22)}  ${secret.padEnd(14)}  ${base}  ${model}\n`,
+      `${record.provider.padEnd(14)}  ${record.id.padEnd(24)}  ${record.mode.padEnd(7)}  ${secret.padEnd(14)}  ${oauth.padEnd(18)}  ${base}  ${model}\n`,
     );
   }
   return 0;
@@ -846,7 +865,7 @@ const handleAuthLogout: Handler = async (args) => {
   const provider = parseProvider(flags.provider);
   if (!provider)
     return err(
-      "auth logout: --provider openai|anthropic|google|openrouter|local|custom is required",
+      "auth logout: --provider openai-codex|openai|anthropic|google|openrouter|local|custom is required",
     );
   const id = typeof flags.id === "string" ? flags.id : defaultProviderId(provider);
   const removed = await providerAuthStore().remove(provider, id);

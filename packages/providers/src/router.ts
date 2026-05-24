@@ -8,9 +8,9 @@ export interface ProviderSelection {
 /**
  * Provider router.
  *
- * Selects providers per agent role with fallback chains. Right now this is a
- * simple registry; budget-aware routing and capability-aware routing land
- * later in Phase 2.
+ * Selects providers per agent role. Assignments may contain explicit fallback
+ * chains, but BureauOS never invents billing-sensitive fallbacks by itself.
+ * Budget-aware routing and capability-aware routing land later in Phase 2.
  */
 export class ProviderRouter {
   private readonly providers = new Map<string, ProviderAdapter>();
@@ -21,8 +21,9 @@ export class ProviderRouter {
   }
 
   /**
-   * Assign a chain of providers to an agent role.
-   * The first one is the default; subsequent entries are fallbacks.
+   * Assign a provider chain to an agent role.
+   * The first one is the route to try first; subsequent entries must be
+   * explicit, policy-approved fallbacks.
    */
   assign(agentRole: string, providerIds: readonly string[]): void {
     this.assignments.set(agentRole, [...providerIds]);

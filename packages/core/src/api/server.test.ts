@@ -310,6 +310,36 @@ describe("API server", () => {
     expect(audit).not.toContain("sk-test-provider-secret");
   });
 
+  it("connects OpenAI Codex OAuth without falling back to OpenAI API auth", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const login = await fetch(`${server.url}/providers/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        provider: "openai-codex",
+        accessToken: "oauth-access-token-api",
+        refreshToken: "oauth-refresh-token-api",
+        defaultModel: "gpt-5",
+      }),
+    });
+
+    expect(login.status).toBe(201);
+    const loginBody = (await login.json()) as Array<{
+      provider: string;
+      source: string;
+      auth_mode: string;
+      oauth_token_masked: string;
+      no_api_fallback: boolean;
+    }>;
+    const codex = loginBody.find((provider) => provider.provider === "openai-codex");
+    expect(codex?.source).toBe("auth");
+    expect(codex?.auth_mode).toBe("oauth");
+    expect(codex?.oauth_token_masked).toBe("oaut...-api");
+    expect(codex?.no_api_fallback).toBe(true);
+    expect(JSON.stringify(loginBody)).not.toContain("oauth-access-token-api");
+  });
+
   it("rejects GitHub issue creation when no API GitHub client is configured", async () => {
     server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
 

@@ -190,10 +190,13 @@ export interface ProviderConnection {
   provider: string;
   id: string;
   source: "auth" | "env";
+  auth_mode: "oauth" | "api-key" | "local";
   has_api_key: boolean;
   api_key_masked: string;
+  oauth_token_masked: string;
   base_url: string;
   default_model: string;
+  no_api_fallback: boolean;
   status: "ok" | "missing";
   reason?: string;
 }
@@ -241,7 +244,10 @@ export const Api = {
     }),
   providerLogin: (input: {
     provider: string;
+    mode?: "oauth" | "api-key" | "local";
     apiKey?: string;
+    accessToken?: string;
+    refreshToken?: string;
     baseUrl?: string;
     defaultModel?: string;
   }) =>

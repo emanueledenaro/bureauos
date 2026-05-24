@@ -16,13 +16,14 @@ export interface AgentModelSelection {
 }
 
 const CATEGORY_FALLBACKS: Record<AgentCategory, readonly ProviderType[]> = {
-  executive: ["openai", "anthropic", "openrouter", "google", "local"],
-  delivery: ["openai", "anthropic", "google", "openrouter", "local"],
-  growth: ["openai", "anthropic", "openrouter", "google", "local"],
-  governance: ["anthropic", "openai", "google", "openrouter", "local"],
+  executive: ["openai-codex", "anthropic", "openrouter", "google", "local"],
+  delivery: ["openai-codex", "anthropic", "google", "openrouter", "local"],
+  growth: ["openai-codex", "anthropic", "openrouter", "google", "local"],
+  governance: ["openai-codex", "anthropic", "google", "openrouter", "local"],
 };
 
 const PROVIDER_DEFAULT_MODELS: Record<ProviderType, string> = {
+  "openai-codex": "gpt-5",
   openai: "gpt-5",
   anthropic: "claude-opus-4-7",
   google: "gemini-2.5-pro",
@@ -68,9 +69,12 @@ export function providerChainForRole(
   config: BureauConfig,
   role: AgentDefinition,
 ): readonly string[] {
-  const preferred = toProviderType(roleModelPreference(config, role.id).provider);
+  const preference = roleModelPreference(config, role.id);
+  if (preference.provider === "codex") return [providerId("openai-codex")];
+  const preferred = toProviderType(preference.provider);
+  if (preferred) return [providerId(preferred)];
   const fallback = CATEGORY_FALLBACKS[role.category];
-  return unique([...(preferred ? [preferred] : []), ...fallback]).map(providerId);
+  return unique(fallback).map(providerId);
 }
 
 export function configureAgentProviderRouting(

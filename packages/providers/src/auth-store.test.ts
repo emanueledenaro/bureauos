@@ -34,6 +34,7 @@ describe("ProviderAuthStore", () => {
     });
 
     expect(record.id).toBe("openai-default");
+    expect(record.mode).toBe("api-key");
     expect(record.defaultModel).toBe("gpt-5");
     expect(await exists(providerAuthPath(dir))).toBe(true);
     const mode = (await stat(providerAuthPath(dir))).mode & 0o777;
@@ -53,5 +54,44 @@ describe("ProviderAuthStore", () => {
     await expect(readFile(providerAuthPath(dir), "utf8")).resolves.toContain("sk-ant-new");
     expect(await store.remove("anthropic")).toBe(true);
     expect(await exists(providerAuthPath(dir))).toBe(false);
+  });
+
+  it("stores OpenAI Codex OAuth separately from OpenAI API keys", async () => {
+    const store = ProviderAuthStore.forWorkspace(dir);
+    const oauth = await store.upsert({
+      provider: "openai-codex",
+      accessToken: "oauth-access-token-123456",
+      refreshToken: "oauth-refresh-token-123456",
+      defaultModel: "gpt-5",
+    });
+    const api = await store.upsert({
+      provider: "openai",
+      apiKey: "sk-openai-api-key",
+      defaultModel: "gpt-5",
+    });
+
+    expect(oauth.id).toBe("openai-codex-default");
+    expect(oauth.mode).toBe("oauth");
+    expect(oauth.apiKey).toBe("");
+    expect(api.id).toBe("openai-default");
+    expect(api.mode).toBe("api-key");
+    expect(api.accessToken).toBe("");
+
+    const records = await store.list();
+    expect(records.map((record) => `${record.provider}:${record.mode}`).sort()).toEqual([
+      "openai-codex:oauth",
+      "openai:api-key",
+    ]);
+  });
+
+  it("rejects OAuth on the OpenAI API provider", async () => {
+    const store = ProviderAuthStore.forWorkspace(dir);
+    await expect(
+      store.upsert({
+        provider: "openai",
+        mode: "oauth",
+        accessToken: "oauth-access-token-123456",
+      }),
+    ).rejects.toThrow("openai-codex");
   });
 });

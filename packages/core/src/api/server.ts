@@ -68,6 +68,7 @@ type ProviderStatus = ProviderConnection & {
 };
 
 const PROVIDER_TYPES: ReadonlySet<ProviderType> = new Set([
+  "openai-codex",
   "openai",
   "anthropic",
   "google",
@@ -225,7 +226,11 @@ const ROUTES: Record<string, RouteHandler> = {
     const body = (await readJson(req)) as {
       provider?: string;
       id?: string;
+      mode?: "oauth" | "api-key" | "local";
       apiKey?: string;
+      accessToken?: string;
+      refreshToken?: string;
+      expiresAt?: string;
       baseUrl?: string;
       defaultModel?: string;
     };
@@ -238,7 +243,11 @@ const ROUTES: Record<string, RouteHandler> = {
     const record = await ProviderAuthStore.forWorkspace(options.workspaceRoot).upsert({
       provider,
       ...(body.id ? { id: body.id } : {}),
+      ...(body.mode ? { mode: body.mode } : {}),
       ...(body.apiKey ? { apiKey: body.apiKey } : {}),
+      ...(body.accessToken ? { accessToken: body.accessToken } : {}),
+      ...(body.refreshToken ? { refreshToken: body.refreshToken } : {}),
+      ...(body.expiresAt ? { expiresAt: body.expiresAt } : {}),
       ...(body.baseUrl ? { baseUrl: body.baseUrl } : {}),
       ...(body.defaultModel ? { defaultModel: body.defaultModel } : {}),
     });

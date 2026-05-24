@@ -23,9 +23,14 @@ export type {
   ProviderEnv,
 } from "./configured-router.js";
 export { ProviderAuthStore, maskSecret, providerAuthPath } from "./auth-store.js";
-export type { ProviderCredentialInput, ProviderCredentialRecord } from "./auth-store.js";
+export type {
+  ProviderAuthMode,
+  ProviderCredentialInput,
+  ProviderCredentialRecord,
+} from "./auth-store.js";
 
 export { OpenAIAdapter, NotConfiguredError } from "./adapters/openai.js";
+export { OAuthBridgeNotConfiguredError, OpenAICodexOAuthAdapter } from "./adapters/openai-codex.js";
 export { AnthropicAdapter } from "./adapters/anthropic.js";
 export { GoogleAdapter } from "./adapters/google.js";
 export { LocalAdapter } from "./adapters/local.js";

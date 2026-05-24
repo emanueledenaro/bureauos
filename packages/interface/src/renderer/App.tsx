@@ -1193,16 +1193,23 @@ function SettingsView({
   providers: ProviderConnection[];
   onProviderLogin: (input: {
     provider: string;
+    mode?: "oauth" | "api-key" | "local";
     apiKey?: string;
+    accessToken?: string;
+    refreshToken?: string;
     baseUrl?: string;
     defaultModel?: string;
   }) => Promise<void>;
   onProviderLogout: (provider: string, id: string) => Promise<void>;
 }) {
-  const [provider, setProvider] = useState("openai");
+  const [provider, setProvider] = useState("openai-codex");
   const [apiKey, setApiKey] = useState("");
+  const [accessToken, setAccessToken] = useState("");
+  const [refreshToken, setRefreshToken] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
   const [defaultModel, setDefaultModel] = useState("");
   const [busy, setBusy] = useState(false);
+  const mode = provider === "openai-codex" ? "oauth" : provider === "local" ? "local" : "api-key";
 
   const connect = async (): Promise<void> => {
     if (busy) return;
@@ -1210,10 +1217,17 @@ function SettingsView({
     try {
       await onProviderLogin({
         provider,
+        mode,
         ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+        ...(accessToken.trim() ? { accessToken: accessToken.trim() } : {}),
+        ...(refreshToken.trim() ? { refreshToken: refreshToken.trim() } : {}),
+        ...(baseUrl.trim() ? { baseUrl: baseUrl.trim() } : {}),
         ...(defaultModel.trim() ? { defaultModel: defaultModel.trim() } : {}),
       });
       setApiKey("");
+      setAccessToken("");
+      setRefreshToken("");
+      setBaseUrl("");
       setDefaultModel("");
     } finally {
       setBusy(false);
@@ -1233,17 +1247,49 @@ function SettingsView({
             onChange={(event) => setProvider(event.target.value)}
             className="h-9 rounded-md border border-neutral-200 bg-white px-3 text-[11px]"
           >
-            {["openai", "anthropic", "google", "openrouter", "local", "custom"].map((item) => (
-              <option key={item}>{item}</option>
-            ))}
+            <option value="openai-codex">OpenAI Codex OAuth</option>
+            <option value="openai">OpenAI API</option>
+            <option value="anthropic">Anthropic API</option>
+            <option value="google">Google API</option>
+            <option value="openrouter">OpenRouter API</option>
+            <option value="local">Local</option>
+            <option value="custom">Custom API</option>
           </select>
-          <input
-            value={apiKey}
-            onChange={(event) => setApiKey(event.target.value)}
-            className="h-9 rounded-md border border-neutral-200 px-3 text-[11px]"
-            placeholder="API key"
-            type="password"
-          />
+          {mode === "oauth" ? (
+            <>
+              <input
+                value={accessToken}
+                onChange={(event) => setAccessToken(event.target.value)}
+                className="h-9 rounded-md border border-neutral-200 px-3 text-[11px]"
+                placeholder="OAuth access token"
+                type="password"
+              />
+              <input
+                value={refreshToken}
+                onChange={(event) => setRefreshToken(event.target.value)}
+                className="h-9 rounded-md border border-neutral-200 px-3 text-[11px]"
+                placeholder="OAuth refresh token"
+                type="password"
+              />
+            </>
+          ) : null}
+          {mode === "api-key" ? (
+            <input
+              value={apiKey}
+              onChange={(event) => setApiKey(event.target.value)}
+              className="h-9 rounded-md border border-neutral-200 px-3 text-[11px]"
+              placeholder="API key"
+              type="password"
+            />
+          ) : null}
+          {mode === "local" || provider === "custom" ? (
+            <input
+              value={baseUrl}
+              onChange={(event) => setBaseUrl(event.target.value)}
+              className="h-9 rounded-md border border-neutral-200 px-3 text-[11px]"
+              placeholder="Base URL"
+            />
+          ) : null}
           <input
             value={defaultModel}
             onChange={(event) => setDefaultModel(event.target.value)}
@@ -1260,8 +1306,9 @@ function SettingsView({
         </div>
       </div>
       <div className="mt-5 overflow-hidden rounded-md border border-neutral-200">
-        <div className="grid grid-cols-[120px_1fr_80px_90px_100px] bg-neutral-50 px-4 py-2 text-[10px] font-semibold uppercase text-neutral-500">
+        <div className="grid grid-cols-[120px_90px_1fr_80px_90px_100px] bg-neutral-50 px-4 py-2 text-[10px] font-semibold uppercase text-neutral-500">
           <span>Provider</span>
+          <span>Mode</span>
           <span>Credential</span>
           <span>Source</span>
           <span>Status</span>
@@ -1270,11 +1317,17 @@ function SettingsView({
         {providers.map((item) => (
           <div
             key={`${item.provider}:${item.id}`}
-            className="grid grid-cols-[120px_1fr_80px_90px_100px] items-center border-t border-neutral-100 px-4 py-3 text-[11px]"
+            className="grid grid-cols-[120px_90px_1fr_80px_90px_100px] items-center border-t border-neutral-100 px-4 py-3 text-[11px]"
           >
             <span className="font-medium text-neutral-950">{item.provider}</span>
+            <span className="text-neutral-500">{item.auth_mode}</span>
             <span className="truncate text-neutral-500">
-              {item.id} {item.api_key_masked ? `- ${item.api_key_masked}` : ""}
+              {item.id}{" "}
+              {item.oauth_token_masked
+                ? `- ${item.oauth_token_masked}`
+                : item.api_key_masked
+                  ? `- ${item.api_key_masked}`
+                  : ""}
             </span>
             <span className="text-neutral-500">{item.source}</span>
             <span className={item.status === "ok" ? "text-emerald-700" : "text-amber-700"}>
@@ -1327,7 +1380,10 @@ export function App() {
 
   const onProviderLogin = async (input: {
     provider: string;
+    mode?: "oauth" | "api-key" | "local";
     apiKey?: string;
+    accessToken?: string;
+    refreshToken?: string;
     baseUrl?: string;
     defaultModel?: string;
   }): Promise<void> => {

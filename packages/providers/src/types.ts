@@ -4,10 +4,17 @@
  * BureauOS is model-agnostic: every model provider plugs in through the same
  * `ProviderAdapter` contract; every execution runtime (Codex, Claude Code,
  * Gemini CLI, etc.) plugs in through `RuntimeAdapter`. The provider router
- * (in `./router.ts`) selects providers per agent role with fallback chains.
+ * (in `./router.ts`) selects the owner-approved provider route per agent role.
  */
 
-export type ProviderType = "openai" | "anthropic" | "google" | "local" | "openrouter" | "custom";
+export type ProviderType =
+  | "openai-codex"
+  | "openai"
+  | "anthropic"
+  | "google"
+  | "local"
+  | "openrouter"
+  | "custom";
 export type RuntimeType = "codex" | "claude-code" | "gemini-cli" | "custom";
 
 export interface ValidationResult {

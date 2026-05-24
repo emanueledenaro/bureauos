@@ -320,4 +320,4 @@ The first version of BureauOS should focus on the protocol before full automatio
 
 ## Repository Status
 
-This repository now contains the BureauOS operating model plus a working local-first kernel: structured memory, registries, policy gates, artifacts, audit logs, provider auth, provider-routed agent drafting, GitHub issue workflows, daemon scheduling foundations, local API endpoints, and the ElectronJS Operating Room. Several external integrations are still draft-first or adapter-level, but the core AAAS loop is executable locally.
+This repository now contains the BureauOS operating model plus a working local-first kernel: structured memory, registries, policy gates, artifacts, audit logs, provider auth with separate OAuth/API routes, provider-routed agent drafting, GitHub issue workflows, daemon scheduling foundations, local API endpoints, and the ElectronJS Operating Room. Several external integrations are still draft-first or adapter-level, but the core AAAS loop is executable locally.
