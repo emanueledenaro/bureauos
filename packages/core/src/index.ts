@@ -52,6 +52,14 @@ export type {
 export { ApprovalRegistry } from "./registries/approval.js";
 export type { ApprovalRecord, ApprovalStatus, CreateApprovalInput } from "./registries/approval.js";
 
+export { CompanyRegistry } from "./registries/company.js";
+export type { CompanyRecord } from "./registries/company.js";
+
+// Memory helpers
+export { appendDailyNote } from "./memory/daily.js";
+export { appendDecision } from "./memory/decisions.js";
+export type { DecisionInput } from "./memory/decisions.js";
+
 // Policy
 export { PolicyEngine } from "./policy/engine.js";
 export type { PolicyInput, PolicyDecision, PolicyOutcome, RiskClass } from "./policy/engine.js";

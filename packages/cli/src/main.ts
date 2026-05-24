@@ -30,6 +30,10 @@ import {
   OpenRouterAdapter,
   ProviderRouter,
 } from "@bureauos/providers";
+import {
+  GITHUB_LABEL_TAXONOMY,
+  OctokitGitHubClient,
+} from "@bureauos/capabilities";
 
 const HELP = `bureau ${VERSION}
 
@@ -70,6 +74,10 @@ Providers:
 
 Server:
   serve [--port N]                          Start the local HTTP API server
+  daemon [--port N]                         Run scheduler + API server in foreground
+
+GitHub:
+  github ensure-labels --owner O --repo R   Apply the BureauOS label taxonomy
 
 Misc:
   --version | -v       Print version
@@ -556,6 +564,24 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
     reject: handleApprovalsResolve("rejected"),
   },
   providers: { list: handleProvidersList },
+  github: {
+    "ensure-labels": async (args: readonly string[]) => {
+      const flags = parseFlags(args, {
+        owner: { type: "string" },
+        repo: { type: "string" },
+        token: { type: "string" },
+      });
+      if (typeof flags === "string") return err(`github ensure-labels: ${flags}`);
+      if (typeof flags.owner !== "string") return err("github ensure-labels: --owner required");
+      if (typeof flags.repo !== "string") return err("github ensure-labels: --repo required");
+      const token = typeof flags.token === "string" ? flags.token : process.env["GITHUB_TOKEN"];
+      if (!token) return err("github ensure-labels: provide --token or set GITHUB_TOKEN");
+      const gh = new OctokitGitHubClient({ token });
+      await gh.ensureLabels(flags.owner, flags.repo, GITHUB_LABEL_TAXONOMY);
+      process.stdout.write(`bureau: ensured ${GITHUB_LABEL_TAXONOMY.length} labels on ${flags.owner}/${flags.repo}\n`);
+      return 0;
+    },
+  },
   serve: handleServe,
   daemon: async (args) => {
     const flags = parseFlags(args, { port: { type: "number", alias: "p" } });
