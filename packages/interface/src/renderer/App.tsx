@@ -246,7 +246,7 @@ function SidebarLink({
 
 function Sidebar({ state }: { state: DashboardState }) {
   return (
-    <aside className="flex w-56 flex-col border-r border-neutral-200 bg-white">
+    <aside className="hidden w-56 flex-col border-r border-neutral-200 bg-white md:flex">
       <div className="border-b border-neutral-200 px-4 py-4">
         <div className="text-sm font-semibold text-neutral-900">BureauOS</div>
         <div className="text-xs text-neutral-500">Operating Room</div>
@@ -747,7 +747,7 @@ export function App() {
       <Sidebar state={state} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header pulse={state.pulse} mode={mode} onModeChange={setMode} />
-        <main className="flex flex-1 gap-4 overflow-auto p-4">
+        <main className="flex flex-1 flex-col gap-4 overflow-auto p-4 lg:flex-row">
           <div className="flex flex-1 flex-col gap-4">
             {mode === "portfolio" && <PortfolioMap state={state} />}
             {mode === "today" && <TodayView state={state} />}
@@ -755,7 +755,7 @@ export function App() {
             <OperationsTimeline events={state.audit} />
             <RevenuePulse pulse={state.pulse} opportunities={state.opportunities} />
           </div>
-          <div className="flex w-80 flex-shrink-0 flex-col gap-4">
+          <div className="flex w-full flex-col gap-4 lg:w-80 lg:flex-shrink-0">
             <CoordinatorChat />
             <PendingApprovals approvals={state.approvals} onResolve={onResolve} />
           </div>
