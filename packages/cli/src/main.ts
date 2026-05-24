@@ -592,7 +592,12 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
     const audit = new AuditLog(workspacePaths(process.cwd()).auditLog);
     const artifacts = new ArtifactStore(process.cwd());
     const runs = new RunEngine(process.cwd(), { audit, artifacts, policy });
-    const scheduler = new Scheduler({ config, runs });
+    const scheduler = new Scheduler({
+      config,
+      runs,
+      workspaceRoot: process.cwd(),
+      coordinator: { audit, artifacts, policy },
+    });
     scheduler.start();
     const server = await startApiServer({
       workspaceRoot: process.cwd(),
