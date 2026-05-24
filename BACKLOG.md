@@ -160,6 +160,8 @@ Goal: real model calls behind a provider-agnostic interface. The router selects 
 - [x] Implement env-based credential loading.
 - [x] Implement the router with default + fallback chains.
 - [x] Add a `bureau providers list` CLI command.
+- [ ] Add an OpenCode-style auth store and commands (`bureau auth login/list/logout`) for provider credentials.
+- [ ] Add provider connection management in ElectronJS Settings.
 - [ ] Wire real SDK calls (`generateText`, `stream`) for each adapter.
 - [ ] Add budget-aware and capability-aware routing.
 - [ ] Add OS keychain integration as an alternative credential source.
@@ -277,10 +279,10 @@ Goal: real multi-project support with isolated project memory and project-manage
 - [x] Implement Project Manager dispatch with project-scoped memory packet.
 - [x] Implement context-packet generation per agent (bounded context, not full memory).
 - [ ] Add per-project Project Manager configuration and ownership records.
-- [ ] Enforce project memory isolation at capability/runtime boundaries.
+- [x] Enforce project memory isolation at capability/runtime boundaries.
 - [ ] Implement the coordinator's global memory access path (with audit).
 - [ ] Implement cross-project executive reports.
-- [ ] Add tests proving isolation cannot be bypassed by accident.
+- [x] Add tests proving isolation cannot be bypassed by accident.
 
 ## Phase 6 — Growth and Revenue (v0.6)
 

@@ -300,6 +300,11 @@ export class ProjectDispatchService {
       });
     }
 
+    const contextArtifactIdsByRole: Record<string, readonly string[]> = {};
+    for (const handoff of handoffs) {
+      contextArtifactIdsByRole[handoff.role] = [handoff.artifact.id];
+    }
+
     const dispatch = await dispatchRun(
       { audit: this.audit, artifacts: this.artifacts, policy: this.policy },
       {
@@ -307,6 +312,8 @@ export class ProjectDispatchService {
         run,
         scope,
         briefing: `Project dispatch packet: ${packet.id}\n\n${briefing}`,
+        contextArtifactIds: [packet.id],
+        contextArtifactIdsByRole,
       },
     );
     const producedArtifactIds = dispatch.steps.flatMap((step) => step.artifactIds);

@@ -4,8 +4,12 @@
     "composite": true,
     "outDir": "./dist",
     "rootDir": "./src",
-    "tsBuildInfoFile": "./dist/.tsbuildinfo"
+    "tsBuildInfoFile": "./dist/.tsbuildinfo",
+    "paths": {
+      "@bureauos/memory": ["../memory/src/index.ts"]
+    }
   },
   "include": ["src/**/*"],
-  "exclude": ["dist", "node_modules", "**/*.test.ts"]
+  "exclude": ["dist", "node_modules", "**/*.test.ts"],
+  "references": [{ "path": "../memory" }]
 }

@@ -8,6 +8,11 @@ import { ensureDir, writeDoc, type FrontMatter } from "../registries/base.js";
 import { join } from "node:path";
 import { newId } from "../ids.js";
 import type { RunRecord, RunType } from "./engine.js";
+import {
+  MEMORY_BOUNDARY_CAPABILITY,
+  MEMORY_CAPABILITY,
+  MemoryBoundaryService,
+} from "../memory/isolation.js";
 
 /**
  * Supreme Coordinator dispatch.
@@ -24,6 +29,7 @@ export interface CoordinatorDeps {
   audit: AuditLog;
   policy: PolicyEngine;
   registry?: AgentRegistry;
+  memory?: MemoryBoundaryService;
 }
 
 const PIPELINES: Record<RunType, readonly string[]> = {
@@ -56,6 +62,8 @@ export interface DispatchInput {
   run: RunRecord;
   scope: string;
   briefing?: string;
+  contextArtifactIds?: readonly string[];
+  contextArtifactIdsByRole?: Readonly<Record<string, readonly string[]>>;
 }
 
 export interface DispatchOutput {
@@ -82,6 +90,7 @@ export async function dispatchRun(
       audit: deps.audit,
       policy: deps.policy,
     });
+  const memory = deps.memory ?? new MemoryBoundaryService(input.workspaceRoot);
   const pipeline = pipelineForRunType(input.run.type);
   const briefingId = newId("brief");
   const briefingPath = join(workspacePaths(input.workspaceRoot).artifactsDir, `${briefingId}.md`);
@@ -118,6 +127,25 @@ ${input.briefing ?? "(none supplied)"}
   const steps: Array<{ role: string; artifactIds: readonly string[]; notes: string }> = [];
   for (const role of pipeline) {
     const agent = registry.get(role);
+    const roleContextArtifactIds = Array.from(
+      new Set([
+        briefingId,
+        ...(input.contextArtifactIds ?? []),
+        ...(input.contextArtifactIdsByRole?.[role] ?? []),
+      ]),
+    );
+    const boundary = await memory.forAgent({
+      agent: agent.definition,
+      run: input.run,
+      contextArtifactIds: roleContextArtifactIds,
+    });
+    await deps.audit.append({
+      actor: agent.definition.id,
+      action: "memory.boundary.applied",
+      target: input.run.id,
+      capability: MEMORY_CAPABILITY,
+      result: "ok",
+    });
     const out = await agent.execute({
       context: {
         runId: input.run.id,
@@ -126,7 +154,10 @@ ${input.briefing ?? "(none supplied)"}
         ...(input.run.client_id ? { clientId: input.run.client_id } : {}),
         ...(input.briefing ? { briefing: input.briefing } : {}),
       },
-      capabilities: new Map(),
+      capabilities: new Map<string, unknown>([
+        [MEMORY_CAPABILITY, boundary.store],
+        [MEMORY_BOUNDARY_CAPABILITY, boundary],
+      ]),
     });
     steps.push({ role, artifactIds: out.artifactIds, notes: out.notes });
     await deps.audit.append({

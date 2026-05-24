@@ -54,6 +54,17 @@ export type { CompanyRecord } from "./registries/company.js";
 export { appendDailyNote } from "./memory/daily.js";
 export { appendDecision } from "./memory/decisions.js";
 export type { DecisionInput } from "./memory/decisions.js";
+export {
+  MEMORY_BOUNDARY_CAPABILITY,
+  MEMORY_CAPABILITY,
+  MemoryBoundaryService,
+} from "./memory/isolation.js";
+export type {
+  AgentMemoryBoundary,
+  AgentMemoryCapability,
+  MemoryBoundaryDeps,
+  MemoryBoundaryInput,
+} from "./memory/isolation.js";
 
 // Policy
 export { PolicyEngine } from "./policy/engine.js";

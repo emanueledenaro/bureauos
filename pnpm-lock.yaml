@@ -70,6 +70,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@bureauos/memory':
+        specifier: workspace:*
+        version: link:../memory
       js-yaml:
         specifier: ^4.1.0
         version: 4.1.1

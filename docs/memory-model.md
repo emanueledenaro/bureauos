@@ -315,6 +315,16 @@ Blocked sharing:
 - unrelated project decisions
 - unrelated customer data
 
+Runtime enforcement:
+
+- every dispatch builds an agent-specific memory boundary
+- the Supreme Coordinator receives global memory access
+- a Project Manager receives assigned project memory, linked client memory, company policy, current run memory, and bounded context artifacts
+- specialist project agents receive only company policy, current run memory, and their bounded context artifacts
+- the official `memory` capability rejects reads and searches outside the boundary and records the boundary application in the audit log
+
+External runtimes such as Codex still need their own filesystem and capability adapters before they can be considered sandboxed at process level.
+
 ## Write-Back Rules
 
 After every run, BureauOS should write back:

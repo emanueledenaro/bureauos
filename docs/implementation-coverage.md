@@ -134,14 +134,15 @@ Every major capability described in the docs must become one of:
 | Project Manager dispatch | `project dispatch`, `/projects/dispatch`, Electron project cards | implemented |
 | Project-scoped memory packet | `project-dispatch-packet` artifact | implemented |
 | Per-agent handoff packet | `agent-handoff` artifact | implemented |
-| Runtime-enforced memory isolation | not implemented | designed |
+| Runtime-enforced memory isolation | `MemoryBoundaryService`, `ScopedMemoryStore`, dispatcher `memory` capability | implemented |
 | Per-project PM ownership config | not implemented | designed |
 
 ## Current Priority Order
 
-1. Enforce project memory isolation at capability/runtime boundaries.
-2. Add GitHub check parsing and webhook ingestion.
-3. Add ElectronJS pages for clients, projects, approvals, reports, memory, settings.
-4. Add always-on scheduler tasks for daily report, project health, growth review, and client review.
-5. Add real provider SDK calls behind budget-aware routing.
-6. Add connector adapters behind draft-first policy gates.
+1. Add OpenCode-style provider auth/connect flows for CLI and ElectronJS Settings.
+2. Wire the provider router into concrete agents with role-specific defaults.
+3. Add GitHub check parsing and webhook ingestion.
+4. Add ElectronJS pages for clients, projects, approvals, reports, memory, settings.
+5. Add always-on scheduler tasks for daily report, project health, growth review, and client review.
+6. Add budget-aware and capability-aware routing.
+7. Add connector adapters behind draft-first policy gates.
