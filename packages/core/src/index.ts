@@ -74,7 +74,19 @@ export type {
 // Agents
 export { AGENT_ROLES, AGENT_INDEX, getAgent, agentsByCategory } from "./agents/roles.js";
 export type { AgentDefinition, AgentCategory, AgentScope } from "./agents/roles.js";
+export { AgentRegistry, StubAgent } from "./agents/runtime.js";
+export type {
+  AgentRuntime,
+  AgentRunInput,
+  AgentRunOutput,
+  AgentContext,
+  AgentDeps,
+} from "./agents/runtime.js";
 
 // API server
 export { startApiServer } from "./api/server.js";
 export type { ApiServerOptions, ApiServer } from "./api/server.js";
+
+// Daemon
+export { Scheduler } from "./daemon/scheduler.js";
+export type { SchedulerOptions } from "./daemon/scheduler.js";

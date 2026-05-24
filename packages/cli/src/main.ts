@@ -11,6 +11,7 @@ import {
   PolicyEngine,
   ProjectRegistry,
   RunEngine,
+  Scheduler,
   VERSION,
   defaultConfig,
   initWorkspace,
@@ -555,6 +556,32 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
   },
   providers: { list: handleProvidersList },
   serve: handleServe,
+  daemon: async (args) => {
+    const flags = parseFlags(args, { port: { type: "number", alias: "p" } });
+    if (typeof flags === "string") return err(`daemon: ${flags}`);
+    const config = await loadWorkspaceConfig(process.cwd());
+    const approvals = new ApprovalRegistry(process.cwd());
+    const policy = new PolicyEngine(config, approvals);
+    const audit = new AuditLog(workspacePaths(process.cwd()).auditLog);
+    const artifacts = new ArtifactStore(process.cwd());
+    const runs = new RunEngine(process.cwd(), { audit, artifacts, policy });
+    const scheduler = new Scheduler({ config, runs });
+    scheduler.start();
+    const server = await startApiServer({
+      workspaceRoot: process.cwd(),
+      config,
+      ...(typeof flags.port === "number" ? { port: flags.port } : {}),
+    });
+    process.stdout.write(`bureau: daemon running. API at ${server.url}\n`);
+    process.stdout.write(`bureau: scheduler active. Press Ctrl-C to stop\n`);
+    process.on("SIGINT", () => {
+      scheduler.stop();
+      void server.close();
+      process.exit(0);
+    });
+    await new Promise<void>(() => {});
+    return 0;
+  },
 };
 
 export async function main(argv: readonly string[]): Promise<number> {

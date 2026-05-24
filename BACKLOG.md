@@ -79,45 +79,47 @@ Goal: a local-first kernel that can initialize a workspace, hold company state, 
 
 ### 1.3 Memory Engine
 
-- [ ] Implement a `MemoryStore` interface in `packages/memory` (read, write, append, list, search).
-- [ ] Implement a Markdown-backed `LocalMemoryStore` that reads/writes the `.bureauos/memory` tree.
-- [ ] Implement `loadRootMemory()` and `assembleContextPacket(query)` per [docs/memory-model.md](docs/memory-model.md).
+- [x] Implement a `MemoryStore` interface in `packages/memory` (read, list, search).
+- [x] Implement a Markdown-backed `LocalMemoryStore` that reads the `.bureauos/memory` tree.
+- [x] Implement `assembleContextPacket(query)` returning ROOT + ranked hits.
+- [x] Implement `bureau memory search "<query>"` CLI command.
 - [ ] Implement daily-note creation and append rules (one file per local date).
 - [ ] Implement decision-record writes (`DECISIONS.md` and `runs/<id>.md` cross-link).
 - [ ] Add SQLite-based keyword index over Markdown files (FTS5).
-- [ ] Add a semantic index interface; ship a stub implementation that returns no matches (real embedding provider arrives with the provider router).
-- [ ] Implement `bureau memory search "<query>"` CLI command.
-- [ ] Add tests for write-back rules, isolation between project folders, and promotion of daily notes to durable files.
+- [ ] Add a semantic index interface; ship a stub implementation that returns no matches.
+- [ ] Add tests for write-back rules and isolation between project folders.
 
 ### 1.4 Registries
 
+- [x] Implement the Client registry (CRUD against `.bureauos/memory/clients/`).
+- [x] Implement the Project registry (CRUD against `.bureauos/memory/projects/`).
+- [x] Implement the Opportunity registry (`.bureauos/memory/opportunities/`).
+- [x] Implement the Approval registry (`.bureauos/approvals/pending/` + `resolved/`).
+- [x] Each registry exposes a stable string ID generated via `newId()`.
+- [x] Audit events on every create/update via CLI.
 - [ ] Implement the Company registry (single record).
-- [ ] Implement the Client registry (CRUD against `.bureauos/memory/clients/`).
-- [ ] Implement the Project registry (CRUD against `.bureauos/memory/projects/`).
-- [ ] Implement the Opportunity registry (`.bureauos/memory/opportunities/`).
-- [ ] Implement the Agent registry (from config).
-- [ ] Implement the Capability registry (from config).
-- [ ] Implement the Approval registry (`.bureauos/approvals/pending/` + `resolved/`).
-- [ ] Each registry exposes a stable string ID and an append-only event log entry on every change.
+- [ ] Implement the Agent registry from config.
+- [ ] Implement the Capability registry from config.
 - [ ] Add tests for ID stability across renames.
 
 ### 1.5 Policy Engine
 
-- [ ] Define the policy input/output contract from [docs/protocol.md](docs/protocol.md) `policy_check`.
-- [ ] Implement an evaluator that takes (action, actor, target, capability, autonomy level, approval state, risk class) and returns allow / deny / require approval / require more context / escalate.
-- [ ] Encode the default autonomy levels 0..5 from [docs/autonomy-policy.md](docs/autonomy-policy.md).
-- [ ] Encode the separate growth-autonomy switches.
-- [ ] Implement one-off and standing approvals (with expiry).
-- [ ] Add a `bureau policy explain <action>` CLI command that prints why an action would be allowed or blocked.
-- [ ] Add tests for every action listed in `growth_autonomy` and `require_owner_approval_for` in the example config.
+- [x] Define the policy input/output contract from [docs/protocol.md](docs/protocol.md) `policy_check`.
+- [x] Implement an evaluator that takes (action, actor, target, capability, risk class) and returns allow / deny / require approval / require more context / escalate.
+- [x] Encode autonomy and growth_autonomy switches.
+- [x] Implement one-off and standing approvals matching with expiry.
+- [x] Add a `bureau policy explain <action>` CLI command.
+- [x] Tests covering autonomy actions, growth actions, escalation, and approval matching.
+- [ ] Encode the explicit autonomy levels 0..5 as named presets (current implementation uses per-action switches).
 
 ### 1.6 Artifact Store
 
-- [ ] Implement `writeArtifact(type, payload)` that writes a Markdown file under `.bureauos/memory/artifacts/<id>.md` using the matching template from `templates/`.
-- [ ] Implement the `<!-- bureauos:artifact ... -->` marker convention end-to-end (write and parse).
-- [ ] Implement `readArtifact(id)` and `listArtifacts({type, runId, clientId, projectId})`.
-- [ ] Add cross-links from artifacts to their run report.
-- [ ] Add tests covering each template type.
+- [x] Implement `writeArtifact(type, payload)` writing Markdown under `.bureauos/memory/artifacts/<id>.md`.
+- [x] Implement the `<!-- bureauos:artifact ... -->` marker convention.
+- [x] Implement `readArtifact(id)` and `listArtifacts({type, runId, clientId, projectId})`.
+- [x] Cross-links from artifacts to their run report via `run_id` front-matter.
+- [ ] Use the templates in `templates/` as artifact body scaffolds (current artifacts use inline bodies).
+- [ ] Add tests covering every template type.
 
 ### 1.7 Audit Log
 
@@ -129,12 +131,12 @@ Goal: a local-first kernel that can initialize a workspace, hold company state, 
 
 ### 1.8 Run Engine (local-only)
 
-- [ ] Define the run lifecycle states from the protocol.
-- [ ] Implement `Run` as an entity with persisted state in `.bureauos/memory/runs/<id>.md` plus a JSON sidecar for indexing.
-- [ ] Implement `startRun({trigger, scope})` that runs through context build then policy check then dispatch stub then artifact write then report then memory update, but with no model calls yet. The dispatch step calls a stub agent that just records intent.
-- [ ] Add a `bureau run new` CLI command.
-- [ ] Add a `bureau status` CLI command that shows active runs, pending approvals, and high-level company pulse.
-- [ ] Add tests for a full lifecycle of a single internal run.
+- [x] Define the run lifecycle states from the protocol.
+- [x] Implement `Run` persisted in `.bureauos/memory/runs/<id>.md` with full front-matter.
+- [x] Implement `startRun({trigger, scope})` end-to-end with policy check, dispatch stub, artifact write, audit events on every transition.
+- [x] Add `bureau run new` CLI command.
+- [x] Add `bureau status` CLI command.
+- [x] Tests covering full lifecycle and policy-blocked run path.
 
 ### 1.9 Minimum Viable Kernel Acceptance
 
@@ -151,34 +153,30 @@ Goal: a local-first kernel that can initialize a workspace, hold company state, 
 
 Goal: real model calls behind a provider-agnostic interface. The router selects providers per agent role, with fallbacks and budget awareness.
 
-- [ ] Define `ProviderAdapter` and `RuntimeAdapter` contracts in `packages/providers`.
-- [ ] Implement an OpenAI text adapter.
-- [ ] Implement an Anthropic text adapter.
-- [ ] Implement a Google (Gemini) text adapter.
-- [ ] Implement a local-model adapter (Ollama or compatible OpenAI-style endpoint).
-- [ ] Implement an OpenRouter / gateway adapter.
-- [ ] Implement a Codex runtime adapter (treat Codex as a capability, not a generic provider).
-- [ ] Implement credentials loading from environment variables and a local secrets file (never in git).
-- [ ] Implement `validateCredentials()` per adapter.
-- [ ] Implement the router: default provider per agent + fallback chain + budget-aware routing + capability-aware routing.
-- [ ] Implement a streaming interface that the coordinator chat panel will consume.
-- [ ] Add a `bureau providers list` and `bureau providers test` CLI command.
+- [x] Define `ProviderAdapter` and `RuntimeAdapter` contracts in `packages/providers`.
+- [x] Implement OpenAI/Anthropic/Google/Local/OpenRouter adapter stubs with `validateCredentials()` and `NotConfiguredError`.
+- [x] Implement Codex runtime adapter stub.
+- [x] Implement env-based credential loading.
+- [x] Implement the router with default + fallback chains.
+- [x] Add a `bureau providers list` CLI command.
+- [ ] Wire real SDK calls (`generateText`, `stream`) for each adapter.
+- [ ] Add budget-aware and capability-aware routing.
+- [ ] Add OS keychain integration as an alternative credential source.
 - [ ] Add tests with recorded HTTP fixtures for each adapter.
 
 ## Phase 3 — GitHub Adapter (v0.4)
 
 Goal: BureauOS can read and write GitHub state under policy.
 
-- [ ] Implement a GitHub client wrapper using a personal access token (PAT) or GitHub App credentials.
-- [ ] Implement issue read.
-- [ ] Implement issue create from an artifact (uses the `agent-run.yml` template).
-- [ ] Implement label management (idempotent ensure-labels for the taxonomy in [docs/github-native-workflow.md](docs/github-native-workflow.md)).
-- [ ] Implement comment write with the `<!-- bureauos:artifact ... -->` marker.
-- [ ] Implement PR read.
-- [ ] Implement PR create (branch + commit + push + open PR).
-- [ ] Implement check parsing (read checks and surface failures into the run engine).
-- [ ] Implement webhook ingestion (signal generation from GitHub events).
-- [ ] Add a `bureau github sync` CLI command that pulls authoritative state into the project registry.
+- [x] Define the `GitHubClient` contract in `@bureauos/capabilities`.
+- [x] Ship a `StubGitHubClient` so the kernel and CLI can type-check against the contract.
+- [ ] Implement a real Octokit-backed client behind the same interface.
+- [ ] Implement issue read/list/create.
+- [ ] Implement label management (idempotent ensure-labels).
+- [ ] Implement comment write with the `bureauos:artifact` marker.
+- [ ] Implement PR read/create (branch + commit + push + open PR).
+- [ ] Implement check parsing and webhook ingestion.
+- [ ] Add a `bureau github sync` CLI command.
 - [ ] Add tests with `nock` or equivalent HTTP recording.
 
 ## Phase 4 — Owner Interface MVP (v0.3)
@@ -187,69 +185,64 @@ Goal: a local web app that visualizes kernel state, shaped like [docs/ui-referen
 
 ### 4.1 Shell
 
-- [ ] Choose the frontend stack (recommendation: Next.js + Tailwind + shadcn/ui). Record in an ADR.
-- [ ] Create `packages/interface` with the chosen scaffold.
-- [ ] Implement the page layout: left sidebar, center work area, right rail, bottom strips.
-- [ ] Implement the adaptive header (logo, breadcrumb selector for Portfolio / Today / Goals, status pills, date, avatar).
-- [ ] Implement the left sidebar navigation (Home, Revenue, Delivery, Growth, Clients, Risk, Memory, Agents, Inbox, Approvals, Reports, Settings).
-- [ ] Implement the System Status card at the bottom of the sidebar.
-- [ ] Implement a typed API client that talks to the kernel via a local HTTP server.
+- [x] Frontend stack decided in [ADR 0002](docs/decisions/0002-frontend-stack.md): Electron + React + Tailwind via electron-vite.
+- [x] `packages/interface` scaffolded with main + preload + renderer.
+- [x] Page layout: left sidebar, center work area, right rail, bottom strips.
+- [x] Adaptive header with three status pills and date.
+- [x] Left sidebar navigation with badges from kernel state.
+- [x] System Status card at the bottom of the sidebar.
+- [x] Typed API client in `src/renderer/lib/api.ts`.
 
 ### 4.2 Local API Server
 
-- [ ] Add a local HTTP server in `packages/core` (Fastify or Hono) that exposes the kernel surfaces listed in `docs/bos-kernel-infrastructure.md` (Owner Interface API).
-- [ ] Endpoints: `/company-pulse`, `/clients`, `/projects`, `/opportunities`, `/approvals`, `/runs`, `/agents`, `/reports`, `/coordinator/messages`, `/settings`.
-- [ ] Implement Server-Sent Events for live timeline and coordinator chat streaming.
-- [ ] Add authentication for the local server (single-owner token; multi-user can come later).
+- [x] Local HTTP server in `@bureauos/core` (node:http) exposing the kernel surfaces.
+- [x] Endpoints: `/company-pulse`, `/clients`, `/projects`, `/opportunities`, `/approvals`, `/runs`, `/agents`, `/audit`, `/approvals/resolve`, `/health`.
+- [x] CORS open for localhost during development.
+- [x] Token-based auth path (set `token` in options to enable).
+- [ ] Implement Server-Sent Events for live timeline streaming.
+- [ ] Add the missing endpoints: `/reports`, `/coordinator/messages`, `/settings`.
 
 ### 4.3 Portfolio Operating Room
 
-- [ ] Implement the Portfolio Map view: client columns with capacity percentages and stacked project cards.
-- [ ] Implement the project card component: name, status pill, progress bar, PR link, agent chips.
-- [ ] Implement the Capacity Allocation horizontal stacked bar.
-- [ ] Implement the four tabs (Portfolio Map, Workload, Gantt, Kanban) with the first one functional and the others as placeholders that say "Coming next".
+- [x] Portfolio Map view with client columns and project cards.
+- [x] Project card component (name, status pill, progress bar, stack).
+- [x] Capacity Allocation horizontal stacked bar.
+- [x] Tabs strip rendered (Portfolio Map active, others as placeholders).
+- [ ] Implement Workload, Gantt, Kanban tabs.
 - [ ] Implement the Filters control (status, client, agent).
-- [ ] Wire data from the project registry and run engine.
+- [ ] Surface PR links and agent chips on each card once the GitHub adapter is wired.
 
 ### 4.4 Live Operations Timeline
 
-- [ ] Implement the horizontal timeline component.
-- [ ] Wire events from the audit log via SSE.
-- [ ] Implement event icons by event type and agent badge below each entry.
-- [ ] Implement `View all activity` link to a full audit page.
+- [x] Horizontal timeline component backed by the audit log.
+- [ ] Switch from polling to SSE once the server exposes it.
+- [ ] Event icons by event type.
 
 ### 4.5 Supreme Coordinator Panel
 
-- [ ] Implement the chat surface (read-only first).
-- [ ] Implement the embedded artifact card component (e.g. opportunity card).
-- [ ] Implement quick-action chips below assistant messages.
-- [ ] Wire the chat to the provider router via the local API once Phase 2 is live.
-- [ ] Add the online indicator backed by a coordinator-health check.
+- [x] Chat surface (stub) with embedded artifact card and quick actions.
+- [ ] Wire the chat to the provider router once a provider has credentials.
+- [ ] Stream tokens via SSE.
 
 ### 4.6 Pending Approvals Panel
 
-- [ ] Implement the approvals list component with title, subtitle, metadata, Approve/Reject buttons.
-- [ ] Wire to the approval registry (read).
-- [ ] Implement Approve and Reject (write).
-- [ ] Implement the footer status line: "Autonomous mode is handling NN% of operations" (computed from the audit log).
-- [ ] Add a full `/approvals` page with filters and history.
+- [x] Approvals list with Approve / Reject.
+- [x] Footer status line.
+- [ ] Add the full `/approvals` page with filters and history.
 
 ### 4.7 Revenue Pulse
 
-- [ ] Implement the KPI strip layout.
-- [ ] Implement each KPI card: value, sparkline, delta vs previous period.
-- [ ] KPIs: Pipeline Value, Expected Margin, Active Opportunities, Revenue (MTD), Client Lifetime Value.
-- [ ] Implement the Top Clients by LTV ranked list.
-- [ ] Wire data from the opportunity registry and client revenue memory.
-- [ ] Add a `View full report` page.
+- [x] KPI strip layout with 5 cards.
+- [x] Wired to the opportunity registry through `/company-pulse`.
+- [ ] Sparklines and delta vs previous period.
+- [ ] Top Clients by LTV ranked list.
 
 ### 4.8 Agent Layer
 
-- [ ] Implement the horizontal role-chip strip at the bottom of every page.
-- [ ] One chip per agent role from `docs/agents.md`.
-- [ ] Hover state shows the agent's current run and capability usage.
-- [ ] Click opens an agent detail panel (read-only for MVP).
-- [ ] Add a `Manage Agents` button that opens `/agents`.
+- [x] Horizontal role-chip strip at the bottom.
+- [x] One chip per role from `AGENT_ROLES`.
+- [ ] Hover state with current run and capability usage.
+- [ ] Click opens an agent detail panel.
 
 ### 4.9 Adaptive Modes
 
