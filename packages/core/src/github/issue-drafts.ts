@@ -209,6 +209,11 @@ export class GitHubIssueDraftService {
           createdBy: "supreme_coordinator",
           projectId: project.id,
           ...(client ? { clientId: client.id } : {}),
+          metadata: {
+            title: draft.title,
+            labels: draft.labels,
+            source_artifacts: draft.source_artifacts,
+          },
           body: `${draft.body}\n\n## Labels\n\n${draft.labels.map((label) => `- ${label}`).join("\n")}\n`,
         }),
       );

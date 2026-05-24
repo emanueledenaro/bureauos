@@ -8,10 +8,11 @@
     "noEmit": false,
     "noUncheckedIndexedAccess": false,
     "paths": {
+      "@bureauos/capabilities": ["../capabilities/src/index.ts"],
       "@bureauos/core": ["../core/src/index.ts"],
       "@bureauos/memory": ["../memory/src/index.ts"]
     }
   },
   "include": ["src/main/**/*", "src/preload/**/*", "electron.vite.config.ts"],
-  "references": [{ "path": "../core" }, { "path": "../memory" }]
+  "references": [{ "path": "../capabilities" }, { "path": "../core" }, { "path": "../memory" }]
 }

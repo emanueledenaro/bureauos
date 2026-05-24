@@ -92,6 +92,9 @@ importers:
 
   packages/interface:
     dependencies:
+      '@bureauos/capabilities':
+        specifier: workspace:*
+        version: link:../capabilities
       '@bureauos/core':
         specifier: workspace:*
         version: link:../core

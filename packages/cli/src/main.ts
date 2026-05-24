@@ -8,6 +8,7 @@ import {
   ConfigError,
   CoordinatorIntakeService,
   GitHubIssueDraftService,
+  GitHubIssuePublishService,
   InitError,
   OpportunityRegistry,
   PolicyEngine,
@@ -88,6 +89,8 @@ Server:
 
 GitHub:
   github draft-issues --project slug         Generate GitHub-ready issue drafts from project artifacts
+  github create-issues --project slug --owner O --repo R
+                                            Create GitHub issues from approved drafts under policy
   github ensure-labels --owner O --repo R   Apply the BureauOS label taxonomy
   github sync --owner O --repo R [--state]  Pull issues from GitHub into the audit log
 
@@ -156,6 +159,11 @@ async function loadWorkspaceConfig(cwd: string): Promise<BureauConfig> {
     }
     throw e;
   }
+}
+
+function githubClientFromEnv(): OctokitGitHubClient | undefined {
+  const token = process.env["GITHUB_TOKEN"];
+  return token ? new OctokitGitHubClient({ token }) : undefined;
 }
 
 // --- Handlers ---
@@ -533,6 +541,53 @@ const handleGitHubDraftIssues: Handler = async (args) => {
   return 0;
 };
 
+const handleGitHubCreateIssues: Handler = async (args) => {
+  const flags = parseFlags(args, {
+    project: { type: "string", alias: "p" },
+    owner: { type: "string" },
+    repo: { type: "string" },
+    token: { type: "string" },
+    "no-labels": { type: "boolean" },
+  });
+  if (typeof flags === "string") return err(`github create-issues: ${flags}`);
+  if (typeof flags.project !== "string") {
+    return err("github create-issues: --project <slug> is required");
+  }
+  if (typeof flags.owner !== "string") return err("github create-issues: --owner required");
+  if (typeof flags.repo !== "string") return err("github create-issues: --repo required");
+
+  const token = typeof flags.token === "string" ? flags.token : process.env["GITHUB_TOKEN"];
+  if (!token) return err("github create-issues: provide --token or set GITHUB_TOKEN");
+
+  const config = await loadWorkspaceConfig(process.cwd());
+  const result = await new GitHubIssuePublishService(process.cwd(), {
+    config,
+    githubClient: new OctokitGitHubClient({ token }),
+  }).publishProjectDrafts({
+    projectSlug: flags.project,
+    owner: flags.owner,
+    repo: flags.repo,
+    ensureLabels: flags["no-labels"] !== true,
+  });
+
+  if (result.status === "blocked") {
+    process.stdout.write(
+      `bureau: issue creation blocked by policy; approval ${result.approval?.id ?? "required"} requested\n`,
+    );
+    process.stdout.write(`policy: ${result.policy.reason}\n`);
+    return 0;
+  }
+
+  process.stdout.write(
+    `bureau: created ${result.created.length} GitHub issues on ${result.repository.owner}/${result.repository.repo}\n`,
+  );
+  for (const issue of result.created) {
+    process.stdout.write(`  - #${issue.number} ${issue.title}: ${issue.url}\n`);
+  }
+  if (result.report) process.stdout.write(`report: ${result.report.id}\n`);
+  return 0;
+};
+
 const handleAuditTail: Handler = async (args) => {
   const flags = parseFlags(args, { limit: { type: "number", alias: "n" } });
   if (typeof flags === "string") return err(`audit tail: ${flags}`);
@@ -633,10 +688,12 @@ const handleServe: Handler = async (args) => {
   const flags = parseFlags(args, { port: { type: "number", alias: "p" } });
   if (typeof flags === "string") return err(`serve: ${flags}`);
   const config = await loadWorkspaceConfig(process.cwd());
+  const githubClient = githubClientFromEnv();
   const server = await startApiServer({
     workspaceRoot: process.cwd(),
     config,
     ...(typeof flags.port === "number" ? { port: flags.port } : {}),
+    ...(githubClient ? { githubClient } : {}),
   });
   process.stdout.write(`bureau: API server listening at ${server.url}\n`);
   process.stdout.write(`bureau: workspace ${workspacePaths(process.cwd()).workspaceDir}\n`);
@@ -780,6 +837,7 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
   providers: { list: handleProvidersList },
   github: {
     "draft-issues": handleGitHubDraftIssues,
+    "create-issues": handleGitHubCreateIssues,
     "ensure-labels": async (args: readonly string[]) => {
       const flags = parseFlags(args, {
         owner: { type: "string" },
@@ -870,10 +928,12 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
       coordinator: { audit, artifacts, policy },
     });
     scheduler.start();
+    const githubClient = githubClientFromEnv();
     const server = await startApiServer({
       workspaceRoot: process.cwd(),
       config,
       ...(typeof flags.port === "number" ? { port: flags.port } : {}),
+      ...(githubClient ? { githubClient } : {}),
     });
     process.stdout.write(`bureau: daemon running. API at ${server.url}\n`);
     process.stdout.write(`bureau: scheduler active. Press Ctrl-C to stop\n`);

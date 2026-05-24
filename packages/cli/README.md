@@ -17,10 +17,11 @@ See [BACKLOG.md](../../BACKLOG.md) Phase 1.
 - `bureau policy explain <a>` — explain a policy decision
 - `bureau providers list` — provider management
 - `bureau github draft-issues --project <slug>` — generate GitHub-ready issue drafts from project artifacts
+- `bureau github create-issues --project <slug> --owner <o> --repo <r>` — create GitHub issues from approved drafts under policy
 - `bureau github ensure-labels --owner <o> --repo <r>` — apply the BureauOS label taxonomy
 - `bureau github sync` — reconcile from GitHub
 - `bureau daemon` — run scheduler and local API in the foreground
 
 ## Status
 
-The CLI is an operational local surface for workspace setup, intake, memory, reports, approvals, provider checks, GitHub label setup, GitHub issue draft generation, GitHub issue sync, and daemon mode.
+The CLI is an operational local surface for workspace setup, intake, memory, reports, approvals, provider checks, GitHub label setup, GitHub issue draft generation, policy-gated GitHub issue creation, GitHub issue sync, and daemon mode.

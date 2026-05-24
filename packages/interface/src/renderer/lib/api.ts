@@ -141,6 +141,29 @@ export interface GitHubIssueDraftResult {
   drafts: GitHubIssueDraft[];
   artifacts: ArtifactRecord[];
 }
+export interface GitHubCreatedIssue {
+  owner: string;
+  repo: string;
+  number: number;
+  title: string;
+  url: string;
+  labels: readonly string[];
+  state: "open" | "closed";
+}
+export interface GitHubIssuePublishResult {
+  status: "created" | "blocked";
+  project: ProjectRecord;
+  client?: ClientRecord;
+  repository: {
+    owner: string;
+    repo: string;
+    url: string;
+  };
+  approval?: ApprovalRecord;
+  created: GitHubCreatedIssue[];
+  source_artifacts: string[];
+  report?: ArtifactRecord;
+}
 
 export const Api = {
   pulse: () => api<CompanyPulse>("/company-pulse"),
@@ -170,6 +193,11 @@ export const Api = {
     api<GitHubIssueDraftResult>("/github/issue-drafts", {
       method: "POST",
       body: JSON.stringify({ projectSlug }),
+    }),
+  githubCreateIssues: (input: { projectSlug: string; owner: string; repo: string }) =>
+    api<GitHubIssuePublishResult>("/github/create-issues", {
+      method: "POST",
+      body: JSON.stringify(input),
     }),
   resolveApproval: (id: string, status: "approved" | "rejected", reason?: string) =>
     api<ApprovalRecord>("/approvals/resolve", {

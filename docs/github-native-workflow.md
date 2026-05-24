@@ -108,7 +108,19 @@ The first generated package contains:
 - Compliance gate issue
 - Growth/content issue
 
-Creating real GitHub issues from these drafts is still policy-gated and should require an approved repository target.
+Creating real GitHub issues from these drafts is implemented and policy-gated.
+
+Runtime surfaces:
+
+- CLI: `bureau github create-issues --project <project-slug> --owner <owner> --repo <repo>`
+- API: `POST /github/create-issues` with `{ "projectSlug": "...", "owner": "...", "repo": "..." }`
+- ElectronJS: project cards when `project.repository` points to a GitHub repository
+
+The creator requires a configured GitHub client. In CLI, pass `--token` or set `GITHUB_TOKEN`. In ElectronJS/daemon mode, start the process with `GITHUB_TOKEN`.
+
+When allowed by policy, BureauOS creates issues, writes a `github-issue-publish-report`, updates empty project repository memory, and audits `github.issue_publish.created`.
+
+When blocked by policy, BureauOS does not call GitHub. It creates or reuses an approval request and audits `github.issue_publish.blocked`.
 
 ## Issue Lifecycle
 

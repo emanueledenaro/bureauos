@@ -8,7 +8,7 @@ Layout matches [docs/ui-reference/operating-room.md](../../docs/ui-reference/ope
 - Header with adaptive selector and three status pills
 - Portfolio Operating Room with client columns and capacity allocation
 - Live Operations Timeline (backed by the kernel audit log)
-- Supreme Coordinator chat (stub)
+- Supreme Coordinator intake
 - Pending Approvals panel with approve/reject
 - Revenue Pulse KPI strip
 - Agent Layer footer
@@ -18,6 +18,7 @@ Layout matches [docs/ui-reference/operating-room.md](../../docs/ui-reference/ope
 - The Electron main process boots a local HTTP API server from `@bureauos/core` against the workspace at `process.cwd()` (override with `BUREAUOS_WORKSPACE`).
 - The renderer (React + Tailwind) fetches state from that local API.
 - IPC `bureau:api-url` lets the renderer discover the dynamic port the main process bound.
+- If `GITHUB_TOKEN` is present, the API can create GitHub issues from approved draft artifacts under policy.
 
 ## Development
 
@@ -29,7 +30,7 @@ pnpm --filter @bureauos/interface run dev
 To run against a pre-existing workspace, set:
 
 ```bash
-BUREAUOS_WORKSPACE=/path/to/your/.bureauos pnpm --filter @bureauos/interface run dev
+BUREAUOS_WORKSPACE=/path/to/your/workspace pnpm --filter @bureauos/interface run dev
 ```
 
 ## Build
@@ -41,4 +42,4 @@ pnpm --filter @bureauos/interface run dist
 
 ## Status
 
-Scaffold complete. The dashboard is read-only with one write action (approve / reject). Remaining work is tracked under Phase 4 in the [BACKLOG](../../BACKLOG.md).
+The dashboard reads live kernel state and supports coordinator intake, approval resolution, report generation, GitHub issue draft generation, and policy-gated GitHub issue creation when a repository and token are configured. Remaining work is tracked under Phase 4 in the [BACKLOG](../../BACKLOG.md).

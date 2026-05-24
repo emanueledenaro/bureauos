@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { OctokitGitHubClient } from "@bureauos/capabilities";
 import { startApiServer, loadConfig, workspacePaths, type ApiServer } from "@bureauos/core";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -14,7 +15,13 @@ async function bootApiServer(): Promise<void> {
   const paths = workspacePaths(root);
   try {
     const config = await loadConfig(paths.configFile);
-    apiServer = await startApiServer({ workspaceRoot: root, config, port: 0 });
+    const token = process.env["GITHUB_TOKEN"];
+    apiServer = await startApiServer({
+      workspaceRoot: root,
+      config,
+      port: 0,
+      ...(token ? { githubClient: new OctokitGitHubClient({ token }) } : {}),
+    });
     console.log(`[bureauos] API server at ${apiServer.url}`);
   } catch (err) {
     console.warn(`[bureauos] could not start API server: ${(err as Error).message}`);

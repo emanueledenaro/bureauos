@@ -147,4 +147,29 @@ describe("bureau cli", () => {
     expect(audit).toContain("github.issue_drafts.generated");
     expect(await exists(artifactsDir)).toBe(true);
   });
+
+  it("requires a token before creating real GitHub issues from CLI", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+    const previousToken = process.env["GITHUB_TOKEN"];
+    delete process.env["GITHUB_TOKEN"];
+
+    try {
+      const code = await main([
+        "node",
+        "bureau",
+        "github",
+        "create-issues",
+        "--project",
+        "pizzeria-aurora-booking-website",
+        "--owner",
+        "emanueledenaro",
+        "--repo",
+        "pizzeria-aurora",
+      ]);
+
+      expect(code).toBe(1);
+    } finally {
+      if (previousToken) process.env["GITHUB_TOKEN"] = previousToken;
+    }
+  });
 });

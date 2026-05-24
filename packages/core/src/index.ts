@@ -121,6 +121,14 @@ export type {
   GitHubIssueDraftDeps,
   GitHubIssueDraftResult,
 } from "./github/issue-drafts.js";
+export { GitHubIssuePublishService } from "./github/issue-publisher.js";
+export type {
+  GitHubIssuePublishClient,
+  GitHubIssuePublishClientIssue,
+  GitHubIssuePublishDeps,
+  GitHubIssuePublishInput,
+  GitHubIssuePublishResult,
+} from "./github/issue-publisher.js";
 
 // API server
 export { startApiServer } from "./api/server.js";

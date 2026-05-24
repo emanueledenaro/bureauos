@@ -14,6 +14,10 @@ import { RunEngine } from "../runs/engine.js";
 import { AGENT_ROLES } from "../agents/roles.js";
 import { CoordinatorIntakeService } from "../coordinator/intake.js";
 import { GitHubIssueDraftService } from "../github/issue-drafts.js";
+import {
+  GitHubIssuePublishService,
+  type GitHubIssuePublishClient,
+} from "../github/issue-publisher.js";
 import { BusinessReportService } from "../reports/business.js";
 
 /**
@@ -29,6 +33,7 @@ export interface ApiServerOptions {
   config: BureauConfig;
   port?: number;
   token?: string;
+  githubClient?: GitHubIssuePublishClient;
 }
 
 export interface ApiServer {
@@ -180,6 +185,35 @@ const ROUTES: Record<string, RouteHandler> = {
       body.projectSlug,
     );
     ok(res, result, 201);
+  },
+
+  "POST /github/create-issues": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as {
+      projectSlug?: string;
+      owner?: string;
+      repo?: string;
+      draftArtifactIds?: string[];
+      ensureLabels?: boolean;
+    };
+    if (!body.projectSlug || !body.owner || !body.repo) {
+      ok(res, { error: "projectSlug, owner, and repo required" }, 400);
+      return;
+    }
+    if (!options.githubClient) {
+      ok(res, { error: "GitHub client not configured" }, 400);
+      return;
+    }
+    const result = await new GitHubIssuePublishService(options.workspaceRoot, {
+      config: options.config,
+      githubClient: options.githubClient,
+    }).publishProjectDrafts({
+      projectSlug: body.projectSlug,
+      owner: body.owner,
+      repo: body.repo,
+      ...(Array.isArray(body.draftArtifactIds) ? { draftArtifactIds: body.draftArtifactIds } : {}),
+      ...(typeof body.ensureLabels === "boolean" ? { ensureLabels: body.ensureLabels } : {}),
+    });
+    ok(res, result, result.status === "created" ? 201 : 202);
   },
 
   "POST /coordinator/intake": async ({ res, options, req }) => {

@@ -182,6 +182,10 @@ Goal: BureauOS can read and write GitHub state under policy.
 - [x] Add a `bureau github draft-issues` CLI command.
 - [x] Add local API support for issue draft generation (`POST /github/issue-drafts`).
 - [x] Surface issue draft generation in the ElectronJS project portfolio view.
+- [x] Create real GitHub issues from approved draft artifacts under policy.
+- [x] Add a `bureau github create-issues` CLI command.
+- [x] Add local API support for policy-gated issue creation (`POST /github/create-issues`).
+- [x] Surface GitHub issue creation in ElectronJS project cards when a repository is configured.
 - [ ] Implement check parsing and webhook ingestion.
 - [ ] Add tests with `nock` or equivalent HTTP recording.
 

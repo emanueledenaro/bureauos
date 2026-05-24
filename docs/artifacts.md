@@ -364,6 +364,18 @@ Contains:
 - policy notes
 - external commitment gates
 
+### GitHub Issue Publish Report
+
+Audit artifact for real GitHub issue creation.
+
+Contains:
+
+- project
+- repository
+- policy decision
+- created issue URLs
+- source draft artifacts
+
 ### Capability Audit
 
 Tool and runtime usage record.
@@ -443,6 +455,7 @@ Initial templates are available in:
 - [Ad Campaign Brief](../templates/ad-campaign-brief.md)
 - [Repository Provisioning Plan](../templates/repository-provisioning-plan.md)
 - [GitHub Issue Draft](../templates/github-issue-draft.md)
+- [GitHub Issue Publish Report](../templates/github-issue-publish-report.md)
 - [Capability Audit](../templates/capability-audit.md)
 - [Client Account Plan](../templates/client-account-plan.md)
 - [Client Profile](../templates/client-profile.md)

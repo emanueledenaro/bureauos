@@ -39,6 +39,7 @@ export type ArtifactType =
   | "capability-audit"
   | "client-account-plan"
   | "github-issue-draft"
+  | "github-issue-publish-report"
   | "client-profile";
 
 export interface ArtifactRecord extends FrontMatter {
@@ -60,6 +61,7 @@ export interface WriteArtifactInput {
   clientId?: string;
   projectId?: string;
   status?: ArtifactRecord["status"];
+  metadata?: FrontMatter;
 }
 
 export class ArtifactStore {
@@ -77,6 +79,7 @@ export class ArtifactStore {
     const id = newId("art");
     await ensureDir(this.paths().artifactsDir);
     const record: ArtifactRecord = {
+      ...(input.metadata ?? {}),
       id,
       type: input.type,
       created_by: input.createdBy,

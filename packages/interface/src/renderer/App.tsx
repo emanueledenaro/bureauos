@@ -9,6 +9,7 @@ import {
   type CompanyPulse,
   type CoordinatorIntakeResult,
   type GitHubIssueDraftResult,
+  type GitHubIssuePublishResult,
   type OpportunityRecord,
   type ProjectRecord,
   type RunRecord,
@@ -33,6 +34,16 @@ function timeAgo(iso: string): string {
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function parseGitHubRepository(repository: string): { owner: string; repo: string } | undefined {
+  const clean = repository.trim().replace(/\.git$/, "");
+  if (!clean) return undefined;
+  const urlMatch = /^https?:\/\/github\.com\/([^/]+)\/([^/]+)$/i.exec(clean);
+  if (urlMatch?.[1] && urlMatch[2]) return { owner: urlMatch[1], repo: urlMatch[2] };
+  const shorthand = /^([^/\s]+)\/([^/\s]+)$/.exec(clean);
+  if (shorthand?.[1] && shorthand[2]) return { owner: shorthand[1], repo: shorthand[2] };
+  return undefined;
 }
 
 interface DashboardState {
@@ -285,12 +296,16 @@ function Sidebar({ state }: { state: DashboardState }) {
 
 function ProjectCard({
   p,
-  busy,
+  drafting,
+  publishing,
   onDraftIssues,
+  onCreateIssues,
 }: {
   p: ProjectRecord;
-  busy: boolean;
+  drafting: boolean;
+  publishing: boolean;
   onDraftIssues: (projectSlug: string) => Promise<void>;
+  onCreateIssues: (project: ProjectRecord) => Promise<void>;
 }) {
   const statusTone: Record<string, string> = {
     in_progress: "bg-ok-500",
@@ -322,12 +337,21 @@ function ProjectCard({
         <span className="text-[10px] text-neutral-500">GitHub work package</span>
         <button
           onClick={() => void onDraftIssues(p.slug)}
-          disabled={busy}
+          disabled={drafting}
           className="rounded-md border border-neutral-200 px-2 py-1 text-[11px] font-medium text-neutral-700 hover:bg-neutral-100 disabled:text-neutral-400"
         >
-          {busy ? "Drafting..." : "Draft issues"}
+          {drafting ? "Drafting..." : "Draft issues"}
         </button>
       </div>
+      {p.repository ? (
+        <button
+          onClick={() => void onCreateIssues(p)}
+          disabled={publishing}
+          className="mt-2 w-full rounded-md bg-neutral-900 px-2 py-1.5 text-[11px] font-medium text-white hover:bg-neutral-700 disabled:bg-neutral-100 disabled:text-neutral-400"
+        >
+          {publishing ? "Creating..." : "Create GitHub issues"}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -335,12 +359,20 @@ function ProjectCard({
 function PortfolioMap({
   state,
   onDraftIssues,
+  onCreateIssues,
 }: {
   state: DashboardState;
   onDraftIssues: (projectSlug: string) => Promise<GitHubIssueDraftResult>;
+  onCreateIssues: (
+    projectSlug: string,
+    owner: string,
+    repo: string,
+  ) => Promise<GitHubIssuePublishResult>;
 }) {
   const [busyProject, setBusyProject] = useState<string | undefined>();
+  const [publishingProject, setPublishingProject] = useState<string | undefined>();
   const [lastDraft, setLastDraft] = useState<GitHubIssueDraftResult | undefined>();
+  const [lastPublish, setLastPublish] = useState<GitHubIssuePublishResult | undefined>();
   const [error, setError] = useState<string | undefined>();
 
   const byClient = useMemo(() => {
@@ -369,6 +401,24 @@ function PortfolioMap({
       setError((e as Error).message);
     } finally {
       setBusyProject(undefined);
+    }
+  };
+
+  const createIssues = async (project: ProjectRecord): Promise<void> => {
+    if (publishingProject) return;
+    const target = parseGitHubRepository(project.repository);
+    if (!target) {
+      setError(`Invalid GitHub repository for ${project.name}`);
+      return;
+    }
+    setPublishingProject(project.slug);
+    setError(undefined);
+    try {
+      setLastPublish(await onCreateIssues(project.slug, target.owner, target.repo));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setPublishingProject(undefined);
     }
   };
 
@@ -417,8 +467,10 @@ function PortfolioMap({
                   <ProjectCard
                     key={p.id}
                     p={p}
-                    busy={busyProject === p.slug}
+                    drafting={busyProject === p.slug}
+                    publishing={publishingProject === p.slug}
                     onDraftIssues={draftIssues}
+                    onCreateIssues={createIssues}
                   />
                 ))}
               </div>
@@ -437,7 +489,11 @@ function PortfolioMap({
           >
             {error
               ? error
-              : `Generated ${lastDraft?.drafts.length ?? 0} GitHub issue drafts and ${lastDraft?.artifacts.length ?? 0} artifacts for ${lastDraft?.project.name}.`}
+              : lastPublish
+                ? lastPublish.status === "blocked"
+                  ? `Issue creation blocked by policy; approval ${lastPublish.approval?.id ?? "required"} is waiting.`
+                  : `Created ${lastPublish.created.length} GitHub issues on ${lastPublish.repository.owner}/${lastPublish.repository.repo}.`
+                : `Generated ${lastDraft?.drafts.length ?? 0} GitHub issue drafts and ${lastDraft?.artifacts.length ?? 0} artifacts for ${lastDraft?.project.name}.`}
           </div>
         )}
 
@@ -898,6 +954,16 @@ export function App() {
     return result;
   };
 
+  const onGitHubCreateIssues = async (
+    projectSlug: string,
+    owner: string,
+    repo: string,
+  ): Promise<GitHubIssuePublishResult> => {
+    const result = await Api.githubCreateIssues({ projectSlug, owner, repo });
+    await refresh();
+    return result;
+  };
+
   return (
     <div className="flex h-full min-h-screen">
       <Sidebar state={state} />
@@ -906,7 +972,11 @@ export function App() {
         <main className="flex flex-1 flex-col gap-4 overflow-auto p-4 lg:flex-row">
           <div className="flex flex-1 flex-col gap-4">
             {mode === "portfolio" && (
-              <PortfolioMap state={state} onDraftIssues={onGitHubDraftIssues} />
+              <PortfolioMap
+                state={state}
+                onDraftIssues={onGitHubDraftIssues}
+                onCreateIssues={onGitHubCreateIssues}
+              />
             )}
             {mode === "today" && <TodayView state={state} />}
             {mode === "goals" && <GoalsView state={state} />}
