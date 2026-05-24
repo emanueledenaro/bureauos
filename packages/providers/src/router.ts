@@ -1,5 +1,10 @@
 import type { ProviderAdapter, ValidationResult } from "./types.js";
 
+export interface ProviderSelection {
+  adapter: ProviderAdapter;
+  validation: ValidationResult;
+}
+
 /**
  * Provider router.
  *
@@ -27,11 +32,21 @@ export class ProviderRouter {
     return this.providers.get(providerId);
   }
 
-  forAgent(agentRole: string): ProviderAdapter | undefined {
+  chainForAgent(agentRole: string): readonly ProviderAdapter[] {
     const ids = this.assignments.get(agentRole) ?? [];
-    for (const id of ids) {
-      const adapter = this.providers.get(id);
-      if (adapter) return adapter;
+    return ids
+      .map((id) => this.providers.get(id))
+      .filter((adapter): adapter is ProviderAdapter => adapter !== undefined);
+  }
+
+  forAgent(agentRole: string): ProviderAdapter | undefined {
+    return this.chainForAgent(agentRole)[0];
+  }
+
+  async selectForAgent(agentRole: string): Promise<ProviderSelection | undefined> {
+    for (const adapter of this.chainForAgent(agentRole)) {
+      const validation = await adapter.validateCredentials();
+      if (validation.ok) return { adapter, validation };
     }
     return undefined;
   }

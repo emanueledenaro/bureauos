@@ -1,5 +1,11 @@
 import { appendFile } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  buildConfiguredProviderRouter,
+  type ProviderEnv,
+  type ProviderRouter,
+} from "@bureauos/providers";
+import { configureAgentProviderRouting } from "../agents/provider-routing.js";
 import { ArtifactStore, type ArtifactRecord } from "../artifacts/store.js";
 import { AuditLog } from "../audit/log.js";
 import type { BureauConfig } from "../config/schema.js";
@@ -41,6 +47,8 @@ export interface ProjectDispatchResult {
 
 export interface ProjectDispatchDeps {
   config?: BureauConfig;
+  providerRouter?: ProviderRouter;
+  providerEnv?: ProviderEnv;
   clients?: ClientRegistry;
   projects?: ProjectRegistry;
   approvals?: ApprovalRegistry;
@@ -200,6 +208,8 @@ export class ProjectDispatchService {
   private readonly audit: AuditLog;
   private readonly policy: PolicyEngine;
   private readonly runs: RunEngine;
+  private readonly providerRouter?: ProviderRouter;
+  private readonly providerEnv: ProviderEnv;
 
   constructor(
     private readonly workspaceRoot: string,
@@ -212,6 +222,8 @@ export class ProjectDispatchService {
     this.artifacts = deps.artifacts ?? new ArtifactStore(workspaceRoot);
     this.audit = deps.audit ?? new AuditLog(workspacePaths(workspaceRoot).auditLog);
     this.policy = deps.policy ?? new PolicyEngine(this.config, this.approvals);
+    this.providerRouter = deps.providerRouter;
+    this.providerEnv = deps.providerEnv ?? process.env;
     this.runs =
       deps.runs ??
       new RunEngine(workspaceRoot, {
@@ -305,8 +317,15 @@ export class ProjectDispatchService {
       contextArtifactIdsByRole[handoff.role] = [handoff.artifact.id];
     }
 
+    const providerRouter = await this.agentProviderRouter(pipeline);
     const dispatch = await dispatchRun(
-      { audit: this.audit, artifacts: this.artifacts, policy: this.policy },
+      {
+        audit: this.audit,
+        artifacts: this.artifacts,
+        policy: this.policy,
+        config: this.config,
+        ...(providerRouter ? { providerRouter } : {}),
+      },
       {
         workspaceRoot: this.workspaceRoot,
         run,
@@ -353,5 +372,19 @@ export class ProjectDispatchService {
       dispatch,
       artifacts: [packet, ...handoffs.map((handoff) => handoff.artifact)],
     };
+  }
+
+  private async agentProviderRouter(
+    pipeline: readonly string[],
+  ): Promise<ProviderRouter | undefined> {
+    if (this.providerRouter) {
+      configureAgentProviderRouting(this.providerRouter, this.config, pipeline);
+      return this.providerRouter;
+    }
+
+    const configured = await buildConfiguredProviderRouter(this.workspaceRoot, this.providerEnv);
+    if (configured.credentials.length === 0) return undefined;
+    configureAgentProviderRouting(configured.router, this.config, pipeline);
+    return configured.router;
   }
 }

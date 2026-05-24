@@ -10,12 +10,14 @@ export class OpenRouterAdapter implements ProviderAdapter {
   public readonly id: string;
   public readonly type = "openrouter" as const;
   public readonly name = "OpenRouter";
+  public readonly defaultModel?: string;
 
   constructor(
     id: string,
     private readonly options: { apiKey?: string; defaultModel?: string } = {},
   ) {
     this.id = id;
+    this.defaultModel = options.defaultModel;
   }
 
   async listModels(): Promise<readonly string[]> {

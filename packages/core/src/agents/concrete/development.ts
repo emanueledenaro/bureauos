@@ -1,5 +1,6 @@
 import type { AgentDeps, AgentRunInput, AgentRunOutput, AgentRuntime } from "../runtime.js";
 import { AGENT_INDEX } from "../roles.js";
+import { draftAgentArtifact } from "../model-drafting.js";
 
 /**
  * Development agent.
@@ -14,7 +15,7 @@ export class DevelopmentAgent implements AgentRuntime {
   constructor(private readonly deps: AgentDeps) {}
 
   async execute(input: AgentRunInput): Promise<AgentRunOutput> {
-    const body = `# Technical Plan
+    const fallbackBody = `# Technical Plan
 
 ## Mental Model
 
@@ -42,27 +43,37 @@ Revert the single commit if the deploy or merge surfaces a regression.
 (Stub implementation; code execution arrives with the Codex runtime in
 BACKLOG Phase 8.)
 `;
+    const draft = await draftAgentArtifact({
+      input,
+      definition: this.definition,
+      artifactTitle: "Technical Plan",
+      outputInstructions:
+        "Write a technical plan with mental model, likely files, local changes, tests, risks, and rollback notes. Do not write code unless explicitly requested by the run.",
+      fallbackBody,
+    });
     const artifact = await this.deps.artifacts.write({
       type: "technical-plan",
       createdBy: this.definition.id,
       runId: input.context.runId,
       ...(input.context.clientId !== undefined ? { clientId: input.context.clientId } : {}),
       ...(input.context.projectId !== undefined ? { projectId: input.context.projectId } : {}),
-      body,
+      body: draft.body,
     });
     await this.deps.audit.append({
       actor: this.definition.id,
       action: "agent.development.executed",
       target: input.context.runId,
       artifact_id: artifact.id,
+      ...(draft.capability ? { capability: draft.capability } : {}),
+      ...(draft.error ? { error: draft.error } : {}),
       result: "ok",
     });
     return {
       ok: true,
       artifactIds: [artifact.id],
-      decisions: [],
-      blockers: [],
-      notes: "Technical plan drafted (stub)",
+      decisions: draft.decisions,
+      blockers: draft.blockers,
+      notes: draft.notes,
     };
   }
 }

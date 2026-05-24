@@ -1,5 +1,6 @@
 import type { AgentDeps, AgentRunInput, AgentRunOutput, AgentRuntime } from "../runtime.js";
 import { AGENT_INDEX } from "../roles.js";
+import { draftAgentArtifact } from "../model-drafting.js";
 
 /**
  * QA agent.
@@ -13,7 +14,7 @@ export class QaAgent implements AgentRuntime {
   constructor(private readonly deps: AgentDeps) {}
 
   async execute(input: AgentRunInput): Promise<AgentRunOutput> {
-    const body = `# Test Plan
+    const fallbackBody = `# Test Plan
 
 ## Acceptance Criteria Coverage
 
@@ -42,27 +43,37 @@ export class QaAgent implements AgentRuntime {
 (Stub implementation; BACKLOG Phase 9 will wire prompts through the
 provider router.)
 `;
+    const draft = await draftAgentArtifact({
+      input,
+      definition: this.definition,
+      artifactTitle: "Test Plan",
+      outputInstructions:
+        "Write a QA test plan with acceptance coverage, unit tests, integration tests, manual checks, regression checks, and reproducibility notes.",
+      fallbackBody,
+    });
     const artifact = await this.deps.artifacts.write({
       type: "test-plan",
       createdBy: this.definition.id,
       runId: input.context.runId,
       ...(input.context.clientId !== undefined ? { clientId: input.context.clientId } : {}),
       ...(input.context.projectId !== undefined ? { projectId: input.context.projectId } : {}),
-      body,
+      body: draft.body,
     });
     await this.deps.audit.append({
       actor: this.definition.id,
       action: "agent.qa.executed",
       target: input.context.runId,
       artifact_id: artifact.id,
+      ...(draft.capability ? { capability: draft.capability } : {}),
+      ...(draft.error ? { error: draft.error } : {}),
       result: "ok",
     });
     return {
       ok: true,
       artifactIds: [artifact.id],
-      decisions: [],
-      blockers: [],
-      notes: "Test plan drafted (stub)",
+      decisions: draft.decisions,
+      blockers: draft.blockers,
+      notes: draft.notes,
     };
   }
 }

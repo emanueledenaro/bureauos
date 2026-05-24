@@ -1,5 +1,6 @@
 import type { AgentDeps, AgentRunInput, AgentRunOutput, AgentRuntime } from "../runtime.js";
 import { AGENT_INDEX } from "../roles.js";
+import { draftAgentArtifact } from "../model-drafting.js";
 
 /**
  * Project Manager agent.
@@ -15,7 +16,7 @@ export class ProjectManagerAgent implements AgentRuntime {
 
   async execute(input: AgentRunInput): Promise<AgentRunOutput> {
     const briefing = input.context.briefing ?? "(no briefing supplied)";
-    const body = `# Project Manager Run Report
+    const fallbackBody = `# Project Manager Run Report
 
 - Run: ${input.context.runId}
 - Project: ${input.context.projectId ?? "(none)"}
@@ -40,27 +41,37 @@ ${briefing}
 This is a non-LLM stub implementation. BACKLOG Phase 9 will wire prompts
 through the provider router.
 `;
+    const draft = await draftAgentArtifact({
+      input,
+      definition: this.definition,
+      artifactTitle: "Project Manager Run Report",
+      outputInstructions:
+        "Write a project manager report with scope confirmation, specialist routing, memory boundaries, risks, and next actions.",
+      fallbackBody,
+    });
     const artifact = await this.deps.artifacts.write({
       type: "run-report",
       createdBy: this.definition.id,
       runId: input.context.runId,
       ...(input.context.clientId !== undefined ? { clientId: input.context.clientId } : {}),
       ...(input.context.projectId !== undefined ? { projectId: input.context.projectId } : {}),
-      body,
+      body: draft.body,
     });
     await this.deps.audit.append({
       actor: this.definition.id,
       action: "agent.project_manager.executed",
       target: input.context.runId,
       artifact_id: artifact.id,
+      ...(draft.capability ? { capability: draft.capability } : {}),
+      ...(draft.error ? { error: draft.error } : {}),
       result: "ok",
     });
     return {
       ok: true,
       artifactIds: [artifact.id],
-      decisions: [],
-      blockers: [],
-      notes: "Project plan drafted (stub)",
+      decisions: draft.decisions,
+      blockers: draft.blockers,
+      notes: draft.notes,
     };
   }
 }

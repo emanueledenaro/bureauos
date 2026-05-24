@@ -14,6 +14,7 @@ export type {
 } from "./types.js";
 
 export { ProviderRouter } from "./router.js";
+export type { ProviderSelection } from "./router.js";
 export { buildConfiguredProviderRouter } from "./configured-router.js";
 export type {
   ConfiguredProviderRouter,

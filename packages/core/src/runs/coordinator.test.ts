@@ -11,6 +11,38 @@ import { PolicyEngine } from "../policy/engine.js";
 import { ApprovalRegistry } from "../registries/approval.js";
 import { RunEngine } from "./engine.js";
 import { dispatchRun } from "./coordinator.js";
+import {
+  ProviderRouter,
+  type GenerateTextOptions,
+  type ProviderAdapter,
+} from "@bureauos/providers";
+import { configureAgentProviderRouting } from "../agents/provider-routing.js";
+
+class FakeProvider implements ProviderAdapter {
+  readonly id = "openai-default";
+  readonly type = "openai" as const;
+  readonly name = "Fake OpenAI";
+  readonly defaultModel = "fake-model";
+
+  async listModels(): Promise<readonly string[]> {
+    return [this.defaultModel];
+  }
+
+  async validateCredentials() {
+    return { ok: true };
+  }
+
+  async generateText(options: GenerateTextOptions) {
+    return {
+      text: `# Generated ${options.model}\n\n${options.prompt}`,
+      model: options.model,
+    };
+  }
+
+  async *stream(): AsyncIterable<string> {
+    yield "unused";
+  }
+}
 
 describe("Supreme Coordinator dispatch", () => {
   let dir: string;
@@ -85,5 +117,46 @@ describe("Supreme Coordinator dispatch", () => {
       "security",
       "reviewer",
     ]);
+  });
+
+  it("passes a selected model provider to agents while preserving deterministic fallback", async () => {
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const artifacts = new ArtifactStore(dir);
+    const config = defaultConfig("freelancer");
+    const policy = new PolicyEngine(config, new ApprovalRegistry(dir));
+    const runs = new RunEngine(dir, { audit, artifacts, policy });
+    const providerRouter = new ProviderRouter();
+    providerRouter.register(new FakeProvider());
+    configureAgentProviderRouting(providerRouter, config, ["product"]);
+
+    const run = await runs.start({
+      type: "planning",
+      triggerType: "owner_request",
+      triggerSource: "test",
+      scope: "Prepare provider-routed planning",
+    });
+
+    const result = await dispatchRun(
+      { audit, artifacts, policy, config, providerRouter },
+      {
+        workspaceRoot: dir,
+        run,
+        scope: "Prepare provider-routed planning",
+        briefing: "The product agent should use the configured fake model.",
+      },
+    );
+
+    expect(result.steps.map((s) => s.role)).toEqual(["project_manager", "product"]);
+    const featureSpec = (await artifacts.list({ run_id: run.id })).find(
+      (artifact) => artifact.type === "feature-spec",
+    );
+    expect(featureSpec).toBeDefined();
+    const written = await artifacts.read(featureSpec!.id);
+    expect(written?.body).toContain("# Generated fake-model");
+    expect(written?.body).toContain("## Generation Metadata");
+
+    const log = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(log).toContain("model.provider.selected");
+    expect(log).toContain("model:openai-default");
   });
 });

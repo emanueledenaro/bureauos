@@ -23,12 +23,14 @@ export class OpenAIAdapter implements ProviderAdapter {
   public readonly id: string;
   public readonly type = "openai" as const;
   public readonly name = "OpenAI";
+  public readonly defaultModel?: string;
 
   constructor(
     id: string,
     private readonly options: { apiKey?: string; baseUrl?: string; defaultModel?: string } = {},
   ) {
     this.id = id;
+    this.defaultModel = options.defaultModel;
   }
 
   async listModels(): Promise<readonly string[]> {

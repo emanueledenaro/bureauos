@@ -1,6 +1,7 @@
 import type { AgentDeps, AgentRunInput, AgentRunOutput, AgentRuntime } from "../runtime.js";
 import { AGENT_INDEX, type AgentDefinition } from "../roles.js";
 import type { ArtifactType } from "../../artifacts/store.js";
+import { draftAgentArtifact } from "../model-drafting.js";
 
 /**
  * Builds a concrete agent that writes a single artifact of the given
@@ -23,7 +24,7 @@ class TemplateAgent implements AgentRuntime {
 
   async execute(input: AgentRunInput): Promise<AgentRunOutput> {
     const def = this.definition;
-    const body = `# ${def.role}
+    const fallbackBody = `# ${def.role}
 
 ## Scope
 
@@ -47,27 +48,36 @@ ${def.mustNot.map((r) => `- ${r}`).join("\n")}
 
 (Stub implementation; BACKLOG Phase 9 will wire prompts through the provider router.)
 `;
+    const draft = await draftAgentArtifact({
+      input,
+      definition: def,
+      artifactTitle: def.role,
+      outputInstructions: `Write the ${def.role} artifact for this run. Include applied responsibilities, expected outputs, risks, must-not boundaries, and next actions in Markdown.`,
+      fallbackBody,
+    });
     const artifact = await this.deps.artifacts.write({
       type: this.artifactType,
       createdBy: def.id,
       runId: input.context.runId,
       ...(input.context.clientId !== undefined ? { clientId: input.context.clientId } : {}),
       ...(input.context.projectId !== undefined ? { projectId: input.context.projectId } : {}),
-      body,
+      body: draft.body,
     });
     await this.deps.audit.append({
       actor: def.id,
       action: `agent.${def.id}.executed`,
       target: input.context.runId,
       artifact_id: artifact.id,
+      ...(draft.capability ? { capability: draft.capability } : {}),
+      ...(draft.error ? { error: draft.error } : {}),
       result: "ok",
     });
     return {
       ok: true,
       artifactIds: [artifact.id],
-      decisions: [],
-      blockers: [],
-      notes: `${def.role} stub completed`,
+      decisions: draft.decisions,
+      blockers: draft.blockers,
+      notes: draft.notes,
     };
   }
 }

@@ -33,6 +33,7 @@ export interface ProviderAdapter {
   readonly id: string;
   readonly type: ProviderType;
   readonly name: string;
+  readonly defaultModel?: string;
   listModels(): Promise<readonly string[]>;
   validateCredentials(): Promise<ValidationResult>;
   generateText(options: GenerateTextOptions): Promise<GenerateTextResult>;

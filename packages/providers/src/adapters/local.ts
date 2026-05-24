@@ -13,12 +13,14 @@ export class LocalAdapter implements ProviderAdapter {
   public readonly id: string;
   public readonly type = "local" as const;
   public readonly name = "Local Model";
+  public readonly defaultModel?: string;
 
   constructor(
     id: string,
     private readonly options: { baseUrl?: string; defaultModel?: string } = {},
   ) {
     this.id = id;
+    this.defaultModel = options.defaultModel;
   }
 
   async listModels(): Promise<readonly string[]> {

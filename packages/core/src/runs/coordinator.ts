@@ -1,13 +1,16 @@
 import { AgentRegistry } from "../agents/runtime.js";
 import { buildDefaultAgentRegistry } from "../agents/concrete/index.js";
+import { MODEL_PROVIDER_CAPABILITY, selectAgentModel } from "../agents/provider-routing.js";
 import type { ArtifactStore } from "../artifacts/store.js";
 import type { AuditLog } from "../audit/log.js";
+import type { BureauConfig } from "../config/schema.js";
 import type { PolicyEngine } from "../policy/engine.js";
 import { workspacePaths } from "../paths.js";
 import { ensureDir, writeDoc, type FrontMatter } from "../registries/base.js";
 import { join } from "node:path";
 import { newId } from "../ids.js";
 import type { RunRecord, RunType } from "./engine.js";
+import type { ProviderRouter } from "@bureauos/providers";
 import {
   MEMORY_BOUNDARY_CAPABILITY,
   MEMORY_CAPABILITY,
@@ -19,15 +22,17 @@ import {
  *
  * Given a run brief, this function picks the right set of specialist
  * agents based on the run type and runs them sequentially. The kernel
- * captures every produced artifact id on the run record. The actual
- * model calls are out of scope; the agents here are the concrete
- * stubs from `buildDefaultAgentRegistry`.
+ * captures every produced artifact id on the run record. When a configured
+ * provider router is supplied, agents receive a model capability; otherwise
+ * they fall back to deterministic local templates.
  */
 
 export interface CoordinatorDeps {
   artifacts: ArtifactStore;
   audit: AuditLog;
   policy: PolicyEngine;
+  config?: BureauConfig;
+  providerRouter?: ProviderRouter;
   registry?: AgentRegistry;
   memory?: MemoryBoundaryService;
 }
@@ -146,6 +151,19 @@ ${input.briefing ?? "(none supplied)"}
       capability: MEMORY_CAPABILITY,
       result: "ok",
     });
+    const modelSelection =
+      deps.providerRouter && deps.config
+        ? await selectAgentModel(deps.providerRouter, deps.config, role)
+        : undefined;
+    if (modelSelection) {
+      await deps.audit.append({
+        actor: agent.definition.id,
+        action: "model.provider.selected",
+        target: input.run.id,
+        capability: `model:${modelSelection.provider.id}`,
+        result: "ok",
+      });
+    }
     const out = await agent.execute({
       context: {
         runId: input.run.id,
@@ -157,6 +175,7 @@ ${input.briefing ?? "(none supplied)"}
       capabilities: new Map<string, unknown>([
         [MEMORY_CAPABILITY, boundary.store],
         [MEMORY_BOUNDARY_CAPABILITY, boundary],
+        ...(modelSelection ? ([[MODEL_PROVIDER_CAPABILITY, modelSelection]] as const) : []),
       ]),
     });
     steps.push({ role, artifactIds: out.artifactIds, notes: out.notes });

@@ -2,7 +2,7 @@
 
 Model-agnostic provider router for BureauOS.
 
-Planned adapters (see [docs/capabilities-and-integrations.md](../../docs/capabilities-and-integrations.md)):
+Implemented adapter surfaces (see [docs/capabilities-and-integrations.md](../../docs/capabilities-and-integrations.md)):
 
 - OpenAI
 - Anthropic
@@ -11,8 +11,8 @@ Planned adapters (see [docs/capabilities-and-integrations.md](../../docs/capabil
 - OpenRouter / gateway
 - Codex runtime (treated as a capability, not a generic provider)
 
-The router selects providers per agent role with fallback chains, budget awareness, and capability awareness. Credentials live in environment variables or a gitignored local secrets file, never in the repository.
+The router selects providers per agent role with fallback chains. Credentials live in environment variables or the gitignored workspace auth store (`.bureauos/auth/providers.json`), never in the repository. Agent drafting uses authenticated providers when available and falls back to deterministic templates when no approved provider can run.
 
 ## Status
 
-Scaffold only. See [BACKLOG.md](../../BACKLOG.md) Phase 2.
+Provider auth, validation, role routing, and model-backed artifact drafting are implemented. Budget-aware routing, structured generation, and full capability-aware routing remain future work.

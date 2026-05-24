@@ -1,5 +1,6 @@
 import type { AgentDeps, AgentRunInput, AgentRunOutput, AgentRuntime } from "../runtime.js";
 import { AGENT_INDEX } from "../roles.js";
+import { draftAgentArtifact } from "../model-drafting.js";
 
 /**
  * Compliance agent.
@@ -13,7 +14,7 @@ export class ComplianceAgent implements AgentRuntime {
   constructor(private readonly deps: AgentDeps) {}
 
   async execute(input: AgentRunInput): Promise<AgentRunOutput> {
-    const body = `# Compliance Review
+    const fallbackBody = `# Compliance Review
 
 ## Legal / Contract Risk
 
@@ -41,27 +42,37 @@ export class ComplianceAgent implements AgentRuntime {
 
 (Stub implementation; BACKLOG Phase 9 will wire model-driven analysis.)
 `;
+    const draft = await draftAgentArtifact({
+      input,
+      definition: this.definition,
+      artifactTitle: "Compliance Review",
+      outputInstructions:
+        "Write a compliance review covering legal, privacy, financial, public-claim, and approval risks. Keep external actions blocked unless policy allows them.",
+      fallbackBody,
+    });
     const artifact = await this.deps.artifacts.write({
       type: "compliance-review",
       createdBy: this.definition.id,
       runId: input.context.runId,
       ...(input.context.clientId !== undefined ? { clientId: input.context.clientId } : {}),
       ...(input.context.projectId !== undefined ? { projectId: input.context.projectId } : {}),
-      body,
+      body: draft.body,
     });
     await this.deps.audit.append({
       actor: this.definition.id,
       action: "agent.compliance.executed",
       target: input.context.runId,
       artifact_id: artifact.id,
+      ...(draft.capability ? { capability: draft.capability } : {}),
+      ...(draft.error ? { error: draft.error } : {}),
       result: "ok",
     });
     return {
       ok: true,
       artifactIds: [artifact.id],
-      decisions: [],
-      blockers: [],
-      notes: "Compliance review drafted (stub)",
+      decisions: draft.decisions,
+      blockers: draft.blockers,
+      notes: draft.notes,
     };
   }
 }

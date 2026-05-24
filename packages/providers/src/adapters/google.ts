@@ -10,12 +10,14 @@ export class GoogleAdapter implements ProviderAdapter {
   public readonly id: string;
   public readonly type = "google" as const;
   public readonly name = "Google Gemini";
+  public readonly defaultModel?: string;
 
   constructor(
     id: string,
     private readonly options: { apiKey?: string; defaultModel?: string } = {},
   ) {
     this.id = id;
+    this.defaultModel = options.defaultModel;
   }
 
   async listModels(): Promise<readonly string[]> {

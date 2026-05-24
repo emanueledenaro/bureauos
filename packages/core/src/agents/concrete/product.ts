@@ -1,5 +1,6 @@
 import type { AgentDeps, AgentRunInput, AgentRunOutput, AgentRuntime } from "../runtime.js";
 import { AGENT_INDEX } from "../roles.js";
+import { draftAgentArtifact } from "../model-drafting.js";
 
 /**
  * Product agent.
@@ -14,7 +15,7 @@ export class ProductAgent implements AgentRuntime {
 
   async execute(input: AgentRunInput): Promise<AgentRunOutput> {
     const briefing = input.context.briefing ?? input.context.scope;
-    const body = `# Feature Spec
+    const fallbackBody = `# Feature Spec
 
 ## Title
 
@@ -50,27 +51,37 @@ and delivery moving.
 
 (Stub implementation; BACKLOG Phase 9 will wire model calls.)
 `;
+    const draft = await draftAgentArtifact({
+      input,
+      definition: this.definition,
+      artifactTitle: "Feature Spec",
+      outputInstructions:
+        "Write a product feature spec with background, user story, BDD-style acceptance criteria, scope, non-goals, and open questions.",
+      fallbackBody,
+    });
     const artifact = await this.deps.artifacts.write({
       type: "feature-spec",
       createdBy: this.definition.id,
       runId: input.context.runId,
       ...(input.context.clientId !== undefined ? { clientId: input.context.clientId } : {}),
       ...(input.context.projectId !== undefined ? { projectId: input.context.projectId } : {}),
-      body,
+      body: draft.body,
     });
     await this.deps.audit.append({
       actor: this.definition.id,
       action: "agent.product.executed",
       target: input.context.runId,
       artifact_id: artifact.id,
+      ...(draft.capability ? { capability: draft.capability } : {}),
+      ...(draft.error ? { error: draft.error } : {}),
       result: "ok",
     });
     return {
       ok: true,
       artifactIds: [artifact.id],
-      decisions: [],
-      blockers: [],
-      notes: "Feature spec drafted (stub)",
+      decisions: draft.decisions,
+      blockers: draft.blockers,
+      notes: draft.notes,
     };
   }
 }

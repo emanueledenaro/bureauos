@@ -72,11 +72,11 @@ Every major capability described in the docs must become one of:
 | Documented capability | Runtime surface | Status |
 | --- | --- | --- |
 | Agent role catalog | `AGENT_ROLES` | implemented |
-| PM agent per project | concrete PM stub | partial |
-| Delivery agents | concrete/stub agents | partial |
-| Growth agents | template agents | partial |
-| Compliance agent | concrete compliance stub | partial |
-| Agent provider routing | provider router | partial |
+| PM agent per project | concrete PM agent with provider-backed drafting fallback | partial |
+| Delivery agents | concrete/template agents with provider-backed drafting fallback | partial |
+| Growth agents | template agents with provider-backed drafting fallback | partial |
+| Compliance agent | concrete compliance agent with provider-backed drafting fallback | partial |
+| Agent provider routing | `ProviderRouter`, `configureAgentProviderRouting`, dispatcher model capability | implemented |
 | Codex runtime capability | adapter placeholder | designed |
 | MCP capability bus | config/capability model | designed |
 
@@ -141,9 +141,9 @@ Every major capability described in the docs must become one of:
 
 ## Current Priority Order
 
-1. Wire the provider router into concrete agents with role-specific defaults.
-2. Add GitHub check parsing and webhook ingestion.
-3. Add ElectronJS pages for clients, projects, approvals, reports, memory, settings.
-4. Add always-on scheduler tasks for daily report, project health, growth review, and client review.
-5. Add budget-aware and capability-aware routing.
-6. Add connector adapters behind draft-first policy gates.
+1. Add GitHub check parsing and webhook ingestion.
+2. Add ElectronJS pages for clients, projects, approvals, reports, memory, settings.
+3. Add always-on scheduler tasks for daily report, project health, growth review, and client review.
+4. Add budget-aware and capability-aware routing.
+5. Add connector adapters behind draft-first policy gates.
+6. Wire Codex runtime execution for development/reviewer/QA under policy.

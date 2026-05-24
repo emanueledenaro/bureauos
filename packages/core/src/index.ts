@@ -117,6 +117,13 @@ export type {
   AgentDeps,
 } from "./agents/runtime.js";
 export {
+  MODEL_PROVIDER_CAPABILITY,
+  configureAgentProviderRouting,
+  providerChainForRole,
+  selectAgentModel,
+} from "./agents/provider-routing.js";
+export type { AgentModelSelection } from "./agents/provider-routing.js";
+export {
   buildDefaultAgentRegistry,
   ProjectManagerAgent,
   ProductAgent,
