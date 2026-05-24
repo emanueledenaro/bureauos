@@ -4,23 +4,66 @@ An always-on autonomous AI agency operating system that runs revenue, software d
 
 ## Quickstart
 
-The runtime is in early scaffolding. The first useful command — `bureau init` — already works.
+Requires **Node 20+** and **pnpm 9+**.
 
 ```bash
-# requires Node 20 and pnpm 9
+git clone https://github.com/emanueledenaro/bureauos
+cd bureauos
 pnpm install
 pnpm -r run build
-node packages/cli/dist/bin/bureau.js init --name "Your Company" --preset freelancer
 ```
 
-This creates a local `.bureauos/` workspace with:
+Then drive the kernel through the CLI:
 
-- `bureauos.yaml` — the runtime config
-- `memory/` — Markdown-first structured memory (ROOT, COMPANY, CLIENTS, PROJECTS, ...)
-- `audit/audit.log` — append-only audit trail
+```bash
+# In any directory where you want a workspace:
+node /path/to/bureauos/packages/cli/dist/bin/bureau.js init \
+  --name "Your Company" --preset freelancer
+
+# Add some entities:
+node /path/to/bureauos/packages/cli/dist/bin/bureau.js client create --name "Acme Co"
+node /path/to/bureauos/packages/cli/dist/bin/bureau.js project create --name "Website" --client acme-co --stack "Next.js"
+node /path/to/bureauos/packages/cli/dist/bin/bureau.js opportunity create --title "Mobile App" --source linkedin --client acme-co --value 148000
+
+# Run the kernel and see the workspace snapshot:
+node /path/to/bureauos/packages/cli/dist/bin/bureau.js run new --type planning --scope "Q3 roadmap"
+node /path/to/bureauos/packages/cli/dist/bin/bureau.js status
+node /path/to/bureauos/packages/cli/dist/bin/bureau.js audit tail -n 10
+```
+
+### Owner Interface (Electron)
+
+```bash
+pnpm --filter @bureauos/interface run dev
+```
+
+The Electron main process starts the local API server against
+`$BUREAUOS_WORKSPACE` (default: `process.cwd()`) and the renderer connects
+to it. Layout matches `docs/ui-reference/operating-room.md`.
+
+### What's in the workspace
+
+After `bureau init` the directory contains:
+
+- `bureauos.yaml` — runtime config (autonomy, growth autonomy, limits, ...)
+- `memory/` — markdown-first structured memory (ROOT, COMPANY, CLIENTS,
+  PROJECTS, BRAND, OFFERS, CHANNELS, LEADS, CAMPAIGNS, PRICING, PROPOSALS,
+  COMPLIANCE, APPROVALS, PUBLIC_CLAIMS, POLICIES, ...)
+- `audit/audit.log` — append-only JSONL audit trail
 - `approvals/` — pending and resolved approval records
 
-See `docs/bos-kernel-infrastructure.md` for the full layout and [`BACKLOG.md`](./BACKLOG.md) for what comes next.
+See `docs/bos-kernel-infrastructure.md` for the full layout and
+[`BACKLOG.md`](./BACKLOG.md) for what's shipped and what's next.
+
+### Build, test, typecheck
+
+```bash
+pnpm -r run build      # tsc + electron-vite build for the interface
+pnpm -r run typecheck  # strict TypeScript across all packages
+pnpm -r run test       # vitest
+```
+
+CI on every push runs the same plus a smoke `bureau init`.
 
 BureauOS is an operating model for autonomous AI agency work. A single supreme executive coordinator speaks with the owner, remembers the whole company through structured persistent memory, manages multiple project teams, grows the owner's visibility, runs marketing and conversion work, creates and manages revenue opportunities, and delegates execution to specialized agents with scoped memory, clear policies, and auditable artifacts.
 
