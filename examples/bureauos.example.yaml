@@ -1,0 +1,296 @@
+organization:
+  name: "Example AI Software Agency"
+
+setup:
+  preset: "freelancer"
+  mode: "safe_draft"
+  generated_by: "bureau init"
+  advanced_config_required: false
+  auto_detect:
+    git: true
+    github_remote: true
+    package_manager: true
+    test_commands: true
+    codex_capabilities: true
+    mcp_connectors: true
+
+interface:
+  enabled: true
+  mode: "local_dashboard"
+  mobile_first: true
+  default_views:
+    - executive_overview
+    - clients
+    - projects
+    - opportunities
+    - approvals
+    - reports
+    - coordinator_chat
+  notifications:
+    approval_needed: true
+    high_risk_blocker: true
+    client_issue: true
+    revenue_opportunity: true
+    daily_report: true
+    low_value_activity: false
+
+supreme_coordinator:
+  provider: openai
+  model: gpt-5
+  user_facing: true
+  always_on: true
+  memory:
+    scope: global
+    root: ".bureauos/memory/ROOT.md"
+    company: ".bureauos/memory/COMPANY.md"
+    daily_notes: ".bureauos/memory/memory"
+    decisions: ".bureauos/memory/DECISIONS.md"
+    archive: ".bureauos/memory/archive"
+    search_index: ".bureauos/memory/indexes/memory.sqlite"
+
+agents:
+  project_manager:
+    provider: openai
+    model: gpt-5
+  product:
+    provider: anthropic
+    model: claude-sonnet
+  ux:
+    provider: openai
+    model: gpt-5
+  development:
+    provider: codex
+    runtime: codex
+    capabilities:
+      - filesystem
+      - shell
+      - git
+      - github
+      - skills
+      - mcp
+  qa:
+    provider: openai
+    model: gpt-5
+  security:
+    provider: anthropic
+    model: claude-opus
+  reviewer:
+    provider: anthropic
+    model: claude-opus
+  release:
+    provider: openai
+    model: gpt-5
+  visibility:
+    provider: openai
+    model: gpt-5
+  content:
+    provider: openai
+    model: gpt-5
+  social:
+    provider: openai
+    model: gpt-5
+  creative:
+    provider: openai
+    model: gpt-5
+  ads:
+    provider: openai
+    model: gpt-5
+  marketing:
+    provider: openai
+    model: gpt-5
+  conversion:
+    provider: openai
+    model: gpt-5
+  sales:
+    provider: openai
+    model: gpt-5
+  pricing:
+    provider: openai
+    model: gpt-5
+  proposal:
+    provider: openai
+    model: gpt-5
+  compliance:
+    provider: openai
+    model: gpt-5
+  client_success:
+    provider: openai
+    model: gpt-5
+
+autonomy:
+  observe_signals: true
+  start_triage_runs: true
+  create_internal_reports: true
+  create_issues: true
+  comment_on_issues: true
+  create_branches: true
+  push_commits: true
+  open_pull_requests: true
+  merge_pull_requests: false
+  deploy_production: false
+  contact_clients_directly: false
+
+triggers:
+  github:
+    enabled: true
+    watch_issues: true
+    watch_pull_requests: true
+    watch_checks: true
+    watch_security_alerts: true
+  schedules:
+    project_health_check: "hourly"
+    daily_executive_report: "daily"
+    growth_review: "weekly"
+    client_account_review: "weekly"
+  thresholds:
+    stale_pr_hours: 48
+    blocked_issue_hours: 24
+    unanswered_client_message_hours: 12
+    empty_content_pipeline_days: 7
+
+growth_autonomy:
+  draft_content: true
+  draft_campaigns: true
+  draft_replies: true
+  draft_proposals: true
+  update_internal_pipeline: true
+  publish_public_content: false
+  send_client_messages: false
+  run_paid_ads: false
+  change_pricing: false
+  send_final_proposals: false
+  accept_projects: false
+  publish_social_posts: false
+  generate_public_creatives: true
+  launch_ad_campaigns: false
+  change_ad_budget: false
+  allow_one_off_owner_approval: true
+  require_action_sensitive_memory_for_approval: true
+
+business:
+  primary_objective: "sustainable_owner_profit"
+  optimize_for:
+    - revenue
+    - margin
+    - delivery_quality
+    - reputation
+    - client_retention
+    - owner_control
+  metrics:
+    track_pipeline_value: true
+    track_expected_margin: true
+    track_delivery_capacity: true
+    track_payment_status: false
+    track_client_retention_risk: true
+    track_marketing_performance: true
+    track_client_lifetime_value: true
+    track_client_profitability: true
+    track_client_value_score: true
+  policies:
+    minimum_margin_required: true
+    require_delivery_review_before_proposal: true
+    require_compliance_review_before_external_commitment: true
+    require_owner_approval_for_price_commitment: true
+  require_owner_approval_for:
+    - final_price
+    - final_scope_commitment
+    - final_proposal_send
+    - contract_acceptance
+    - paid_ad_spend
+    - ad_campaign_launch
+    - client_logo_or_testimonial_use
+    - public_claims_about_results
+    - production_deploy
+
+open_source:
+  goal: "widely_adopted_owner_operator_agency_os"
+  optimize_for:
+    - usefulness
+    - safety
+    - clear_docs
+    - example_workflows
+    - model_agnostic_integrations
+    - community_contributions
+
+capabilities:
+  codex:
+    type: runtime
+    allowed_agents:
+      - development
+      - reviewer
+      - qa
+    actions:
+      read_repo: true
+      edit_code: true
+      run_tests: true
+      open_pr: true
+      merge_pr: false
+      deploy: false
+    audit_required: true
+  skills:
+    type: registry
+    allowed_agents:
+      - supreme_coordinator
+      - project_manager
+      - development
+      - qa
+      - security
+      - marketing
+      - compliance
+    audit_required: true
+  mcp:
+    type: tool_bus
+    allowed_agents:
+      - supreme_coordinator
+      - project_manager
+      - development
+      - reviewer
+      - qa
+      - security
+      - marketing
+      - sales
+      - compliance
+    high_risk_actions_require_policy: true
+
+limits:
+  max_retries_per_task: 2
+  max_files_changed_without_human_review: 8
+  require_tests_for_code_changes: true
+  require_security_review_for_auth_changes: true
+  require_security_review_for_payment_changes: true
+  require_human_for_destructive_actions: true
+
+memory:
+  coordinator_has_global_access: true
+  isolate_projects: true
+  write_decision_records: true
+  verify_live_state_when_cheap: true
+  retain_raw_history: true
+  promote_daily_notes_to_durable_memory: true
+  root_memory_always_loaded: true
+  growth_memory:
+    brand: ".bureauos/memory/BRAND.md"
+    offers: ".bureauos/memory/OFFERS.md"
+    channels: ".bureauos/memory/CHANNELS.md"
+    leads: ".bureauos/memory/LEADS.md"
+    campaigns: ".bureauos/memory/CAMPAIGNS.md"
+    conversion_notes: ".bureauos/memory/CONVERSION_NOTES.md"
+    pricing: ".bureauos/memory/PRICING.md"
+    proposals: ".bureauos/memory/PROPOSALS.md"
+  client_intelligence:
+    clients_root: ".bureauos/memory/clients"
+    profile: "CLIENT.md"
+    revenue: "REVENUE.md"
+    relationship: "RELATIONSHIP.md"
+    permissions: "PERMISSIONS.md"
+    communication: "COMMUNICATION.md"
+    opportunities: "OPPORTUNITIES.md"
+    projects: "PROJECTS.md"
+
+github:
+  source_of_truth: true
+  use_issues: true
+  use_labels: true
+  use_comments: true
+  use_pull_requests: true
+  use_checks: true

@@ -1,0 +1,42 @@
+name: Feature
+description: Request a product feature for BureauOS.
+title: "[Feature]: "
+labels:
+  - "type: feature"
+  - "stage: intake"
+body:
+  - type: textarea
+    id: background
+    attributes:
+      label: Background
+      description: What problem should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: user-story
+    attributes:
+      label: User Story
+      description: As a... I want... So that...
+      placeholder: |
+        As a
+        I want
+        So that
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: Use Given / When / Then where possible.
+      placeholder: |
+        Given
+        When
+        Then
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Constraints, risks, examples, or related issues.
+

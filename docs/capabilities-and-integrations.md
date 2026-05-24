@@ -1,0 +1,246 @@
+# Capabilities and Integrations
+
+BureauOS should not rely only on language model reasoning.
+
+Agents need capabilities:
+
+- Codex-style coding execution
+- reusable skills
+- MCP servers
+- local CLI tools
+- GitHub integrations
+- browser automation
+- design/image tools
+- database tools
+- calendar, email, CRM, ads, and analytics connectors
+
+The capability layer lets BureauOS assign the right tools to the right agents under policy.
+
+## Core Idea
+
+```text
+Agent role + memory + policy + capabilities = useful autonomous worker
+```
+
+The model provides reasoning. Capabilities provide action.
+
+## Codex Runtime
+
+Codex can act as a development execution runtime.
+
+Useful for:
+
+- reading repositories
+- editing code
+- running tests
+- creating patches
+- opening pull requests
+- debugging CI failures
+- reviewing diffs
+- using local tools
+- using project-specific skills
+
+Recommended assignment:
+
+```yaml
+agents:
+  development:
+    runtime: codex
+    capabilities:
+      - filesystem
+      - shell
+      - git
+      - test_runner
+      - github
+      - skills
+      - mcp
+```
+
+## Skills
+
+Skills are reusable capability packs.
+
+They can provide:
+
+- instructions
+- workflows
+- templates
+- scripts
+- domain-specific procedures
+- verification ladders
+
+Examples:
+
+- frontend app building
+- GitHub PR review
+- security scan
+- Supabase work
+- Stripe work
+- browser QA
+- presentation generation
+- SEO/content workflows
+
+BureauOS should treat skills as approved operating procedures, not random prompt snippets.
+
+## MCP Servers
+
+MCP servers expose external tools and resources.
+
+Examples:
+
+- GitHub
+- Slack
+- Google Drive
+- Gmail
+- Calendar
+- Supabase
+- Stripe
+- Vercel
+- browser automation
+- local filesystem
+- custom business systems
+
+BureauOS should use MCP as a controlled tool bus.
+
+## Capability Registry
+
+Each capability should be registered.
+
+Example:
+
+```yaml
+capabilities:
+  github:
+    type: mcp
+    allowed_agents:
+      - supreme_coordinator
+      - project_manager
+      - development
+      - reviewer
+    actions:
+      read_issues: true
+      create_issues: true
+      comment: true
+      open_pr: true
+      merge_pr: false
+
+  codex:
+    type: runtime
+    allowed_agents:
+      - development
+      - reviewer
+      - qa
+    actions:
+      edit_code: true
+      run_tests: true
+      open_pr: true
+      deploy: false
+
+  ads_platform:
+    type: mcp
+    allowed_agents:
+      - ads
+      - marketing
+      - compliance
+    actions:
+      read_campaigns: true
+      draft_campaigns: true
+      launch_campaigns: false
+      change_budget: false
+```
+
+## Per-Agent Capability Boundaries
+
+The same tool can mean different permissions for different agents.
+
+Example:
+
+```yaml
+development:
+  github:
+    open_pr: true
+    merge_pr: false
+
+release:
+  github:
+    create_release: true
+    deploy_production: false
+
+ads:
+  ads_platform:
+    draft_campaign: true
+    launch_campaign: false
+
+supreme_coordinator:
+  all_capabilities:
+    inspect: true
+    dispatch: true
+    override_policy: false
+```
+
+The supreme coordinator can inspect and dispatch capabilities, but high-risk execution still requires policy or owner approval.
+
+## Capability Selection
+
+When a run starts, BureauOS should select capabilities based on:
+
+- run type
+- project
+- agent role
+- policy
+- risk class
+- owner approvals
+- available connectors
+- required evidence
+
+Example:
+
+```text
+Run type: mobile app proposal
+
+Agents:
+- Product: no code tools
+- UX: design templates, browser references
+- Development: Codex runtime, repo read, architecture estimation
+- Pricing: pricing memory, proposal templates
+- Compliance: policy memory, client permissions
+- Proposal: document templates
+```
+
+## Capability Audit
+
+Every capability use should be auditable.
+
+Record:
+
+- agent
+- tool
+- action
+- target
+- approval source
+- result
+- artifact produced
+- risk level
+
+This matters for:
+
+- trust
+- debugging
+- client safety
+- legal/compliance review
+- repeatability
+
+## Safety Rule
+
+Capabilities increase power.
+
+Therefore:
+
+```text
+More capability requires stronger policy.
+```
+
+Drafting is usually safe.
+
+External actions, payments, ad spend, client communication, production deployment, secrets, and destructive operations require explicit policy gates.
+

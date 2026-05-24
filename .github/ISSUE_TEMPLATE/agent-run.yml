@@ -1,0 +1,69 @@
+name: Agent Run
+description: Track a BureauOS agentic run.
+title: "[Run]: "
+labels:
+  - "stage: intake"
+  - "agent: coordinator"
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: What should the run accomplish?
+    validations:
+      required: true
+  - type: dropdown
+    id: run-type
+    attributes:
+      label: Run Type
+      options:
+        - feature
+        - bug
+        - review
+        - release
+        - planning
+        - retrospective
+        - visibility
+        - content
+        - campaign
+        - conversion
+        - sales
+        - social
+        - creative
+        - ads
+        - compliance
+        - client_success
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Relevant project, repository, issue, PR, client, or constraints.
+  - type: checkboxes
+    id: agents
+    attributes:
+      label: Agents Requested
+      options:
+        - label: Product
+        - label: UX/UI
+        - label: Development
+        - label: QA
+        - label: Security
+        - label: Reviewer
+        - label: Release
+        - label: Visibility
+        - label: Content
+        - label: Social
+        - label: Creative
+        - label: Ads
+        - label: Marketing
+        - label: Conversion
+        - label: Sales
+        - label: Compliance
+        - label: Client Success
+  - type: textarea
+    id: policy
+    attributes:
+      label: Policy Notes
+      description: Autonomy level, human approval requirements, or risk constraints.
