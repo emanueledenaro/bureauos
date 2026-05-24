@@ -13,6 +13,7 @@ import { PolicyEngine } from "../policy/engine.js";
 import { RunEngine } from "../runs/engine.js";
 import { AGENT_ROLES } from "../agents/roles.js";
 import { CoordinatorIntakeService } from "../coordinator/intake.js";
+import { GitHubIssueDraftService } from "../github/issue-drafts.js";
 import { BusinessReportService } from "../reports/business.js";
 
 /**
@@ -164,6 +165,20 @@ const ROUTES: Record<string, RouteHandler> = {
     const result = await new BusinessReportService(options.workspaceRoot, {
       config: options.config,
     }).generate();
+    ok(res, result, 201);
+  },
+
+  "POST /github/issue-drafts": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as {
+      projectSlug?: string;
+    };
+    if (!body.projectSlug || !body.projectSlug.trim()) {
+      ok(res, { error: "projectSlug required" }, 400);
+      return;
+    }
+    const result = await new GitHubIssueDraftService(options.workspaceRoot).draftForProject(
+      body.projectSlug,
+    );
     ok(res, result, 201);
   },
 

@@ -7,6 +7,7 @@ import {
   ClientRegistry,
   ConfigError,
   CoordinatorIntakeService,
+  GitHubIssueDraftService,
   InitError,
   OpportunityRegistry,
   PolicyEngine,
@@ -86,6 +87,7 @@ Server:
   daemon [--port N]                         Run scheduler + API server in foreground
 
 GitHub:
+  github draft-issues --project slug         Generate GitHub-ready issue drafts from project artifacts
   github ensure-labels --owner O --repo R   Apply the BureauOS label taxonomy
   github sync --owner O --repo R [--state]  Pull issues from GitHub into the audit log
 
@@ -508,6 +510,29 @@ const handleReportGenerate: Handler = async () => {
   return 0;
 };
 
+const handleGitHubDraftIssues: Handler = async (args) => {
+  const flags = parseFlags(args, {
+    project: { type: "string", alias: "p" },
+  });
+  if (typeof flags === "string") return err(`github draft-issues: ${flags}`);
+  if (typeof flags.project !== "string") {
+    return err("github draft-issues: --project <slug> is required");
+  }
+  await loadWorkspaceConfig(process.cwd());
+  const result = await new GitHubIssueDraftService(process.cwd()).draftForProject(flags.project);
+
+  process.stdout.write(
+    `bureau: generated ${result.drafts.length} GitHub issue drafts for ${result.project.slug}\n`,
+  );
+  for (const [index, draft] of result.drafts.entries()) {
+    const artifact = result.artifacts[index];
+    process.stdout.write(`  - ${draft.title}\n`);
+    process.stdout.write(`    labels: ${draft.labels.join(", ")}\n`);
+    if (artifact) process.stdout.write(`    artifact: ${artifact.id}\n`);
+  }
+  return 0;
+};
+
 const handleAuditTail: Handler = async (args) => {
   const flags = parseFlags(args, { limit: { type: "number", alias: "n" } });
   if (typeof flags === "string") return err(`audit tail: ${flags}`);
@@ -754,6 +779,7 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
   },
   providers: { list: handleProvidersList },
   github: {
+    "draft-issues": handleGitHubDraftIssues,
     "ensure-labels": async (args: readonly string[]) => {
       const flags = parseFlags(args, {
         owner: { type: "string" },

@@ -21,72 +21,94 @@ BureauOS Release       -> GitHub releases
 ### Type
 
 ```text
-type: feature
-type: bug
-type: refactor
-type: docs
-type: chore
-type: release
+type:feature
+type:bug
+type:refactor
+type:docs
+type:chore
+type:release
 ```
 
 ### Stage
 
 ```text
-stage: intake
-stage: product-ready
-stage: design-ready
-stage: dev-ready
-stage: in-progress
-stage: review
-stage: qa
-stage: blocked
-stage: done
+stage:intake
+stage:product-ready
+stage:design-ready
+stage:dev-ready
+stage:in-progress
+stage:review
+stage:qa
+stage:blocked
+stage:done
 ```
 
 ### Agent
 
 ```text
-agent: coordinator
-agent: pm
-agent: product
-agent: ux
-agent: dev
-agent: qa
-agent: security
-agent: reviewer
-agent: release
+agent:coordinator
+agent:pm
+agent:product
+agent:ux
+agent:dev
+agent:qa
+agent:security
+agent:reviewer
+agent:release
 ```
 
 ### Risk
 
 ```text
-risk: low
-risk: medium
-risk: high
-risk: critical
+risk:low
+risk:medium
+risk:high
+risk:critical
 ```
 
 ### Needs
 
 ```text
-needs: human
-needs: repro
-needs: logs
-needs: design
-needs: tests
-needs: security
-needs: decision
+needs:human
+needs:repro
+needs:logs
+needs:design
+needs:tests
+needs:security
+needs:decision
 ```
 
 ### Autonomy
 
 ```text
-autonomy: read-only
-autonomy: issue-only
-autonomy: pr-allowed
-autonomy: merge-allowed
-autonomy: deploy-allowed
+autonomy:read-only
+autonomy:issue-only
+autonomy:pr-allowed
+autonomy:merge-allowed
+autonomy:deploy-allowed
 ```
+
+## Issue Draft Generation
+
+The Supreme Coordinator can convert project artifacts into GitHub-ready issue drafts without publishing them externally.
+
+Runtime surfaces:
+
+- CLI: `bureau github draft-issues --project <project-slug>`
+- API: `POST /github/issue-drafts` with `{ "projectSlug": "<project-slug>" }`
+- ElectronJS: project cards in the Portfolio Operating Room
+
+Generated drafts are stored as `github-issue-draft` artifacts in persistent memory and audit an event named `github.issue_drafts.generated`.
+
+The first generated package contains:
+
+- Product scope issue
+- Repository provisioning issue
+- Proposal/pricing issue
+- Compliance gate issue
+- Growth/content issue
+
+Creating real GitHub issues from these drafts is still policy-gated and should require an approved repository target.
 
 ## Issue Lifecycle
 
@@ -150,4 +172,3 @@ Required before merge:
 GitHub is the operational source of truth for visible work.
 
 Persistent memory may store summaries and decisions, but issue and PR state should be reconciled from GitHub when possible.
-

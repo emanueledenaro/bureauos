@@ -129,6 +129,18 @@ export interface BusinessReportResult {
   };
   next_actions: string[];
 }
+export interface GitHubIssueDraft {
+  title: string;
+  body: string;
+  labels: string[];
+  source_artifacts: string[];
+}
+export interface GitHubIssueDraftResult {
+  project: ProjectRecord;
+  client?: ClientRecord;
+  drafts: GitHubIssueDraft[];
+  artifacts: ArtifactRecord[];
+}
 
 export const Api = {
   pulse: () => api<CompanyPulse>("/company-pulse"),
@@ -153,6 +165,11 @@ export const Api = {
   generateReports: () =>
     api<BusinessReportResult>("/reports/generate", {
       method: "POST",
+    }),
+  githubIssueDrafts: (projectSlug: string) =>
+    api<GitHubIssueDraftResult>("/github/issue-drafts", {
+      method: "POST",
+      body: JSON.stringify({ projectSlug }),
     }),
   resolveApproval: (id: string, status: "approved" | "rejected", reason?: string) =>
     api<ApprovalRecord>("/approvals/resolve", {

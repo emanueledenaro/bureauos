@@ -114,6 +114,14 @@ export type {
   BusinessReportResult,
 } from "./reports/business.js";
 
+// GitHub planning
+export { GitHubIssueDraftService } from "./github/issue-drafts.js";
+export type {
+  GitHubIssueDraft,
+  GitHubIssueDraftDeps,
+  GitHubIssueDraftResult,
+} from "./github/issue-drafts.js";
+
 // API server
 export { startApiServer } from "./api/server.js";
 export type { ApiServerOptions, ApiServer } from "./api/server.js";

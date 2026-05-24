@@ -72,4 +72,35 @@ describe("API server", () => {
       expect.arrayContaining(["executive-report", "business-operating-report"]),
     );
   });
+
+  it("generates GitHub issue drafts from a project slug", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    await fetch(`${server.url}/coordinator/intake`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        clientName: "Pizzeria Aurora",
+        message: "Ho parlato con una pizzeria: vuole sito con prenotazioni.",
+      }),
+    });
+
+    const response = await fetch(`${server.url}/github/issue-drafts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectSlug: "pizzeria-aurora-booking-website" }),
+    });
+
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as {
+      drafts: Array<{ title: string; labels: string[] }>;
+      artifacts: unknown[];
+    };
+    expect(body.drafts).toHaveLength(5);
+    expect(body.artifacts).toHaveLength(5);
+    expect(body.drafts[0]?.labels).toEqual(expect.arrayContaining(["type:feature"]));
+
+    const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(audit).toContain("github.issue_drafts.generated");
+  });
 });

@@ -115,6 +115,7 @@ Every major capability described in the docs must become one of:
 | --- | --- | --- |
 | GitHub labels | `github ensure-labels` | implemented |
 | GitHub issue sync | `github sync` | partial |
+| GitHub issue draft generation | `github draft-issues`, `/github/issue-drafts`, Electron project cards | implemented |
 | GitHub PR creation | not implemented | designed |
 | OpenAI provider | provider adapter | partial |
 | Anthropic provider | provider adapter | partial |
@@ -127,10 +128,9 @@ Every major capability described in the docs must become one of:
 
 ## Current Priority Order
 
-1. Finish Supreme Coordinator intake as the primary owner workflow.
-2. Add executive reports and client account reports generated from real registries.
-3. Add project manager dispatch with project-scoped memory packets.
-4. Add GitHub issue creation from artifacts.
-5. Add ElectronJS pages for clients, projects, approvals, reports, memory, settings.
-6. Add always-on scheduler tasks for daily report, project health, growth review, and client review.
-7. Add connector adapters behind draft-first policy gates.
+1. Add policy-gated GitHub issue creation from approved draft artifacts.
+2. Add project manager dispatch with project-scoped memory packets.
+3. Add ElectronJS pages for clients, projects, approvals, reports, memory, settings.
+4. Add always-on scheduler tasks for daily report, project health, growth review, and client review.
+5. Add real provider SDK calls behind budget-aware routing.
+6. Add connector adapters behind draft-first policy gates.

@@ -38,6 +38,7 @@ export type ArtifactType =
   | "repository-provisioning-plan"
   | "capability-audit"
   | "client-account-plan"
+  | "github-issue-draft"
   | "client-profile";
 
 export interface ArtifactRecord extends FrontMatter {

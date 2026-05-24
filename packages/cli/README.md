@@ -2,21 +2,25 @@
 
 The `bureau` command-line interface.
 
-## Commands (planned)
+## Commands
 
 See [BACKLOG.md](../../BACKLOG.md) Phase 1.
 
 - `bureau init` — initialize a workspace
 - `bureau status` — show company pulse
+- `bureau intake --message <m>` — let the Supreme Coordinator create client/project/opportunity work
+- `bureau report generate` — generate executive and business operating reports
 - `bureau config validate` — validate the local config
 - `bureau memory search <q>` — search executive and project memory
 - `bureau run new` — start a new run
 - `bureau audit tail` — tail the audit log
 - `bureau policy explain <a>` — explain a policy decision
-- `bureau providers list` / `bureau providers test` — provider management
+- `bureau providers list` — provider management
+- `bureau github draft-issues --project <slug>` — generate GitHub-ready issue drafts from project artifacts
+- `bureau github ensure-labels --owner <o> --repo <r>` — apply the BureauOS label taxonomy
 - `bureau github sync` — reconcile from GitHub
-- `bureau daemon start|stop|status` — control the always-on daemon
+- `bureau daemon` — run scheduler and local API in the foreground
 
 ## Status
 
-Scaffold only. `bureau --help` prints the planned command list. Commands are not implemented yet.
+The CLI is an operational local surface for workspace setup, intake, memory, reports, approvals, provider checks, GitHub label setup, GitHub issue draft generation, GitHub issue sync, and daemon mode.

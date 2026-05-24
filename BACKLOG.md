@@ -177,8 +177,12 @@ Goal: BureauOS can read and write GitHub state under policy.
 - [x] Implement comment write (`commentOnIssue`).
 - [x] Implement PR read/list/create.
 - [x] Add a `bureau github ensure-labels` CLI command.
+- [x] Add a `bureau github sync` CLI command.
+- [x] Generate GitHub-ready issue drafts from coordinator artifacts.
+- [x] Add a `bureau github draft-issues` CLI command.
+- [x] Add local API support for issue draft generation (`POST /github/issue-drafts`).
+- [x] Surface issue draft generation in the ElectronJS project portfolio view.
 - [ ] Implement check parsing and webhook ingestion.
-- [ ] Add a `bureau github sync` CLI command.
 - [ ] Add tests with `nock` or equivalent HTTP recording.
 
 ## Phase 4 — Owner Interface MVP (v0.3)

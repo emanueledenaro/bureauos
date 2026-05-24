@@ -350,6 +350,20 @@ Contains:
 - memory paths
 - approvals
 
+### GitHub Issue Draft
+
+GitHub-ready work item generated from project artifacts.
+
+Contains:
+
+- issue title
+- issue body
+- labels
+- source artifacts
+- acceptance criteria
+- policy notes
+- external commitment gates
+
 ### Capability Audit
 
 Tool and runtime usage record.
@@ -428,6 +442,7 @@ Initial templates are available in:
 - [Creative Brief](../templates/creative-brief.md)
 - [Ad Campaign Brief](../templates/ad-campaign-brief.md)
 - [Repository Provisioning Plan](../templates/repository-provisioning-plan.md)
+- [GitHub Issue Draft](../templates/github-issue-draft.md)
 - [Capability Audit](../templates/capability-audit.md)
 - [Client Account Plan](../templates/client-account-plan.md)
 - [Client Profile](../templates/client-profile.md)

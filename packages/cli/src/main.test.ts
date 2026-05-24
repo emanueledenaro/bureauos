@@ -118,4 +118,33 @@ describe("bureau cli", () => {
     const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
     expect(audit).toContain("report.business.generated");
   });
+
+  it("generates GitHub issue drafts from CLI", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+    await main([
+      "node",
+      "bureau",
+      "intake",
+      "--client",
+      "Pizzeria Aurora",
+      "--message",
+      "Ho parlato con una pizzeria: vuole sito con prenotazioni.",
+    ]);
+
+    const code = await main([
+      "node",
+      "bureau",
+      "github",
+      "draft-issues",
+      "--project",
+      "pizzeria-aurora-booking-website",
+    ]);
+
+    expect(code).toBe(0);
+
+    const artifactsDir = join(dir, ".bureauos", "memory", "artifacts");
+    const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
+    expect(audit).toContain("github.issue_drafts.generated");
+    expect(await exists(artifactsDir)).toBe(true);
+  });
 });
