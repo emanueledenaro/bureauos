@@ -1,4 +1,5 @@
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { createHmac } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -227,6 +228,85 @@ describe("API server", () => {
 
     const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(audit).toContain("github.issue_publish.created");
+  });
+
+  it("ingests signed GitHub webhooks into signal memory", async () => {
+    const secret = "webhook-secret";
+    server = await startApiServer({
+      workspaceRoot: dir,
+      config: defaultConfig("agency"),
+      token: "owner-api-token",
+      githubWebhookSecret: secret,
+    });
+    const payload = JSON.stringify({
+      action: "opened",
+      repository: {
+        name: "web",
+        full_name: "acme/web",
+        owner: { login: "acme" },
+      },
+      issue: {
+        number: 7,
+        title: "Booking form fails on mobile",
+        html_url: "https://github.com/acme/web/issues/7",
+        labels: [{ name: "type:bug" }],
+        state: "open",
+        updated_at: "2026-05-24T10:00:00.000Z",
+      },
+    });
+    const signature = `sha256=${createHmac("sha256", secret).update(payload).digest("hex")}`;
+
+    const response = await fetch(`${server.url}/github/webhook`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-github-event": "issues",
+        "x-github-delivery": "delivery-api-1",
+        "x-hub-signature-256": signature,
+      },
+      body: payload,
+    });
+
+    expect(response.status).toBe(202);
+    const body = (await response.json()) as {
+      repository: string;
+      createdOpportunities: Array<{ source: string }>;
+      report: { type: string };
+    };
+    expect(body.repository).toBe("acme/web");
+    expect(body.createdOpportunities.map((opportunity) => opportunity.source)).toEqual([
+      "github:acme/web#7",
+    ]);
+    expect(body.report.type).toBe("github-signal-report");
+
+    const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(audit).toContain("github.issue_webhook.ingested");
+  });
+
+  it("rejects GitHub webhooks with invalid signatures", async () => {
+    server = await startApiServer({
+      workspaceRoot: dir,
+      config: defaultConfig("agency"),
+      githubWebhookSecret: "webhook-secret",
+    });
+
+    const response = await fetch(`${server.url}/github/webhook`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-github-event": "issues",
+        "x-hub-signature-256": "sha256=invalid",
+      },
+      body: JSON.stringify({
+        repository: {
+          name: "web",
+          full_name: "acme/web",
+          owner: { login: "acme" },
+        },
+      }),
+    });
+
+    expect(response.status).toBe(401);
   });
 
   it("dispatches a project into project-scoped agent handoffs", async () => {

@@ -129,6 +129,9 @@ The Supreme Coordinator can observe GitHub as a delivery signal source.
 Runtime surface:
 
 - CLI: `bureau github sync --owner <owner> --repo <repo>`
+- API/webhook: `POST /github/webhook` with GitHub `issues`, `pull_request`, or `check_run` events
+- Daemon: linked GitHub repositories in project memory are polled every 15 minutes when `GITHUB_TOKEN` is configured
+- ElectronJS: latest `github-signal-report` artifacts are visible in the Live Operations Timeline
 
 The sync reads issues, pull requests, and check runs for open pull requests. BureauOS writes a `github-signal-report` artifact, creates new internal opportunities for newly observed issues, and audits:
 
@@ -136,6 +139,13 @@ The sync reads issues, pull requests, and check runs for open pull requests. Bur
 - `github.issue_stale.detected`
 - `github.pr_stale.detected`
 - `github.signals.synced`
+
+The webhook path writes the same `github-signal-report` artifact type from pushed GitHub events. `GITHUB_WEBHOOK_SECRET` enables `x-hub-signature-256` verification for `serve` and `daemon`, so GitHub can post events without the owner API bearer token. Webhook ingestion audits:
+
+- `github.issue_webhook.ingested`
+- `github.pr_webhook.ingested`
+- `github.check_failed.detected`
+- `github.webhook.ingested`
 
 This is read-only. It does not push commits, comment on issues, or open PRs. Failed checks and stale PRs become internal operating signals for later health-check or bug triage runs.
 

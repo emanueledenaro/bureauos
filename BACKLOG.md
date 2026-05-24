@@ -188,7 +188,7 @@ Goal: BureauOS can read and write GitHub state under policy.
 - [x] Add a `bureau github create-issues` CLI command.
 - [x] Add local API support for policy-gated issue creation (`POST /github/create-issues`).
 - [x] Surface GitHub issue creation in ElectronJS project cards when a repository is configured.
-- [ ] Implement check parsing and webhook ingestion.
+- [x] Implement check parsing and webhook ingestion.
 - [ ] Add tests with `nock` or equivalent HTTP recording.
 
 ## Phase 4 — Owner Interface MVP (v0.3)
@@ -307,8 +307,8 @@ Goal: scheduler and event watchers so BureauOS works while the owner is offline.
 - [x] Generate executive and business operating reports during the daily executive report job.
 - [ ] Implement threshold triggers (stale PR, blocked issue, unanswered client message, empty content pipeline).
 - [ ] Implement memory triggers (follow-ups due).
-- [ ] Implement event ingestion from the GitHub adapter.
-- [ ] Implement signal classification.
+- [x] Implement event ingestion from the GitHub adapter.
+- [x] Implement signal classification for GitHub issue, PR, and check-run events.
 - [ ] Implement bounded retries with policy escalation.
 - [ ] Add a `bureau daemon` CLI subcommand (start, stop, status).
 - [ ] Add tests for each trigger type.

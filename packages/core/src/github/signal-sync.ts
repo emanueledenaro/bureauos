@@ -3,6 +3,7 @@ import { AuditLog } from "../audit/log.js";
 import { workspacePaths } from "../paths.js";
 import { ClientRegistry } from "../registries/client.js";
 import { OpportunityRegistry, type OpportunityRecord } from "../registries/opportunity.js";
+import { createGitHubIssueOpportunities } from "./opportunity-import.js";
 
 export interface GitHubSignalIssue {
   owner: string;
@@ -296,7 +297,9 @@ export class GitHubSignalSyncService {
     const stalePullRequests = pullRequests.filter(
       (pr) => pr.state === "open" && isStale(pr.updatedAt, cutoff),
     );
-    const createdOpportunities = await this.createIssueOpportunities({
+    const createdOpportunities = await createGitHubIssueOpportunities({
+      clients: this.clients,
+      opportunities: this.opportunities,
       owner,
       repo,
       issues,
@@ -381,37 +384,5 @@ export class GitHubSignalSyncService {
       createdOpportunities,
       report,
     };
-  }
-
-  private async createIssueOpportunities(args: {
-    owner: string;
-    repo: string;
-    issues: readonly GitHubSignalIssue[];
-    clientSlug?: string;
-  }): Promise<OpportunityRecord[]> {
-    let clientId = "";
-    if (args.clientSlug) {
-      const client = await this.clients.get(args.clientSlug);
-      if (!client) throw new Error(`client not found: ${args.clientSlug}`);
-      clientId = client.id;
-    }
-
-    const existing = await this.opportunities.list();
-    const knownSources = new Set(existing.map((opportunity) => opportunity.source));
-    const created: OpportunityRecord[] = [];
-    for (const issue of args.issues) {
-      const source = `github:${args.owner}/${args.repo}#${issue.number}`;
-      if (knownSources.has(source)) continue;
-      created.push(
-        await this.opportunities.create({
-          title: issue.title,
-          source,
-          clientId,
-          notes: `Imported from ${issue.url}`,
-        }),
-      );
-      knownSources.add(source);
-    }
-    return created;
   }
 }

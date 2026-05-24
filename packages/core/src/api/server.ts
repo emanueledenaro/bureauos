@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile, stat, open } from "node:fs/promises";
 import { URL } from "node:url";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import type { BureauConfig } from "../config/schema.js";
 import { workspacePaths } from "../paths.js";
 import { ClientRegistry } from "../registries/client.js";
@@ -23,6 +24,7 @@ import {
   type GitHubIssuePublishClient,
 } from "../github/issue-publisher.js";
 import { BusinessReportService } from "../reports/business.js";
+import { GitHubWebhookIngestionService } from "../github/webhook-ingestion.js";
 import {
   ProviderAuthStore,
   buildConfiguredProviderRouter,
@@ -44,6 +46,7 @@ export interface ApiServerOptions {
   port?: number;
   token?: string;
   githubClient?: GitHubIssuePublishClient;
+  githubWebhookSecret?: string;
 }
 
 export interface ApiServer {
@@ -99,21 +102,36 @@ function unauthorized(res: ServerResponse): void {
 }
 
 async function readJson(req: IncomingMessage): Promise<unknown> {
+  const raw = await readRaw(req);
+  if (!raw) return {};
+  return JSON.parse(raw) as unknown;
+}
+
+async function readRaw(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     let raw = "";
     req.on("data", (chunk: Buffer) => {
       raw += chunk.toString("utf8");
     });
-    req.on("end", () => {
-      if (!raw) return resolve({});
-      try {
-        resolve(JSON.parse(raw));
-      } catch (e) {
-        reject(e);
-      }
-    });
+    req.on("end", () => resolve(raw));
     req.on("error", reject);
   });
+}
+
+function headerString(req: IncomingMessage, name: string): string {
+  const value = req.headers[name.toLowerCase()];
+  if (Array.isArray(value)) return value[0] ?? "";
+  return value ?? "";
+}
+
+function verifyGitHubSignature(secret: string, raw: string, signature: string): boolean {
+  if (!signature.startsWith("sha256=")) return false;
+  const expected = `sha256=${createHmac("sha256", secret).update(raw).digest("hex")}`;
+  const actualBuffer = Buffer.from(signature, "utf8");
+  const expectedBuffer = Buffer.from(expected, "utf8");
+  return (
+    actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer)
+  );
 }
 
 function deps(options: ApiServerOptions) {
@@ -350,6 +368,34 @@ const ROUTES: Record<string, RouteHandler> = {
     ok(res, result, result.status === "created" ? 201 : 202);
   },
 
+  "POST /github/webhook": async ({ res, options, req, url }) => {
+    const raw = await readRaw(req);
+    const signature = headerString(req, "x-hub-signature-256");
+    if (
+      options.githubWebhookSecret &&
+      !verifyGitHubSignature(options.githubWebhookSecret, raw, signature)
+    ) {
+      unauthorized(res);
+      return;
+    }
+    const event = headerString(req, "x-github-event");
+    if (!event) {
+      ok(res, { error: "x-github-event header required" }, 400);
+      return;
+    }
+    const payload = raw ? (JSON.parse(raw) as unknown) : {};
+    const result = await new GitHubWebhookIngestionService(options.workspaceRoot).ingest({
+      event,
+      payload,
+      ...(headerString(req, "x-github-delivery")
+        ? { deliveryId: headerString(req, "x-github-delivery") }
+        : {}),
+      ...(url.searchParams.get("client") ? { clientSlug: url.searchParams.get("client")! } : {}),
+      source: "api",
+    });
+    ok(res, result, 202);
+  },
+
   "POST /coordinator/intake": async ({ res, options, req }) => {
     const body = (await readJson(req)) as {
       message?: string;
@@ -527,7 +573,8 @@ export async function startApiServer(options: ApiServerOptions): Promise<ApiServ
         return;
       }
 
-      if (options.token) {
+      const githubWebhookRoute = method === "POST" && url.pathname === "/github/webhook";
+      if (options.token && !(githubWebhookRoute && options.githubWebhookSecret)) {
         const auth = req.headers["authorization"];
         if (auth !== `Bearer ${options.token}`) {
           unauthorized(res);

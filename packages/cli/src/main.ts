@@ -785,6 +785,9 @@ const handleServe: Handler = async (args) => {
     config,
     ...(typeof flags.port === "number" ? { port: flags.port } : {}),
     ...(githubClient ? { githubClient } : {}),
+    ...(process.env["GITHUB_WEBHOOK_SECRET"]
+      ? { githubWebhookSecret: process.env["GITHUB_WEBHOOK_SECRET"] }
+      : {}),
   });
   process.stdout.write(`bureau: API server listening at ${server.url}\n`);
   process.stdout.write(`bureau: workspace ${workspacePaths(process.cwd()).workspaceDir}\n`);
@@ -1101,19 +1104,23 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
     const audit = new AuditLog(workspacePaths(process.cwd()).auditLog);
     const artifacts = new ArtifactStore(process.cwd());
     const runs = new RunEngine(process.cwd(), { audit, artifacts, policy });
+    const githubClient = githubClientFromEnv();
     const scheduler = new Scheduler({
       config,
       runs,
       workspaceRoot: process.cwd(),
       coordinator: { audit, artifacts, policy },
+      ...(githubClient ? { githubClient } : {}),
     });
     scheduler.start();
-    const githubClient = githubClientFromEnv();
     const server = await startApiServer({
       workspaceRoot: process.cwd(),
       config,
       ...(typeof flags.port === "number" ? { port: flags.port } : {}),
       ...(githubClient ? { githubClient } : {}),
+      ...(process.env["GITHUB_WEBHOOK_SECRET"]
+        ? { githubWebhookSecret: process.env["GITHUB_WEBHOOK_SECRET"] }
+        : {}),
     });
     process.stdout.write(`bureau: daemon running. API at ${server.url}\n`);
     process.stdout.write(`bureau: scheduler active. Press Ctrl-C to stop\n`);

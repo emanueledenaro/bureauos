@@ -71,6 +71,7 @@ Observed GitHub delivery signal.
 Contains:
 
 - repository
+- source event or sync run
 - issue count
 - pull request count
 - check-run count

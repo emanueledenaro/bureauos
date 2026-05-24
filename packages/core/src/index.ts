@@ -167,6 +167,12 @@ export type {
   GitHubSignalSyncInput,
   GitHubSignalSyncResult,
 } from "./github/signal-sync.js";
+export { GitHubWebhookIngestionService } from "./github/webhook-ingestion.js";
+export type {
+  GitHubWebhookIngestInput,
+  GitHubWebhookIngestResult,
+  GitHubWebhookIngestionDeps,
+} from "./github/webhook-ingestion.js";
 
 // API server
 export { startApiServer } from "./api/server.js";

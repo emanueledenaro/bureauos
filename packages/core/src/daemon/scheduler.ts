@@ -2,6 +2,8 @@ import type { BureauConfig } from "../config/schema.js";
 import type { RunEngine, RunType } from "../runs/engine.js";
 import { dispatchRun, type CoordinatorDeps } from "../runs/coordinator.js";
 import { BusinessReportService } from "../reports/business.js";
+import { ProjectRegistry } from "../registries/project.js";
+import { GitHubSignalSyncService, type GitHubSignalClient } from "../github/signal-sync.js";
 
 /**
  * Always-on scheduler.
@@ -17,6 +19,7 @@ export interface SchedulerOptions {
   runs: RunEngine;
   workspaceRoot?: string;
   coordinator?: CoordinatorDeps;
+  githubClient?: GitHubSignalClient;
   logger?: (message: string) => void;
 }
 
@@ -53,7 +56,34 @@ const TICKS: Array<Omit<TickJob, "last">> = [
     scope: "weekly client account review",
     everyMs: 7 * 24 * 60 * 60 * 1000,
   },
+  {
+    name: "github_project_signal_sync",
+    type: "health_check",
+    scope: "sync GitHub signals for linked project repositories",
+    everyMs: 15 * 60 * 1000,
+  },
 ];
+
+function parseGitHubRepository(value: string): { owner: string; repo: string } | undefined {
+  const clean = value.trim().replace(/\.git$/, "");
+  if (!clean) return undefined;
+
+  const ssh = clean.match(/github\.com[:/]([^/\s]+)\/([^/\s]+)$/);
+  if (ssh) return { owner: ssh[1]!, repo: ssh[2]! };
+
+  try {
+    const url = new URL(clean);
+    if (!url.hostname.endsWith("github.com")) return undefined;
+    const [owner, repo] = url.pathname.split("/").filter(Boolean);
+    if (!owner || !repo) return undefined;
+    return { owner, repo: repo.replace(/\.git$/, "") };
+  } catch {
+    const shorthand = clean.match(/^([^/\s]+)\/([^/\s]+)$/);
+    if (shorthand) return { owner: shorthand[1]!, repo: shorthand[2]! };
+  }
+
+  return undefined;
+}
 
 export class Scheduler {
   private interval: NodeJS.Timeout | undefined;
@@ -83,6 +113,10 @@ export class Scheduler {
       if (!due) continue;
       job.last = now;
       try {
+        if (job.name === "github_project_signal_sync") {
+          await this.syncGitHubProjectSignals();
+          continue;
+        }
         const run = await this.options.runs.start({
           type: job.type,
           triggerType: "schedule",
@@ -116,6 +150,40 @@ export class Scheduler {
         this.log(`scheduler: ${job.name} failed: ${(err as Error).message}`);
       }
     }
+  }
+
+  private async syncGitHubProjectSignals(): Promise<void> {
+    if (!this.options.workspaceRoot || !this.options.githubClient) {
+      this.log("scheduler: github_project_signal_sync skipped (GitHub client not configured)");
+      return;
+    }
+
+    const projects = await new ProjectRegistry(this.options.workspaceRoot).list();
+    const repositories = new Map<string, { owner: string; repo: string }>();
+    for (const project of projects) {
+      const parsed = parseGitHubRepository(project.repository);
+      if (!parsed) continue;
+      repositories.set(`${parsed.owner}/${parsed.repo}`, parsed);
+    }
+
+    if (repositories.size === 0) {
+      this.log("scheduler: github_project_signal_sync skipped (no linked GitHub repositories)");
+      return;
+    }
+
+    const sync = new GitHubSignalSyncService(this.options.workspaceRoot, {
+      githubClient: this.options.githubClient,
+      ...(this.options.coordinator
+        ? {
+            audit: this.options.coordinator.audit,
+            artifacts: this.options.coordinator.artifacts,
+          }
+        : {}),
+    });
+    for (const repo of repositories.values()) {
+      await sync.sync({ owner: repo.owner, repo: repo.repo });
+    }
+    this.log(`scheduler: github_project_signal_sync synced ${repositories.size} repositories`);
   }
 
   private log(message: string): void {

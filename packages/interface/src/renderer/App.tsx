@@ -3,6 +3,7 @@ import {
   Api,
   type AgentDefinition,
   type ApprovalRecord,
+  type ArtifactRecord,
   type AuditEvent,
   type BusinessReportResult,
   type CoordinatorAttachmentInput,
@@ -49,6 +50,7 @@ interface DashboardState {
   runs: RunRecord[];
   agents: AgentDefinition[];
   providers: ProviderConnection[];
+  artifacts: ArtifactRecord[];
   audit: AuditEvent[];
   error?: string;
   loading: boolean;
@@ -116,6 +118,7 @@ const emptyState: DashboardState = {
   runs: [],
   agents: [],
   providers: [],
+  artifacts: [],
   audit: [],
   loading: true,
 };
@@ -125,18 +128,29 @@ function useDashboard(): { state: DashboardState; refresh: () => Promise<void> }
 
   const refresh = async (): Promise<void> => {
     try {
-      const [pulse, clients, projects, opportunities, approvals, runs, agents, providers, audit] =
-        await Promise.all([
-          Api.pulse(),
-          Api.clients(),
-          Api.projects(),
-          Api.opportunities(),
-          Api.approvals(),
-          Api.runs(),
-          Api.agents(),
-          Api.providers(),
-          Api.audit(30),
-        ]);
+      const [
+        pulse,
+        clients,
+        projects,
+        opportunities,
+        approvals,
+        runs,
+        agents,
+        artifacts,
+        providers,
+        audit,
+      ] = await Promise.all([
+        Api.pulse(),
+        Api.clients(),
+        Api.projects(),
+        Api.opportunities(),
+        Api.approvals(),
+        Api.runs(),
+        Api.agents(),
+        Api.artifacts(),
+        Api.providers(),
+        Api.audit(30),
+      ]);
       setState({
         pulse,
         clients,
@@ -145,6 +159,7 @@ function useDashboard(): { state: DashboardState; refresh: () => Promise<void> }
         approvals,
         runs,
         agents,
+        artifacts,
         providers,
         audit,
         loading: false,
@@ -953,7 +968,7 @@ function PendingApprovals({
   );
 }
 
-function Timeline({ events }: { events: AuditEvent[] }) {
+function Timeline({ events, artifacts }: { events: AuditEvent[]; artifacts: ArtifactRecord[] }) {
   const visible =
     events.length > 0
       ? events
@@ -970,6 +985,19 @@ function Timeline({ events }: { events: AuditEvent[] }) {
               ] as const,
           )
       : demoEvents.map((event) => [...event, ""] as const);
+  const signalReports = artifacts
+    .filter((artifact) => artifact.type === "github-signal-report")
+    .sort((a, b) => new Date(b.created ?? "").getTime() - new Date(a.created ?? "").getTime())
+    .slice(0, 3);
+  const failingChecks = signalReports.reduce(
+    (sum, report) => sum + (report.failing_checks_count ?? 0),
+    0,
+  );
+  const staleWork = signalReports.reduce(
+    (sum, report) =>
+      sum + (report.stale_issues_count ?? 0) + (report.stale_pull_requests_count ?? 0),
+    0,
+  );
 
   return (
     <section className="dashboard-panel">
@@ -1008,6 +1036,36 @@ function Timeline({ events }: { events: AuditEvent[] }) {
           </div>
         ))}
       </div>
+      {signalReports.length > 0 ? (
+        <div className="grid grid-cols-[150px_1fr] gap-4 border-t border-neutral-100 px-6 py-4">
+          <div>
+            <div className="text-[11px] font-semibold text-neutral-950">GitHub Signals</div>
+            <div className="mt-1 text-[10px] text-neutral-500">
+              {failingChecks} failing checks, {staleWork} stale items
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {signalReports.map((report) => (
+              <div key={report.id} className="rounded-md border border-neutral-200 p-2">
+                <div className="truncate text-[10px] font-medium text-neutral-950">
+                  {report.repository ?? "GitHub"}
+                </div>
+                <div className="mt-1 text-[10px] text-neutral-500">
+                  {report.github_event ?? "sync"}
+                  {report.github_action ? `:${report.github_action}` : ""}
+                </div>
+                <div className="mt-2 flex gap-2 text-[10px] text-neutral-500">
+                  <span>PR {report.pull_requests_count ?? 0}</span>
+                  <span>CI {report.checks_count ?? 0}</span>
+                  <span className={report.failing_checks_count ? "text-rose-700" : ""}>
+                    Fail {report.failing_checks_count ?? 0}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -1419,7 +1477,7 @@ export function App() {
               <CoordinatorPanel onIntake={onCoordinatorIntake} />
             </div>
             <div className="min-w-0">
-              <Timeline events={state.audit} />
+              <Timeline events={state.audit} artifacts={state.artifacts} />
             </div>
             <div className="min-w-0">
               <PendingApprovals approvals={state.approvals} onResolve={onResolve} />

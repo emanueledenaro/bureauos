@@ -28,4 +28,4 @@ See [BACKLOG.md](../../BACKLOG.md) Phase 1.
 
 ## Status
 
-The CLI is an operational local surface for workspace setup, intake, memory, project dispatch, reports, approvals, provider auth and checks, GitHub label setup, GitHub issue draft generation, policy-gated GitHub issue creation, GitHub issue/PR/check sync, and daemon mode.
+The CLI is an operational local surface for workspace setup, intake, memory, project dispatch, reports, approvals, provider auth and checks, GitHub label setup, GitHub issue draft generation, policy-gated GitHub issue creation, GitHub issue/PR/check sync, GitHub webhook ingestion through `serve`/`daemon`, daemon polling for linked project repositories, and daemon mode.

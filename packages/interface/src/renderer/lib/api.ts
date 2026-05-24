@@ -105,6 +105,16 @@ export interface ArtifactRecord {
   id: string;
   type: string;
   status: string;
+  created?: string;
+  repository?: string;
+  github_event?: string;
+  github_action?: string;
+  issues_count?: number;
+  pull_requests_count?: number;
+  checks_count?: number;
+  failing_checks_count?: number;
+  stale_issues_count?: number;
+  stale_pull_requests_count?: number;
 }
 export interface CoordinatorAttachmentInput {
   name: string;
@@ -209,6 +219,7 @@ export const Api = {
   approvals: () => api<ApprovalRecord[]>("/approvals"),
   runs: () => api<RunRecord[]>("/runs"),
   agents: () => api<AgentDefinition[]>("/agents"),
+  artifacts: () => api<ArtifactRecord[]>("/artifacts"),
   providers: () => api<ProviderConnection[]>("/providers"),
   audit: (n = 50) => api<AuditEvent[]>(`/audit?n=${n}`),
   coordinatorIntake: (input: {
