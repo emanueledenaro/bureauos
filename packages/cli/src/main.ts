@@ -75,6 +75,7 @@ Server:
 
 GitHub:
   github ensure-labels --owner O --repo R   Apply the BureauOS label taxonomy
+  github sync --owner O --repo R [--state]  Pull issues from GitHub into the audit log
 
 Misc:
   --version | -v       Print version
@@ -657,6 +658,43 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
       process.stdout.write(
         `bureau: ensured ${GITHUB_LABEL_TAXONOMY.length} labels on ${flags.owner}/${flags.repo}\n`,
       );
+      return 0;
+    },
+    sync: async (args: readonly string[]) => {
+      const flags = parseFlags(args, {
+        owner: { type: "string" },
+        repo: { type: "string" },
+        token: { type: "string" },
+        state: { type: "string" },
+      });
+      if (typeof flags === "string") return err(`github sync: ${flags}`);
+      if (typeof flags.owner !== "string") return err("github sync: --owner required");
+      if (typeof flags.repo !== "string") return err("github sync: --repo required");
+      const token = typeof flags.token === "string" ? flags.token : process.env["GITHUB_TOKEN"];
+      if (!token) return err("github sync: provide --token or set GITHUB_TOKEN");
+      const gh = new OctokitGitHubClient({ token });
+      const issues = await gh.listIssues(flags.owner, flags.repo, {
+        state: (typeof flags.state === "string" ? flags.state : "open") as
+          | "open"
+          | "closed"
+          | "all",
+      });
+      const audit = new AuditLog(workspacePaths(process.cwd()).auditLog);
+      await audit.append({
+        actor: "cli",
+        action: "github.sync",
+        target: `${flags.owner}/${flags.repo}`,
+        result: "ok",
+      });
+      process.stdout.write(
+        `bureau: pulled ${issues.length} issues from ${flags.owner}/${flags.repo}\n`,
+      );
+      for (const i of issues.slice(0, 20)) {
+        process.stdout.write(`  #${i.number}  ${i.state.padEnd(6)}  ${i.title}\n`);
+      }
+      if (issues.length > 20) {
+        process.stdout.write(`  ...and ${issues.length - 20} more\n`);
+      }
       return 0;
     },
   },
