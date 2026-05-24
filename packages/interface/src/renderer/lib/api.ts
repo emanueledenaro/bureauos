@@ -54,6 +54,8 @@ export interface ClientRecord {
   name: string;
   status: string;
   industry: string;
+  created?: string;
+  updated?: string;
 }
 export interface ProjectRecord {
   id: string;
@@ -63,14 +65,23 @@ export interface ProjectRecord {
   status: string;
   repository: string;
   stack: string;
+  created?: string;
+  updated?: string;
 }
 export interface OpportunityRecord {
   id: string;
   title: string;
+  source?: string;
   client_id: string;
   status: string;
   expected_value: number;
   expected_margin: number;
+  qualification_status?: string;
+  proposal_status?: string;
+  pricing_status?: string;
+  next_action?: string;
+  created?: string;
+  updated?: string;
 }
 export interface ApprovalRecord {
   id: string;
@@ -79,6 +90,8 @@ export interface ApprovalRecord {
   target: string;
   scope: string;
   status: string;
+  created?: string;
+  updated?: string;
 }
 export interface RunRecord {
   id: string;
@@ -86,6 +99,10 @@ export interface RunRecord {
   status: string;
   scope: string;
   created: string;
+  trigger_type?: string;
+  trigger_source?: string;
+  project_id?: string;
+  client_id?: string;
 }
 export interface AuditEvent {
   timestamp: string;

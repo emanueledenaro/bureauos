@@ -20,8 +20,8 @@ body {
     Arial,
     sans-serif;
   -webkit-font-smoothing: antialiased;
-  color: #1c1917;
-  background-color: #f7f7f5;
+  color: #f5f5f4;
+  background-color: #09090b;
 }
 
 button,
@@ -40,15 +40,15 @@ button:disabled {
 }
 
 .dashboard-panel {
-  border: 1px solid #e5e5e5;
+  border: 1px solid #27272a;
   border-radius: 8px;
-  background: #ffffff;
-  box-shadow: 0 1px 1px rgb(0 0 0 / 0.02);
+  background: #111113;
+  box-shadow: 0 1px 1px rgb(0 0 0 / 0.35);
 }
 
 .dashboard-scale {
-  width: 138.889%;
-  transform: scale(0.72);
+  width: 147.059%;
+  transform: scale(0.68);
   transform-origin: top left;
 }
 
@@ -85,7 +85,7 @@ button:disabled {
   top: 74px;
   left: -24px;
   width: 24px;
-  border-top: 2px solid #9ca3af;
+  border-top: 2px solid #52525b;
 }
 
 .portfolio-column:not(:first-child)::after {
@@ -94,17 +94,17 @@ button:disabled {
   top: 74px;
   left: -24px;
   height: 76px;
-  border-left: 2px solid #9ca3af;
+  border-left: 2px solid #52525b;
 }
 
 .workstream-card {
   position: relative;
   min-height: 62px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid #2f2f35;
   border-radius: 8px;
-  background: #ffffff;
+  background: #151518;
   padding: 9px 11px;
-  box-shadow: 0 8px 20px rgb(15 23 42 / 0.03);
+  box-shadow: 0 8px 20px rgb(0 0 0 / 0.2);
 }
 
 .workstream-card::before {
@@ -113,7 +113,7 @@ button:disabled {
   top: 30px;
   left: -7px;
   width: 7px;
-  border-top: 2px solid #9ca3af;
+  border-top: 2px solid #52525b;
 }
 
 .workstream-card::after {
@@ -140,7 +140,7 @@ button:disabled {
   top: 31px;
   right: 24px;
   left: 24px;
-  border-top: 1px solid #e5e5e5;
+  border-top: 1px solid #27272a;
 }
 
 .timeline-event {
@@ -156,21 +156,21 @@ button:disabled {
   z-index: 1;
   width: 9px;
   height: 9px;
-  border: 2px solid #ffffff;
+  border: 2px solid #111113;
   border-radius: 999px;
-  box-shadow: 0 0 0 1px #d4d4d4;
+  box-shadow: 0 0 0 1px #3f3f46;
 }
 
 .agent-pill {
   display: grid;
-  min-width: 120px;
-  grid-template-columns: 28px minmax(0, 1fr) 8px;
+  min-width: 112px;
+  grid-template-columns: 24px minmax(0, 1fr) 8px;
   align-items: center;
-  gap: 8px;
-  border: 1px solid #e5e5e5;
+  gap: 7px;
+  border: 1px solid #27272a;
   border-radius: 8px;
-  padding: 8px;
-  background: #ffffff;
+  padding: 6px;
+  background: #111113;
 }
 
 .coordinator-chat {
@@ -189,11 +189,11 @@ button:disabled {
 }
 
 .coordinator-composer {
-  border: 1px solid #e5e5e5;
+  border: 1px solid #27272a;
   border-radius: 10px;
-  background: #ffffff;
+  background: #151518;
   padding: 10px;
-  box-shadow: 0 10px 24px rgb(15 23 42 / 0.04);
+  box-shadow: 0 10px 24px rgb(0 0 0 / 0.24);
 }
 
 .attachment-chip {
@@ -203,9 +203,9 @@ button:disabled {
   grid-template-columns: 36px minmax(0, 1fr) 12px;
   align-items: center;
   gap: 8px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid #27272a;
   border-radius: 8px;
-  background: #fafafa;
+  background: #18181b;
   padding: 6px;
 }
 
