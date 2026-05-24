@@ -141,6 +141,19 @@ export type {
   BusinessReportResult,
 } from "./reports/business.js";
 
+// Provider auth
+export {
+  authorizeOpenAICodexOAuth,
+  completeOpenAICodexOAuth,
+  providerAuthMethods,
+} from "./providers/openai-codex-oauth-session.js";
+export type {
+  ProviderAuthAuthorization,
+  ProviderAuthMethod,
+  ProviderOAuthCallbackInput,
+  ProviderOAuthCallbackResult,
+} from "./providers/openai-codex-oauth-session.js";
+
 // GitHub planning
 export { GitHubIssueDraftService } from "./github/issue-drafts.js";
 export type {

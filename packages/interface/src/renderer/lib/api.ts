@@ -227,6 +227,19 @@ export interface ProviderConnection {
   status: "ok" | "missing";
   reason?: string;
 }
+export interface ProviderAuthMethod {
+  type: "oauth" | "api";
+  label: string;
+}
+export interface ProviderAuthAuthorization {
+  url: string;
+  method: "auto" | "code";
+  instructions: string;
+}
+export interface ProviderOAuthCallbackResult {
+  status: "connected" | "pending";
+  providers?: ProviderConnection[];
+}
 
 export const Api = {
   pulse: () => api<CompanyPulse>("/company-pulse"),
@@ -285,6 +298,20 @@ export const Api = {
     }),
   providerLogout: (input: { provider: string; id?: string }) =>
     api<{ removed: boolean; providers: ProviderConnection[] }>("/providers/auth/logout", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  providerAuthMethods: () => api<Record<string, ProviderAuthMethod[]>>("/provider/auth"),
+  providerOAuthAuthorize: (providerID: string, method = 0) =>
+    api<ProviderAuthAuthorization>(`/provider/${providerID}/oauth/authorize`, {
+      method: "POST",
+      body: JSON.stringify({ method }),
+    }),
+  providerOAuthCallback: (
+    providerID: string,
+    input: { method?: number; code?: string; defaultModel?: string } = {},
+  ) =>
+    api<ProviderOAuthCallbackResult>(`/provider/${providerID}/oauth/callback`, {
       method: "POST",
       body: JSON.stringify(input),
     }),

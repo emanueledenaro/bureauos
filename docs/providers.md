@@ -30,7 +30,6 @@ Environment variables still work only for their matching provider:
 ## CLI
 
 ```sh
-bureau auth login --provider openai-codex --access-token "$OPENAI_CODEX_ACCESS_TOKEN" --refresh-token "$OPENAI_CODEX_REFRESH_TOKEN" --model gpt-5
 bureau auth login --provider openai --api-key "$OPENAI_API_KEY" --model gpt-5
 bureau auth login --provider anthropic --api-key "$ANTHROPIC_API_KEY" --model claude-sonnet-4-6
 bureau auth login --provider openrouter --api-key "$OPENROUTER_API_KEY"
@@ -54,14 +53,17 @@ The command loads stored credentials first, then reads matching environment vari
 The local API exposes provider auth for the desktop interface:
 
 - `GET /providers`
+- `GET /provider/auth`
+- `POST /provider/openai-codex/oauth/authorize`
+- `POST /provider/openai-codex/oauth/callback`
 - `POST /providers/auth/login`
 - `POST /providers/auth/logout`
 
-ElectronJS Settings uses those endpoints to connect and disconnect providers without exposing raw secrets in renderer responses.
+The singular `/provider/...` endpoints follow OpenCode's provider auth pattern: the UI asks which auth methods a provider supports, starts OAuth authorization, then completes the callback. ElectronJS Settings uses browser OAuth for `openai-codex`; API-key providers still use explicit API-key login. Raw secrets are never returned in renderer responses.
 
 ## Current Runtime State
 
-- OpenAI Codex OAuth: separate provider profile, token validation, no API-key fallback. Live OAuth model bridging remains adapter-level.
+- OpenAI Codex OAuth: separate provider profile, browser PKCE login, token validation, no API-key fallback. Live OAuth model bridging remains adapter-level.
 - OpenAI API: SDK-backed `generateText` and `stream`.
 - Anthropic: SDK-backed `generateText` and `stream`.
 - Google, OpenRouter, Local: registered adapters with credential validation, model calls still stubbed.
@@ -69,6 +71,7 @@ ElectronJS Settings uses those endpoints to connect and disconnect providers wit
 
 ## Next Steps
 
-- Add browser/device OAuth login so owners do not paste tokens manually.
+- Add Codex OAuth request bridging for live model calls.
+- Add optional device/headless OAuth login.
 - Add budget-aware and capability-aware routing.
 - Move production-grade secrets to OS keychain as an alternative to the local auth file.

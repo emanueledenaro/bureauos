@@ -29,9 +29,15 @@ import { GitHubSignalTriggerService } from "../github/signal-triggers.js";
 import {
   ProviderAuthStore,
   buildConfiguredProviderRouter,
+  type OpenAICodexOAuthFetch,
   type ProviderConnection,
   type ProviderType,
 } from "@bureauos/providers";
+import {
+  authorizeOpenAICodexOAuth,
+  completeOpenAICodexOAuth,
+  providerAuthMethods,
+} from "../providers/openai-codex-oauth-session.js";
 
 /**
  * Local HTTP API server.
@@ -48,6 +54,8 @@ export interface ApiServerOptions {
   token?: string;
   githubClient?: GitHubIssuePublishClient;
   githubWebhookSecret?: string;
+  openaiCodexOAuthFetch?: OpenAICodexOAuthFetch;
+  openaiCodexOAuthCallbackPort?: number;
 }
 
 export interface ApiServer {
@@ -239,6 +247,44 @@ const ROUTES: Record<string, RouteHandler> = {
 
   "GET /providers": async ({ res, options }) => {
     ok(res, await providerStatuses(options.workspaceRoot));
+  },
+
+  "GET /provider/auth": ({ res }) => {
+    ok(res, providerAuthMethods());
+  },
+
+  "POST /provider/openai-codex/oauth/authorize": async ({ res, options }) => {
+    ok(
+      res,
+      await authorizeOpenAICodexOAuth({
+        callbackPort: options.openaiCodexOAuthCallbackPort,
+      }),
+      201,
+    );
+  },
+
+  "POST /provider/openai-codex/oauth/callback": async ({ res, options, req }) => {
+    const payload = (await readJson(req)) as {
+      method?: number;
+      code?: string;
+      defaultModel?: string;
+    };
+    const result = await completeOpenAICodexOAuth({
+      workspaceRoot: options.workspaceRoot,
+      payload,
+      fetch: options.openaiCodexOAuthFetch,
+    });
+    if (result.status === "pending") {
+      ok(res, result, 202);
+      return;
+    }
+    await deps(options).audit.append({
+      actor: "owner",
+      action: "provider.oauth.connected",
+      target: "openai-codex",
+      result: "ok",
+    });
+    ok(res, { ...result, providers: await providerStatuses(options.workspaceRoot) }, 201);
   },
 
   "POST /providers/auth/login": async ({ res, options, req }) => {

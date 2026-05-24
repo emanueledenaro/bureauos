@@ -11,6 +11,7 @@ import type {
   GitHubIssuePublishClientIssue,
 } from "../github/issue-publisher.js";
 import { startApiServer, type ApiServer } from "./server.js";
+import type { OpenAICodexOAuthFetch } from "@bureauos/providers";
 
 class TestGitHubClient implements GitHubIssuePublishClient {
   created: GitHubIssuePublishClientIssue[] = [];
@@ -32,6 +33,15 @@ class TestGitHubClient implements GitHubIssuePublishClient {
     this.created.push(issue);
     return issue;
   }
+}
+
+function jsonResponse(body: unknown): Response {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => body,
+    text: async () => JSON.stringify(body),
+  } as Response;
 }
 
 describe("API server", () => {
@@ -418,6 +428,71 @@ describe("API server", () => {
     expect(codex?.oauth_token_masked).toBe("oaut...-api");
     expect(codex?.no_api_fallback).toBe(true);
     expect(JSON.stringify(loginBody)).not.toContain("oauth-access-token-api");
+  });
+
+  it("exposes OpenCode-style provider auth methods", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const response = await fetch(`${server.url}/provider/auth`);
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as Record<string, Array<{ type: string; label: string }>>;
+    expect(body["openai-codex"]).toEqual([{ type: "oauth", label: "ChatGPT Plus/Pro (browser)" }]);
+    expect(body["openai"]).toEqual([{ type: "api", label: "API key" }]);
+  });
+
+  it("connects OpenAI Codex with the browser OAuth callback flow", async () => {
+    const oauthFetch = (async () =>
+      jsonResponse({
+        access_token: "browser-oauth-access-token",
+        refresh_token: "browser-oauth-refresh-token",
+        expires_in: 3600,
+      })) as OpenAICodexOAuthFetch;
+
+    server = await startApiServer({
+      workspaceRoot: dir,
+      config: defaultConfig("agency"),
+      openaiCodexOAuthFetch: oauthFetch,
+      openaiCodexOAuthCallbackPort: 0,
+    });
+
+    const authorize = await fetch(`${server.url}/provider/openai-codex/oauth/authorize`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ method: 0 }),
+    });
+    expect(authorize.status, await authorize.clone().text()).toBe(201);
+    const authorization = (await authorize.json()) as { url: string; method: string };
+    expect(authorization.method).toBe("auto");
+
+    const authUrl = new URL(authorization.url);
+    const callbackUrl = new URL(authUrl.searchParams.get("redirect_uri")!);
+    callbackUrl.searchParams.set("code", "oauth-browser-code");
+    callbackUrl.searchParams.set("state", authUrl.searchParams.get("state")!);
+    const callbackHit = await fetch(callbackUrl);
+    expect(callbackHit.status).toBe(200);
+
+    const complete = await fetch(`${server.url}/provider/openai-codex/oauth/callback`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ method: 0, defaultModel: "gpt-5" }),
+    });
+    expect(complete.status).toBe(201);
+    const body = (await complete.json()) as {
+      status: string;
+      providers: Array<{
+        provider: string;
+        auth_mode: string;
+        oauth_token_masked: string;
+        no_api_fallback: boolean;
+      }>;
+    };
+    const codex = body.providers.find((item) => item.provider === "openai-codex");
+    expect(body.status).toBe("connected");
+    expect(codex?.auth_mode).toBe("oauth");
+    expect(codex?.oauth_token_masked).toBe("brow...oken");
+    expect(codex?.no_api_fallback).toBe(true);
+    expect(JSON.stringify(body)).not.toContain("browser-oauth-access-token");
   });
 
   it("rejects GitHub issue creation when no API GitHub client is configured", async () => {

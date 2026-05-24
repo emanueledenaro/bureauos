@@ -11,6 +11,7 @@ import {
   type CompanyPulse,
   type CoordinatorIntakeResult,
   type OpportunityRecord,
+  type ProviderAuthAuthorization,
   type ProviderConnection,
   type ProjectRecord,
   type RunRecord,
@@ -1991,6 +1992,7 @@ function SettingsView({
   providers,
   onProviderLogin,
   onProviderLogout,
+  onRefresh,
 }: {
   providers: ProviderConnection[];
   onProviderLogin: (input: {
@@ -2003,34 +2005,95 @@ function SettingsView({
     defaultModel?: string;
   }) => Promise<void>;
   onProviderLogout: (provider: string, id: string) => Promise<void>;
+  onRefresh: () => Promise<void>;
 }) {
   const [provider, setProvider] = useState("openai-codex");
   const [apiKey, setApiKey] = useState("");
-  const [accessToken, setAccessToken] = useState("");
-  const [refreshToken, setRefreshToken] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [defaultModel, setDefaultModel] = useState("");
+  const [oauthCode, setOauthCode] = useState("");
+  const [oauthAuthorization, setOauthAuthorization] = useState<
+    ProviderAuthAuthorization | undefined
+  >();
+  const [oauthStatus, setOauthStatus] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
   const mode = provider === "openai-codex" ? "oauth" : provider === "local" ? "local" : "api-key";
+
+  const openAuthorizationUrl = async (url: string): Promise<void> => {
+    if (window.bureau) {
+      await window.bureau.openExternal(url);
+      return;
+    }
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  const startOpenAICodexOAuth = async (): Promise<void> => {
+    setOauthStatus("Opening OpenAI authorization...");
+    const authorization = await Api.providerOAuthAuthorize("openai-codex");
+    setOauthAuthorization(authorization);
+    await openAuthorizationUrl(authorization.url);
+
+    if (authorization.method === "code") {
+      setOauthStatus(authorization.instructions);
+      return;
+    }
+
+    setOauthStatus("Waiting for browser authorization...");
+    const result = await Api.providerOAuthCallback("openai-codex", {
+      method: 0,
+      ...(defaultModel.trim() ? { defaultModel: defaultModel.trim() } : {}),
+    });
+    if (result.status !== "connected") {
+      setOauthStatus("Authorization is still pending. Paste the final redirect URL to complete.");
+      return;
+    }
+    setOauthStatus("OpenAI Codex OAuth connected.");
+    setOauthAuthorization(undefined);
+    setOauthCode("");
+    setDefaultModel("");
+    await onRefresh();
+  };
+
+  const completeOpenAICodexOAuth = async (): Promise<void> => {
+    if (!oauthCode.trim()) return;
+    setOauthStatus("Completing OpenAI Codex OAuth...");
+    const result = await Api.providerOAuthCallback("openai-codex", {
+      method: 0,
+      code: oauthCode.trim(),
+      ...(defaultModel.trim() ? { defaultModel: defaultModel.trim() } : {}),
+    });
+    if (result.status !== "connected") {
+      setOauthStatus("Authorization is still pending.");
+      return;
+    }
+    setOauthStatus("OpenAI Codex OAuth connected.");
+    setOauthAuthorization(undefined);
+    setOauthCode("");
+    setDefaultModel("");
+    await onRefresh();
+  };
 
   const connect = async (): Promise<void> => {
     if (busy) return;
     setBusy(true);
     try {
+      if (provider === "openai-codex") {
+        await startOpenAICodexOAuth();
+        return;
+      }
       await onProviderLogin({
         provider,
         mode,
         ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
-        ...(accessToken.trim() ? { accessToken: accessToken.trim() } : {}),
-        ...(refreshToken.trim() ? { refreshToken: refreshToken.trim() } : {}),
         ...(baseUrl.trim() ? { baseUrl: baseUrl.trim() } : {}),
         ...(defaultModel.trim() ? { defaultModel: defaultModel.trim() } : {}),
       });
       setApiKey("");
-      setAccessToken("");
-      setRefreshToken("");
       setBaseUrl("");
       setDefaultModel("");
+      setOauthStatus(undefined);
+      setOauthAuthorization(undefined);
+      setOauthCode("");
     } finally {
       setBusy(false);
     }
@@ -2057,24 +2120,6 @@ function SettingsView({
             <option value="local">Local</option>
             <option value="custom">Custom API</option>
           </select>
-          {mode === "oauth" ? (
-            <>
-              <input
-                value={accessToken}
-                onChange={(event) => setAccessToken(event.target.value)}
-                className="h-9 rounded-md border border-neutral-800 bg-neutral-950 px-3 text-[11px] text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-neutral-700"
-                placeholder="OAuth access token"
-                type="password"
-              />
-              <input
-                value={refreshToken}
-                onChange={(event) => setRefreshToken(event.target.value)}
-                className="h-9 rounded-md border border-neutral-800 bg-neutral-950 px-3 text-[11px] text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-neutral-700"
-                placeholder="OAuth refresh token"
-                type="password"
-              />
-            </>
-          ) : null}
           {mode === "api-key" ? (
             <input
               value={apiKey}
@@ -2103,10 +2148,40 @@ function SettingsView({
             disabled={busy}
             className="h-9 rounded-md bg-neutral-950 px-4 text-[11px] font-medium text-white"
           >
-            Connect
+            {provider === "openai-codex" ? "Connect OAuth" : "Connect"}
           </button>
         </div>
       </div>
+      {provider === "openai-codex" ? (
+        <div className="mt-4 rounded-md border border-neutral-800 bg-neutral-950 p-4">
+          <div className="text-[11px] font-semibold text-neutral-50">
+            OpenAI Codex uses browser OAuth only.
+          </div>
+          <div className="mt-1 text-[11px] text-neutral-500">
+            This connection is separate from OpenAI API keys and never falls back to API auth.
+          </div>
+          {oauthStatus ? (
+            <div className="mt-3 text-[11px] text-neutral-300">{oauthStatus}</div>
+          ) : null}
+          {oauthAuthorization ? (
+            <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
+              <input
+                value={oauthCode}
+                onChange={(event) => setOauthCode(event.target.value)}
+                className="h-9 rounded-md border border-neutral-800 bg-neutral-950 px-3 text-[11px] text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-neutral-700"
+                placeholder="Final redirect URL or authorization code"
+              />
+              <button
+                onClick={() => void completeOpenAICodexOAuth()}
+                disabled={busy || !oauthCode.trim()}
+                className="h-9 rounded-md border border-neutral-800 px-4 text-[11px] font-medium text-neutral-100 disabled:text-neutral-600"
+              >
+                Complete
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <div className="mt-5 overflow-hidden rounded-md border border-neutral-800">
         <div className="grid grid-cols-[120px_90px_1fr_80px_90px_100px] bg-neutral-900 px-4 py-2 text-[10px] font-semibold uppercase text-neutral-500">
           <span>Provider</span>
@@ -2221,6 +2296,7 @@ export function App() {
                   providers={state.providers}
                   onProviderLogin={onProviderLogin}
                   onProviderLogout={onProviderLogout}
+                  onRefresh={refresh}
                 />
               ) : null}
             </div>

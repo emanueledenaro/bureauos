@@ -16,4 +16,4 @@ The router selects the owner-chosen provider per agent role. `openai-codex` and 
 
 ## Status
 
-Provider auth, auth-mode validation, role routing, and model-backed artifact drafting are implemented. Browser/device OAuth login, budget-aware routing, structured generation, and full capability-aware routing remain future work.
+Provider auth, browser PKCE login for OpenAI Codex OAuth, auth-mode validation, role routing, and model-backed artifact drafting are implemented. Device/headless OAuth login, budget-aware routing, structured generation, and full capability-aware routing remain future work.

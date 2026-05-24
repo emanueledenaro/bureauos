@@ -291,7 +291,7 @@ export function executiveReport(orgName: string, isoDate: string): string {
 
 ## Decisions Needed
 
-- Connect OpenAI Codex OAuth (\`bureau auth login --provider openai-codex --access-token <token>\`) or explicitly choose an API provider.
+- Connect OpenAI Codex through the desktop OAuth flow or explicitly choose a separate API-key provider.
 - Connect GitHub if you want delivery operations to flow through PRs (\`bureau github connect\`).
 - Define the first offer (edit BRAND.md and OFFERS.md).
 

@@ -28,6 +28,26 @@ export type {
   ProviderCredentialInput,
   ProviderCredentialRecord,
 } from "./auth-store.js";
+export {
+  OPENAI_CODEX_AUTHORIZE_URL,
+  OPENAI_CODEX_CLIENT_ID,
+  OPENAI_CODEX_DEFAULT_REDIRECT_URI,
+  OPENAI_CODEX_SCOPE,
+  OPENAI_CODEX_TOKEN_URL,
+  createOpenAICodexAuthorization,
+  createOpenAICodexCodeChallenge,
+  createOpenAICodexCodeVerifier,
+  createOpenAICodexState,
+  exchangeOpenAICodexCode,
+  parseOpenAICodexAuthorizationInput,
+  refreshOpenAICodexToken,
+} from "./openai-codex-oauth.js";
+export type {
+  OpenAICodexAuthorization,
+  OpenAICodexOAuthFetch,
+  OpenAICodexToken,
+  ParsedOpenAICodexAuthorizationInput,
+} from "./openai-codex-oauth.js";
 
 export { OpenAIAdapter, NotConfiguredError } from "./adapters/openai.js";
 export { OAuthBridgeNotConfiguredError, OpenAICodexOAuthAdapter } from "./adapters/openai-codex.js";

@@ -118,14 +118,14 @@ Every major capability described in the docs must become one of:
 | GitHub issue draft generation | `github draft-issues`, `/github/issue-drafts`, Electron project cards | implemented |
 | GitHub issue creation from drafts | `github create-issues`, `/github/create-issues`, Electron project cards | implemented |
 | GitHub PR creation | not implemented | designed |
-| OpenAI Codex OAuth provider | separate `openai-codex` provider, OAuth auth mode, no API fallback | partial |
+| OpenAI Codex OAuth provider | separate `openai-codex` provider, browser PKCE OAuth, token refresh helpers, no API fallback | partial |
 | OpenAI API provider | separate `openai` provider, SDK-backed API-key adapter | partial |
 | Anthropic provider | provider adapter | partial |
 | Google provider | provider adapter | partial |
 | OpenRouter provider | provider adapter | partial |
 | Local provider | provider adapter | partial |
-| Provider auth/connect | `ProviderAuthStore`, auth modes, `bureau auth login/list/logout`, `.bureauos/auth/providers.json` | implemented |
-| Electron provider settings | Settings mode, `/providers`, `/providers/auth/login`, `/providers/auth/logout` | implemented |
+| Provider auth/connect | `ProviderAuthStore`, auth modes, OpenCode-style `/provider/auth` and OAuth authorize/callback endpoints, `.bureauos/auth/providers.json` | implemented |
+| Electron provider settings | Settings mode, browser OAuth for `openai-codex`, explicit API-key connect for API providers | implemented |
 | Gmail/Slack/Drive/Calendar | not implemented | designed |
 | Supabase/Stripe/Vercel | not implemented | designed |
 | Ads platforms | draft-only policy, no adapter | designed |
