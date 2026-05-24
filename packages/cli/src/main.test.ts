@@ -64,4 +64,58 @@ describe("bureau cli", () => {
     const code = await main(["node", "bureau", "frobnicate"]);
     expect(code).toBe(1);
   });
+
+  it("runs supreme coordinator intake from a raw owner message", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+    const code = await main([
+      "node",
+      "bureau",
+      "intake",
+      "--client",
+      "Pizzeria Aurora",
+      "--message",
+      "Ho parlato con una pizzeria: vuole sito con prenotazioni, logo, posizione e contenuti.",
+      "--value",
+      "4500",
+    ]);
+
+    expect(code).toBe(0);
+    expect(
+      await exists(join(dir, ".bureauos", "memory", "clients", "pizzeria-aurora", "CLIENT.md")),
+    ).toBe(true);
+    expect(
+      await exists(
+        join(
+          dir,
+          ".bureauos",
+          "memory",
+          "projects",
+          "pizzeria-aurora-booking-website",
+          "PROJECT.md",
+        ),
+      ),
+    ).toBe(true);
+
+    const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
+    expect(audit).toContain("coordinator.intake.completed");
+  });
+
+  it("generates business reports from CLI", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+    await main([
+      "node",
+      "bureau",
+      "intake",
+      "--client",
+      "Pizzeria Aurora",
+      "--message",
+      "Ho parlato con una pizzeria: vuole sito con prenotazioni.",
+    ]);
+
+    const code = await main(["node", "bureau", "report", "generate"]);
+    expect(code).toBe(0);
+
+    const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
+    expect(audit).toContain("report.business.generated");
+  });
 });

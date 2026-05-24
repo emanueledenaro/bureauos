@@ -1,6 +1,7 @@
 import type { BureauConfig } from "../config/schema.js";
 import type { RunEngine, RunType } from "../runs/engine.js";
 import { dispatchRun, type CoordinatorDeps } from "../runs/coordinator.js";
+import { BusinessReportService } from "../reports/business.js";
 
 /**
  * Always-on scheduler.
@@ -94,6 +95,17 @@ export class Scheduler {
             run,
             scope: job.scope,
           });
+          if (job.name === "daily_executive_report") {
+            const report = await new BusinessReportService(this.options.workspaceRoot, {
+              config: this.options.config,
+              artifacts: this.options.coordinator.artifacts,
+              audit: this.options.coordinator.audit,
+              runs: this.options.runs,
+            }).generate();
+            this.log(
+              `scheduler: generated reports ${report.executive_report.id}, ${report.business_operating_report.id}`,
+            );
+          }
           this.log(
             `scheduler: ran ${job.name} -> ${run.id} (${run.status}, ${result.steps.length} steps)`,
           );

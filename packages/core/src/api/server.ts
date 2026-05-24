@@ -12,6 +12,8 @@ import { AuditLog } from "../audit/log.js";
 import { PolicyEngine } from "../policy/engine.js";
 import { RunEngine } from "../runs/engine.js";
 import { AGENT_ROLES } from "../agents/roles.js";
+import { CoordinatorIntakeService } from "../coordinator/intake.js";
+import { BusinessReportService } from "../reports/business.js";
 
 /**
  * Local HTTP API server.
@@ -143,6 +145,56 @@ const ROUTES: Record<string, RouteHandler> = {
   "GET /runs": async ({ res, options }) => ok(res, await deps(options).runs.list()),
   "GET /artifacts": async ({ res, options }) => ok(res, await deps(options).artifacts.list()),
   "GET /agents": ({ res }) => ok(res, AGENT_ROLES),
+
+  "GET /reports": async ({ res, options }) => {
+    const artifacts = await deps(options).artifacts.list();
+    ok(
+      res,
+      artifacts.filter((artifact) => {
+        return (
+          artifact.type === "executive-report" ||
+          artifact.type === "business-operating-report" ||
+          artifact.type === "client-account-plan"
+        );
+      }),
+    );
+  },
+
+  "POST /reports/generate": async ({ res, options }) => {
+    const result = await new BusinessReportService(options.workspaceRoot, {
+      config: options.config,
+    }).generate();
+    ok(res, result, 201);
+  },
+
+  "POST /coordinator/intake": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as {
+      message?: string;
+      source?: string;
+      clientName?: string;
+      projectName?: string;
+      industry?: string;
+      expectedValue?: number;
+      expectedMargin?: number;
+    };
+    if (!body.message || !body.message.trim()) {
+      ok(res, { error: "message required" }, 400);
+      return;
+    }
+    const service = new CoordinatorIntakeService(options.workspaceRoot, {
+      config: options.config,
+    });
+    const result = await service.process({
+      message: body.message,
+      source: body.source ?? "electron",
+      ...(body.clientName ? { clientName: body.clientName } : {}),
+      ...(body.projectName ? { projectName: body.projectName } : {}),
+      ...(body.industry ? { industry: body.industry } : {}),
+      ...(typeof body.expectedValue === "number" ? { expectedValue: body.expectedValue } : {}),
+      ...(typeof body.expectedMargin === "number" ? { expectedMargin: body.expectedMargin } : {}),
+    });
+    ok(res, result, 201);
+  },
 
   "GET /audit": async ({ res, options, url }) => {
     const n = Number(url.searchParams.get("n") ?? "100");

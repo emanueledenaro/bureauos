@@ -201,8 +201,9 @@ Goal: a local web app that visualizes kernel state, shaped like [docs/ui-referen
 - [x] Endpoints: `/company-pulse`, `/clients`, `/projects`, `/opportunities`, `/approvals`, `/runs`, `/agents`, `/audit`, `/approvals/resolve`, `/health`.
 - [x] CORS open for localhost during development.
 - [x] Token-based auth path (set `token` in options to enable).
-- [ ] Implement Server-Sent Events for live timeline streaming.
+- [x] Implement Server-Sent Events for live timeline streaming.
 - [ ] Add the missing endpoints: `/reports`, `/coordinator/messages`, `/settings`.
+- [x] Add `POST /coordinator/intake` so the ElectronJS Coordinator panel can create client/project/opportunity work.
 
 ### 4.3 Portfolio Operating Room
 
@@ -222,8 +223,8 @@ Goal: a local web app that visualizes kernel state, shaped like [docs/ui-referen
 
 ### 4.5 Supreme Coordinator Panel
 
-- [x] Chat surface (stub) with embedded artifact card and quick actions.
-- [ ] Wire the chat to the provider router once a provider has credentials.
+- [x] Chat surface connected to real coordinator intake.
+- [ ] Wire full conversational memory to the provider router once a provider has credentials.
 - [ ] Stream tokens via SSE.
 
 ### 4.6 Pending Approvals Panel
@@ -282,6 +283,7 @@ Goal: brand, offers, content, leads, pricing, proposals, conversion, client succ
 - [ ] Implement the pricing brief and proposal brief flows.
 - [ ] Implement compliance reviews and approval records for any external commitment.
 - [ ] Implement client account plans and client success status reports.
+- [x] Generate executive and business operating reports from real registries.
 - [ ] Wire all of this into the Growth and Revenue tab of the interface.
 
 ## Phase 7 — Always-On Daemon (v0.7)
@@ -289,7 +291,8 @@ Goal: brand, offers, content, leads, pricing, proposals, conversion, client succ
 Goal: scheduler and event watchers so BureauOS works while the owner is offline.
 
 - [ ] Implement a scheduler service that runs alongside the local API.
-- [ ] Implement scheduled triggers from the example config (hourly project health, daily executive report, weekly growth review, weekly client account review).
+- [x] Implement scheduled triggers for project health, daily executive report, growth review, and client account review.
+- [x] Generate executive and business operating reports during the daily executive report job.
 - [ ] Implement threshold triggers (stale PR, blocked issue, unanswered client message, empty content pipeline).
 - [ ] Implement memory triggers (follow-ups due).
 - [ ] Implement event ingestion from the GitHub adapter.

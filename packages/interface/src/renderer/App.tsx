@@ -4,8 +4,10 @@ import {
   type AgentDefinition,
   type ApprovalRecord,
   type AuditEvent,
+  type BusinessReportResult,
   type ClientRecord,
   type CompanyPulse,
+  type CoordinatorIntakeResult,
   type OpportunityRecord,
   type ProjectRecord,
   type RunRecord,
@@ -447,38 +449,80 @@ function OperationsTimeline({ events }: { events: AuditEvent[] }) {
 
 // ---------- right rail ----------
 
-function CoordinatorChat() {
+function CoordinatorChat({
+  onIntake,
+}: {
+  onIntake: (message: string, clientName?: string) => Promise<CoordinatorIntakeResult>;
+}) {
+  const [message, setMessage] = useState("");
+  const [clientName, setClientName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [lastResult, setLastResult] = useState<CoordinatorIntakeResult | undefined>();
+  const [error, setError] = useState<string | undefined>();
+
+  const submit = async (): Promise<void> => {
+    if (!message.trim() || busy) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      const result = await onIntake(message.trim(), clientName.trim() || undefined);
+      setLastResult(result);
+      setMessage("");
+      setClientName("");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <section className="rounded-lg border border-neutral-200 bg-white">
       <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
         <div className="flex items-center gap-2 text-sm font-semibold text-neutral-900">
           Supreme Coordinator
-          <span className="text-[10px] font-normal text-ok-600">Online (stub)</span>
+          <span className="text-[10px] font-normal text-ok-600">Online</span>
         </div>
         <span className="text-neutral-400">...</span>
       </div>
       <div className="space-y-3 p-3 text-xs">
-        <div className="rounded-md bg-neutral-100 px-3 py-2 text-neutral-700">
-          A client wants a mobile app.
-        </div>
-        <div className="space-y-2 rounded-md border border-neutral-200 p-3">
-          <div className="text-neutral-900">
-            Opportunity intake will be implemented in Phase 9 (Supreme Coordinator agent). For now,
-            the kernel writes structured intake artifacts when you run{" "}
-            <code className="rounded bg-neutral-100 px-1">bureau opportunity create</code>.
+        <textarea
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          className="min-h-24 w-full resize-none rounded-md border border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-900 outline-none focus:border-neutral-400"
+          placeholder="Oggi ho parlato con una pizzeria: vuole un sito con prenotazioni..."
+        />
+        <input
+          value={clientName}
+          onChange={(e) => setClientName(e.target.value)}
+          className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-900 outline-none focus:border-neutral-400"
+          placeholder="Client name, optional"
+        />
+        <button
+          onClick={() => void submit()}
+          disabled={busy || !message.trim()}
+          className={classes(
+            "w-full rounded-md px-3 py-2 text-xs font-medium",
+            busy || !message.trim()
+              ? "bg-neutral-100 text-neutral-400"
+              : "bg-neutral-900 text-white hover:bg-neutral-700",
+          )}
+        >
+          {busy ? "Coordinating..." : "Send to Coordinator"}
+        </button>
+        {error && <div className="rounded-md bg-bad-500/10 px-3 py-2 text-bad-600">{error}</div>}
+        {lastResult && (
+          <div className="space-y-2 rounded-md border border-neutral-200 p-3">
+            <div className="font-medium text-neutral-900">{lastResult.summary}</div>
+            <div className="text-neutral-500">
+              {lastResult.artifacts.length} artifacts - {lastResult.approvals.length} approvals -
+              run {lastResult.run.id}
+            </div>
+            <div className="rounded bg-neutral-50 px-2 py-1 text-neutral-700">
+              {lastResult.project.name}
+            </div>
           </div>
-        </div>
-        <div className="flex gap-2">
-          <button className="rounded-md border border-neutral-200 px-2 py-1 text-[11px] text-neutral-700">
-            Create proposal
-          </button>
-          <button className="rounded-md border border-neutral-200 px-2 py-1 text-[11px] text-neutral-700">
-            Launch discovery
-          </button>
-          <button className="rounded-md border border-neutral-200 px-2 py-1 text-[11px] text-neutral-700">
-            Prepare estimate
-          </button>
-        </div>
+        )}
       </div>
     </section>
   );
@@ -549,10 +593,25 @@ function KpiCard({ label, value, delta }: { label: string; value: string; delta?
 function RevenuePulse({
   pulse,
   opportunities,
+  onGenerateReport,
 }: {
   pulse?: CompanyPulse;
   opportunities: OpportunityRecord[];
+  onGenerateReport: () => Promise<BusinessReportResult>;
 }) {
+  const [busy, setBusy] = useState(false);
+  const [lastReport, setLastReport] = useState<BusinessReportResult | undefined>();
+
+  const generate = async (): Promise<void> => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      setLastReport(await onGenerateReport());
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const pipeline = pulse?.revenue.pipeline_value ?? 0;
   const active = pulse?.revenue.active_opportunities ?? 0;
   const margin = opportunities.length
@@ -567,7 +626,13 @@ function RevenuePulse({
           <h2 className="text-sm font-semibold text-neutral-900">Revenue Pulse</h2>
           <p className="text-xs text-neutral-500">Real-time revenue and pipeline health.</p>
         </div>
-        <span className="text-xs text-neutral-500">View full report</span>
+        <button
+          onClick={() => void generate()}
+          disabled={busy}
+          className="rounded-md border border-neutral-200 px-2 py-1 text-xs text-neutral-700 hover:bg-neutral-100 disabled:text-neutral-400"
+        >
+          {busy ? "Generating..." : "Generate report"}
+        </button>
       </div>
       <div className="grid grid-cols-2 gap-3 p-4 md:grid-cols-5">
         <KpiCard label="Pipeline Value" value={formatMoney(pipeline)} />
@@ -576,6 +641,11 @@ function RevenuePulse({
         <KpiCard label="Won (MTD)" value={formatMoney(wonValue)} />
         <KpiCard label="Client LTV" value={formatMoney(wonValue)} />
       </div>
+      {lastReport && (
+        <div className="border-t border-neutral-200 px-4 py-2 text-xs text-neutral-600">
+          Generated {lastReport.executive_report.id} and {lastReport.business_operating_report.id}
+        </div>
+      )}
     </section>
   );
 }
@@ -742,6 +812,24 @@ export function App() {
     }
   };
 
+  const onCoordinatorIntake = async (
+    message: string,
+    clientName?: string,
+  ): Promise<CoordinatorIntakeResult> => {
+    const result = await Api.coordinatorIntake({
+      message,
+      ...(clientName ? { clientName } : {}),
+    });
+    await refresh();
+    return result;
+  };
+
+  const onGenerateReport = async (): Promise<BusinessReportResult> => {
+    const result = await Api.generateReports();
+    await refresh();
+    return result;
+  };
+
   return (
     <div className="flex h-full min-h-screen">
       <Sidebar state={state} />
@@ -753,10 +841,14 @@ export function App() {
             {mode === "today" && <TodayView state={state} />}
             {mode === "goals" && <GoalsView state={state} />}
             <OperationsTimeline events={state.audit} />
-            <RevenuePulse pulse={state.pulse} opportunities={state.opportunities} />
+            <RevenuePulse
+              pulse={state.pulse}
+              opportunities={state.opportunities}
+              onGenerateReport={onGenerateReport}
+            />
           </div>
           <div className="flex w-full flex-col gap-4 lg:w-80 lg:flex-shrink-0">
-            <CoordinatorChat />
+            <CoordinatorChat onIntake={onCoordinatorIntake} />
             <PendingApprovals approvals={state.approvals} onResolve={onResolve} />
           </div>
         </main>

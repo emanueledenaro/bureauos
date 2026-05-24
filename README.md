@@ -271,6 +271,7 @@ BureauOS treats GitHub as the operating surface for an AI-native software agency
 - [Founder Intent](docs/founder-intent.md)
 - [Project Audit](docs/audit.md)
 - [BOS Kernel Infrastructure](docs/bos-kernel-infrastructure.md)
+- [Implementation Coverage](docs/implementation-coverage.md)
 - [Universal Opportunity Intake](docs/universal-opportunity-intake.md)
 - [Growth and Revenue](docs/growth-and-revenue.md)
 - [Marketing and Ads Automation](docs/marketing-and-ads-automation.md)

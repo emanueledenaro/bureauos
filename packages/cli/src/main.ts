@@ -3,8 +3,10 @@ import {
   ApprovalRegistry,
   ArtifactStore,
   AuditLog,
+  BusinessReportService,
   ClientRegistry,
   ConfigError,
+  CoordinatorIntakeService,
   InitError,
   OpportunityRegistry,
   PolicyEngine,
@@ -41,6 +43,7 @@ Usage:
 Workspace:
   init [--preset p] [--name n] [--force]   Initialize a new BureauOS workspace
   status                                    Show company pulse
+  intake --message <m> [--client n]         Let the Supreme Coordinator create client/project/opportunity work
   config validate [path]                    Validate the local bureauos.yaml
 
 Memory:
@@ -59,6 +62,9 @@ Runs and audit:
   run list
   audit tail [-n N]
   audit search <q>
+
+Reports:
+  report generate                           Generate executive and business operating reports
 
 Memory write:
   decision --what "..." --why "..." [--run id]   Append a decision record
@@ -215,6 +221,40 @@ const handleStatus: Handler = async () => {
   } catch (e) {
     return err(`status: ${(e as Error).message}`);
   }
+};
+
+const handleIntake: Handler = async (args) => {
+  const flags = parseFlags(args, {
+    message: { type: "string", alias: "m" },
+    client: { type: "string", alias: "c" },
+    project: { type: "string", alias: "p" },
+    source: { type: "string" },
+    value: { type: "number" },
+    margin: { type: "number" },
+    industry: { type: "string" },
+  });
+  if (typeof flags === "string") return err(`intake: ${flags}`);
+  if (typeof flags.message !== "string") return err("intake: --message is required");
+  const config = await loadWorkspaceConfig(process.cwd());
+  const service = new CoordinatorIntakeService(process.cwd(), { config });
+  const result = await service.process({
+    message: flags.message,
+    source: typeof flags.source === "string" ? flags.source : "cli",
+    ...(typeof flags.client === "string" ? { clientName: flags.client } : {}),
+    ...(typeof flags.project === "string" ? { projectName: flags.project } : {}),
+    ...(typeof flags.industry === "string" ? { industry: flags.industry } : {}),
+    ...(typeof flags.value === "number" ? { expectedValue: flags.value } : {}),
+    ...(typeof flags.margin === "number" ? { expectedMargin: flags.margin } : {}),
+  });
+
+  process.stdout.write(`bureau: ${result.summary}\n`);
+  process.stdout.write(`client:      ${result.client.id} (${result.client.slug})\n`);
+  process.stdout.write(`project:     ${result.project.id} (${result.project.slug})\n`);
+  process.stdout.write(`opportunity: ${result.opportunity.id}\n`);
+  process.stdout.write(`run:         ${result.run.id}\n`);
+  process.stdout.write(`artifacts:   ${result.artifacts.map((a) => a.id).join(", ")}\n`);
+  process.stdout.write(`approvals:   ${result.approvals.map((a) => a.id).join(", ")}\n`);
+  return 0;
 };
 
 const handleConfigValidate: Handler = async (args) => {
@@ -454,6 +494,20 @@ const handleRunList: Handler = async () => {
   return 0;
 };
 
+const handleReportGenerate: Handler = async () => {
+  const config = await loadWorkspaceConfig(process.cwd());
+  const result = await new BusinessReportService(process.cwd(), { config }).generate();
+  process.stdout.write(`bureau: generated executive report ${result.executive_report.id}\n`);
+  process.stdout.write(
+    `bureau: generated business operating report ${result.business_operating_report.id}\n`,
+  );
+  process.stdout.write(`pipeline: ${result.metrics.pipeline_value}\n`);
+  if (result.next_actions.length) {
+    process.stdout.write(`next: ${result.next_actions.join(" | ")}\n`);
+  }
+  return 0;
+};
+
 const handleAuditTail: Handler = async (args) => {
   const flags = parseFlags(args, { limit: { type: "number", alias: "n" } });
   if (typeof flags === "string") return err(`audit tail: ${flags}`);
@@ -595,12 +649,14 @@ const handleProvidersList: Handler = async () => {
 const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
   init: handleInit,
   status: handleStatus,
+  intake: handleIntake,
   config: { validate: handleConfigValidate },
   memory: { search: handleMemorySearch },
   client: { create: handleClientCreate, list: handleClientList },
   project: { create: handleProjectCreate, list: handleProjectList },
   opportunity: { create: handleOpportunityCreate, list: handleOpportunityList },
   run: { new: handleRunNew, list: handleRunList },
+  report: { generate: handleReportGenerate },
   audit: {
     tail: handleAuditTail,
     search: async (args: readonly string[]) => {

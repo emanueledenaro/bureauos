@@ -53,4 +53,27 @@ describe("Scheduler", () => {
     const after2 = (await runs.list()).length;
     expect(after2).toBe(after1);
   });
+
+  it("generates business reports during the daily executive report job", async () => {
+    const config = defaultConfig("freelancer");
+    const approvals = new ApprovalRegistry(dir);
+    const policy = new PolicyEngine(config, approvals);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const runs = new RunEngine(dir, { audit, artifacts, policy });
+    const scheduler = new Scheduler({
+      config,
+      runs,
+      workspaceRoot: dir,
+      coordinator: { audit, artifacts, policy },
+      logger: () => {},
+    });
+
+    await scheduler.tick(Date.now());
+
+    const reports = await artifacts.list();
+    expect(reports.map((artifact) => artifact.type)).toEqual(
+      expect.arrayContaining(["executive-report", "business-operating-report"]),
+    );
+  });
 });

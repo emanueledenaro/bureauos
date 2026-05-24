@@ -101,6 +101,34 @@ export interface AgentDefinition {
   scope: string;
   description: string;
 }
+export interface ArtifactRecord {
+  id: string;
+  type: string;
+  status: string;
+}
+export interface CoordinatorIntakeResult {
+  summary: string;
+  next_actions: string[];
+  client: ClientRecord;
+  project: ProjectRecord;
+  opportunity: OpportunityRecord;
+  run: RunRecord;
+  artifacts: ArtifactRecord[];
+  approvals: ApprovalRecord[];
+}
+export interface BusinessReportResult {
+  generated_at: string;
+  executive_report: ArtifactRecord;
+  business_operating_report: ArtifactRecord;
+  metrics: {
+    clients_total: number;
+    projects_total: number;
+    opportunities_total: number;
+    pipeline_value: number;
+    approvals_pending: number;
+  };
+  next_actions: string[];
+}
 
 export const Api = {
   pulse: () => api<CompanyPulse>("/company-pulse"),
@@ -111,6 +139,21 @@ export const Api = {
   runs: () => api<RunRecord[]>("/runs"),
   agents: () => api<AgentDefinition[]>("/agents"),
   audit: (n = 50) => api<AuditEvent[]>(`/audit?n=${n}`),
+  coordinatorIntake: (input: {
+    message: string;
+    clientName?: string;
+    projectName?: string;
+    expectedValue?: number;
+  }) =>
+    api<CoordinatorIntakeResult>("/coordinator/intake", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  reports: () => api<ArtifactRecord[]>("/reports"),
+  generateReports: () =>
+    api<BusinessReportResult>("/reports/generate", {
+      method: "POST",
+    }),
   resolveApproval: (id: string, status: "approved" | "rejected", reason?: string) =>
     api<ApprovalRecord>("/approvals/resolve", {
       method: "POST",

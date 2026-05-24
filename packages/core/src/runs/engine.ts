@@ -225,6 +225,28 @@ export class RunEngine {
     return out;
   }
 
+  async attachArtifacts(id: string, artifactIds: readonly string[]): Promise<RunRecord> {
+    const current = await this.get(id);
+    if (!current) throw new Error(`run not found: ${id}`);
+    const artifacts = Array.from(new Set([...current.artifacts, ...artifactIds]));
+    const updated: RunRecord = {
+      ...current,
+      artifacts,
+      updated: new Date().toISOString(),
+    };
+    await this.persist(
+      updated,
+      `# Run ${id}\n\nScope: ${updated.scope}\nStatus: ${updated.status}\n\nArtifacts: ${artifacts.join(", ")}\nCompleted: ${updated.completed}\n`,
+    );
+    await this.deps.audit.append({
+      actor: updated.created_by,
+      action: "run.artifacts_attached",
+      target: id,
+      result: "ok",
+    });
+    return updated;
+  }
+
   private async transition(record: RunRecord, status: RunStatus): Promise<RunRecord> {
     const updated: RunRecord = { ...record, status, updated: new Date().toISOString() };
     await this.persist(

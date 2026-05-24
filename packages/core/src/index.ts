@@ -76,6 +76,15 @@ export type {
 export { dispatchRun } from "./runs/coordinator.js";
 export type { DispatchInput, DispatchOutput, CoordinatorDeps } from "./runs/coordinator.js";
 
+// Supreme coordinator
+export { CoordinatorIntakeService } from "./coordinator/intake.js";
+export type {
+  CoordinatorIntakeDeps,
+  CoordinatorIntakeInput,
+  CoordinatorIntakeResult,
+  IntakeClassification,
+} from "./coordinator/intake.js";
+
 // Agents
 export { AGENT_ROLES, AGENT_INDEX, getAgent, agentsByCategory } from "./agents/roles.js";
 export type { AgentDefinition, AgentCategory, AgentScope } from "./agents/roles.js";
@@ -96,6 +105,14 @@ export {
   SecurityAgent,
   ComplianceAgent,
 } from "./agents/concrete/index.js";
+
+// Reports
+export { BusinessReportService } from "./reports/business.js";
+export type {
+  BusinessMetrics,
+  BusinessReportDeps,
+  BusinessReportResult,
+} from "./reports/business.js";
 
 // API server
 export { startApiServer } from "./api/server.js";
