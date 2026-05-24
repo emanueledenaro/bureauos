@@ -12,6 +12,8 @@ import {
   RunEngine,
   Scheduler,
   VERSION,
+  appendDailyNote,
+  appendDecision,
   defaultConfig,
   initWorkspace,
   loadConfig,
@@ -57,6 +59,10 @@ Runs and audit:
   run list
   audit tail [-n N]
   audit search <q>
+
+Memory write:
+  decision --what "..." --why "..." [--run id]   Append a decision record
+  follow-up --section Events|Decisions|Runs|Follow-ups --line "..."
 
 Policy:
   policy explain <action> [--actor a] [--target t]
@@ -635,6 +641,56 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
     },
   },
   policy: { explain: handlePolicyExplain },
+  decision: async (args: readonly string[]) => {
+    const flags = parseFlags(args, {
+      what: { type: "string" },
+      why: { type: "string" },
+      actor: { type: "string" },
+      run: { type: "string" },
+      affects: { type: "string" },
+    });
+    if (typeof flags === "string") return err(`decision: ${flags}`);
+    if (typeof flags.what !== "string") return err("decision: --what required");
+    if (typeof flags.why !== "string") return err("decision: --why required");
+    await appendDecision(process.cwd(), {
+      actor: typeof flags.actor === "string" ? flags.actor : "owner",
+      what: flags.what,
+      why: flags.why,
+      ...(typeof flags.run === "string" ? { runId: flags.run } : {}),
+      ...(typeof flags.affects === "string"
+        ? {
+            affects: flags.affects
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean),
+          }
+        : {}),
+    });
+    await new AuditLog(workspacePaths(process.cwd()).auditLog).append({
+      actor: "cli",
+      action: "decision.append",
+      target: flags.what,
+      result: "ok",
+    });
+    process.stdout.write(`bureau: decision recorded in DECISIONS.md\n`);
+    return 0;
+  },
+  "follow-up": async (args: readonly string[]) => {
+    const flags = parseFlags(args, {
+      section: { type: "string" },
+      line: { type: "string" },
+    });
+    if (typeof flags === "string") return err(`follow-up: ${flags}`);
+    if (typeof flags.line !== "string") return err("follow-up: --line required");
+    const section = (typeof flags.section === "string" ? flags.section : "Follow-ups") as
+      | "Events"
+      | "Runs"
+      | "Decisions"
+      | "Follow-ups";
+    const path = await appendDailyNote(process.cwd(), section, flags.line);
+    process.stdout.write(`bureau: appended to ${path}\n`);
+    return 0;
+  },
   approvals: {
     list: handleApprovalsList,
     approve: handleApprovalsResolve("approved"),
@@ -666,6 +722,7 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
         repo: { type: "string" },
         token: { type: "string" },
         state: { type: "string" },
+        client: { type: "string" },
       });
       if (typeof flags === "string") return err(`github sync: ${flags}`);
       if (typeof flags.owner !== "string") return err("github sync: --owner required");
@@ -680,6 +737,22 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
           | "all",
       });
       const audit = new AuditLog(workspacePaths(process.cwd()).auditLog);
+      const opps = new OpportunityRegistry(process.cwd());
+      let clientId = "";
+      if (typeof flags.client === "string") {
+        const c = await new ClientRegistry(process.cwd()).get(flags.client);
+        if (!c) return err(`github sync: client "${flags.client}" not found`);
+        clientId = c.id;
+      }
+      const existing = await opps.list();
+      const knownSources = new Set(existing.map((o) => o.source));
+      let created = 0;
+      for (const i of issues) {
+        const source = `github:${flags.owner}/${flags.repo}#${i.number}`;
+        if (knownSources.has(source)) continue;
+        await opps.create({ title: i.title, source, clientId });
+        created++;
+      }
       await audit.append({
         actor: "cli",
         action: "github.sync",
@@ -687,13 +760,13 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
         result: "ok",
       });
       process.stdout.write(
-        `bureau: pulled ${issues.length} issues from ${flags.owner}/${flags.repo}\n`,
+        `bureau: pulled ${issues.length} issues from ${flags.owner}/${flags.repo} (${created} new opportunities)\n`,
       );
-      for (const i of issues.slice(0, 20)) {
+      for (const i of issues.slice(0, 10)) {
         process.stdout.write(`  #${i.number}  ${i.state.padEnd(6)}  ${i.title}\n`);
       }
-      if (issues.length > 20) {
-        process.stdout.write(`  ...and ${issues.length - 20} more\n`);
+      if (issues.length > 10) {
+        process.stdout.write(`  ...and ${issues.length - 10} more\n`);
       }
       return 0;
     },
