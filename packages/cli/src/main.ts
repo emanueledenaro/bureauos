@@ -9,6 +9,7 @@ import {
   CoordinatorIntakeService,
   GitHubIssueDraftService,
   GitHubIssuePublishService,
+  GitHubSignalSyncService,
   InitError,
   OpportunityRegistry,
   PolicyEngine,
@@ -97,7 +98,7 @@ GitHub:
   github create-issues --project slug --owner O --repo R
                                             Create GitHub issues from approved drafts under policy
   github ensure-labels --owner O --repo R   Apply the BureauOS label taxonomy
-  github sync --owner O --repo R [--state]  Pull issues from GitHub into the audit log
+  github sync --owner O --repo R [--state]  Pull issues, PRs, and check signals into memory
 
 Misc:
   --version | -v       Print version
@@ -1040,50 +1041,52 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
         token: { type: "string" },
         state: { type: "string" },
         client: { type: "string" },
+        "stale-days": { type: "number" },
+        "no-issues": { type: "boolean" },
+        "no-prs": { type: "boolean" },
+        "no-checks": { type: "boolean" },
       });
       if (typeof flags === "string") return err(`github sync: ${flags}`);
       if (typeof flags.owner !== "string") return err("github sync: --owner required");
       if (typeof flags.repo !== "string") return err("github sync: --repo required");
       const token = typeof flags.token === "string" ? flags.token : process.env["GITHUB_TOKEN"];
       if (!token) return err("github sync: provide --token or set GITHUB_TOKEN");
-      const gh = new OctokitGitHubClient({ token });
-      const issues = await gh.listIssues(flags.owner, flags.repo, {
+
+      const result = await new GitHubSignalSyncService(process.cwd(), {
+        githubClient: new OctokitGitHubClient({ token }),
+      }).sync({
+        owner: flags.owner,
+        repo: flags.repo,
         state: (typeof flags.state === "string" ? flags.state : "open") as
           | "open"
           | "closed"
           | "all",
-      });
-      const audit = new AuditLog(workspacePaths(process.cwd()).auditLog);
-      const opps = new OpportunityRegistry(process.cwd());
-      let clientId = "";
-      if (typeof flags.client === "string") {
-        const c = await new ClientRegistry(process.cwd()).get(flags.client);
-        if (!c) return err(`github sync: client "${flags.client}" not found`);
-        clientId = c.id;
-      }
-      const existing = await opps.list();
-      const knownSources = new Set(existing.map((o) => o.source));
-      let created = 0;
-      for (const i of issues) {
-        const source = `github:${flags.owner}/${flags.repo}#${i.number}`;
-        if (knownSources.has(source)) continue;
-        await opps.create({ title: i.title, source, clientId });
-        created++;
-      }
-      await audit.append({
-        actor: "cli",
-        action: "github.sync",
-        target: `${flags.owner}/${flags.repo}`,
-        result: "ok",
+        ...(typeof flags.client === "string" ? { clientSlug: flags.client } : {}),
+        includeIssues: flags["no-issues"] !== true,
+        includePullRequests: flags["no-prs"] !== true,
+        includeChecks: flags["no-checks"] !== true,
+        ...(typeof flags["stale-days"] === "number" ? { staleDays: flags["stale-days"] } : {}),
       });
       process.stdout.write(
-        `bureau: pulled ${issues.length} issues from ${flags.owner}/${flags.repo} (${created} new opportunities)\n`,
+        `bureau: synced ${result.repository}: ${result.issues.length} issues, ${result.pullRequests.length} PRs, ${result.checks.length} checks\n`,
       );
-      for (const i of issues.slice(0, 10)) {
+      process.stdout.write(
+        `signals: ${result.failingChecks.length} failing checks, ${result.staleIssues.length + result.stalePullRequests.length} stale items, ${result.createdOpportunities.length} new opportunities\n`,
+      );
+      process.stdout.write(`report: ${result.report.id}\n`);
+      for (const i of result.issues.slice(0, 10)) {
         process.stdout.write(`  #${i.number}  ${i.state.padEnd(6)}  ${i.title}\n`);
       }
-      if (issues.length > 10) {
-        process.stdout.write(`  ...and ${issues.length - 10} more\n`);
+      for (const pr of result.pullRequests.slice(0, 10)) {
+        const failing = result.failingChecks.filter((check) => check.headSha === pr.headSha).length;
+        process.stdout.write(`  PR #${pr.number}  ${pr.state.padEnd(6)}  ${pr.title}`);
+        if (failing > 0) process.stdout.write(`  failing_checks=${failing}`);
+        process.stdout.write("\n");
+      }
+      if (result.issues.length + result.pullRequests.length > 20) {
+        process.stdout.write(
+          `  ...and ${result.issues.length + result.pullRequests.length - 20} more items\n`,
+        );
       }
       return 0;
     },

@@ -122,6 +122,23 @@ When allowed by policy, BureauOS creates issues, writes a `github-issue-publish-
 
 When blocked by policy, BureauOS does not call GitHub. It creates or reuses an approval request and audits `github.issue_publish.blocked`.
 
+## Signal Sync
+
+The Supreme Coordinator can observe GitHub as a delivery signal source.
+
+Runtime surface:
+
+- CLI: `bureau github sync --owner <owner> --repo <repo>`
+
+The sync reads issues, pull requests, and check runs for open pull requests. BureauOS writes a `github-signal-report` artifact, creates new internal opportunities for newly observed issues, and audits:
+
+- `github.check_failed.detected`
+- `github.issue_stale.detected`
+- `github.pr_stale.detected`
+- `github.signals.synced`
+
+This is read-only. It does not push commits, comment on issues, or open PRs. Failed checks and stale PRs become internal operating signals for later health-check or bug triage runs.
+
 ## Issue Lifecycle
 
 ```text

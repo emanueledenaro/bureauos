@@ -16,6 +16,7 @@ export interface GitHubIssueRef {
   url: string;
   labels: readonly string[];
   state: "open" | "closed";
+  updatedAt: string;
 }
 
 export interface GitHubPullRequestRef {
@@ -25,8 +26,35 @@ export interface GitHubPullRequestRef {
   title: string;
   url: string;
   head: string;
+  headSha: string;
   base: string;
   state: "open" | "closed" | "merged";
+  updatedAt: string;
+}
+
+export type GitHubCheckRunConclusion =
+  | "success"
+  | "failure"
+  | "neutral"
+  | "cancelled"
+  | "skipped"
+  | "timed_out"
+  | "action_required"
+  | "startup_failure"
+  | "stale"
+  | null;
+
+export interface GitHubCheckRunRef {
+  owner: string;
+  repo: string;
+  id: number;
+  name: string;
+  url: string;
+  status: "queued" | "in_progress" | "completed" | "waiting" | "requested" | "pending";
+  conclusion: GitHubCheckRunConclusion;
+  headSha: string;
+  startedAt: string;
+  completedAt: string;
 }
 
 export interface GitHubClientOptions {
@@ -59,6 +87,11 @@ export interface GitHubClient {
     repo: string,
     filter?: { state?: "open" | "closed" | "all" },
   ): Promise<readonly GitHubPullRequestRef[]>;
+  listCheckRunsForRef(
+    owner: string,
+    repo: string,
+    ref: string,
+  ): Promise<readonly GitHubCheckRunRef[]>;
   createPullRequest(
     owner: string,
     repo: string,
@@ -98,6 +131,9 @@ export class StubGitHubClient implements GitHubClient {
     return this.notWired();
   }
   async listPullRequests(): Promise<readonly GitHubPullRequestRef[]> {
+    return this.notWired();
+  }
+  async listCheckRunsForRef(): Promise<readonly GitHubCheckRunRef[]> {
     return this.notWired();
   }
   async createPullRequest(): Promise<GitHubPullRequestRef> {

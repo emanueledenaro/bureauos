@@ -1,6 +1,7 @@
 import { Octokit } from "@octokit/rest";
 import type {
   GitHubClient,
+  GitHubCheckRunRef,
   GitHubClientOptions,
   GitHubIssueRef,
   GitHubPullRequestRef,
@@ -37,7 +38,9 @@ export class OctokitGitHubClient implements GitHubClient {
       state: filter.state ?? "open",
       per_page: 100,
     });
-    return (r.data as unknown as RawIssue[]).map((i) => mapIssue(owner, repo, i));
+    return (r.data as unknown as RawIssue[])
+      .filter((i) => !i.pull_request)
+      .map((i) => mapIssue(owner, repo, i));
   }
 
   async createIssue(
@@ -101,6 +104,20 @@ export class OctokitGitHubClient implements GitHubClient {
     return (r.data as unknown as RawPull[]).map((p) => mapPullRequest(owner, repo, p));
   }
 
+  async listCheckRunsForRef(
+    owner: string,
+    repo: string,
+    ref: string,
+  ): Promise<readonly GitHubCheckRunRef[]> {
+    const r = await this.octokit.checks.listForRef({
+      owner,
+      repo,
+      ref,
+      per_page: 100,
+    });
+    return (r.data.check_runs as unknown as RawCheckRun[]).map((c) => mapCheckRun(owner, repo, c));
+  }
+
   async createPullRequest(
     owner: string,
     repo: string,
@@ -117,6 +134,8 @@ interface RawIssue {
   html_url: string;
   state: string;
   labels: Array<string | { name?: string }>;
+  updated_at?: string | null;
+  pull_request?: unknown;
 }
 
 interface RawPull {
@@ -124,9 +143,22 @@ interface RawPull {
   title: string;
   html_url: string;
   state: string;
-  head: { ref: string };
+  head: { ref: string; sha?: string };
   base: { ref: string };
   merged_at?: string | null;
+  updated_at?: string | null;
+}
+
+interface RawCheckRun {
+  id: number;
+  name: string;
+  html_url?: string | null;
+  details_url?: string | null;
+  status: string;
+  conclusion?: string | null;
+  head_sha: string;
+  started_at?: string | null;
+  completed_at?: string | null;
 }
 
 function mapIssue(owner: string, repo: string, raw: RawIssue): GitHubIssueRef {
@@ -138,6 +170,7 @@ function mapIssue(owner: string, repo: string, raw: RawIssue): GitHubIssueRef {
     url: raw.html_url,
     state: raw.state === "closed" ? "closed" : "open",
     labels: raw.labels.map((l) => (typeof l === "string" ? l : (l.name ?? ""))).filter(Boolean),
+    updatedAt: raw.updated_at ?? "",
   };
 }
 
@@ -149,7 +182,57 @@ function mapPullRequest(owner: string, repo: string, raw: RawPull): GitHubPullRe
     title: raw.title,
     url: raw.html_url,
     head: raw.head.ref,
+    headSha: raw.head.sha ?? "",
     base: raw.base.ref,
     state: raw.merged_at ? "merged" : raw.state === "closed" ? "closed" : "open",
+    updatedAt: raw.updated_at ?? "",
   };
+}
+
+function mapCheckRun(owner: string, repo: string, raw: RawCheckRun): GitHubCheckRunRef {
+  return {
+    owner,
+    repo,
+    id: raw.id,
+    name: raw.name,
+    url: raw.html_url ?? raw.details_url ?? "",
+    status: mapCheckStatus(raw.status),
+    conclusion: mapCheckConclusion(raw.conclusion),
+    headSha: raw.head_sha,
+    startedAt: raw.started_at ?? "",
+    completedAt: raw.completed_at ?? "",
+  };
+}
+
+function mapCheckStatus(status: string): GitHubCheckRunRef["status"] {
+  switch (status) {
+    case "queued":
+    case "in_progress":
+    case "completed":
+    case "waiting":
+    case "requested":
+    case "pending":
+      return status;
+    default:
+      return "pending";
+  }
+}
+
+function mapCheckConclusion(
+  conclusion: string | null | undefined,
+): GitHubCheckRunRef["conclusion"] {
+  switch (conclusion) {
+    case "success":
+    case "failure":
+    case "neutral":
+    case "cancelled":
+    case "skipped":
+    case "timed_out":
+    case "action_required":
+    case "startup_failure":
+    case "stale":
+      return conclusion;
+    default:
+      return null;
+  }
 }

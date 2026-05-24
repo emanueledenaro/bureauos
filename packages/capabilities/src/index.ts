@@ -5,6 +5,8 @@ export { StubGitHubClient } from "./github/client.js";
 export { OctokitGitHubClient } from "./github/octokit-client.js";
 export type {
   GitHubClient,
+  GitHubCheckRunConclusion,
+  GitHubCheckRunRef,
   GitHubClientOptions,
   GitHubIssueRef,
   GitHubPullRequestRef,

@@ -2,9 +2,9 @@
 
 Capability layer for BureauOS.
 
-Planned capabilities (see [docs/capabilities-and-integrations.md](../../docs/capabilities-and-integrations.md)):
+Capability surfaces (see [docs/capabilities-and-integrations.md](../../docs/capabilities-and-integrations.md)):
 
-- GitHub (Phase 3)
+- GitHub issues, labels, PRs, and check runs
 - Codex runtime (Phase 8)
 - MCP tool bus
 - Shell
@@ -15,4 +15,4 @@ Each capability declares allowed agents, allowed actions, required approvals, ri
 
 ## Status
 
-Scaffold only. See [BACKLOG.md](../../BACKLOG.md) Phase 3 and 10.
+GitHub issue, label, PR, and check-run reads are wired through the Octokit adapter. Other connectors remain adapter-level or designed.

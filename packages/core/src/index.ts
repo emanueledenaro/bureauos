@@ -156,6 +156,17 @@ export type {
   GitHubIssuePublishInput,
   GitHubIssuePublishResult,
 } from "./github/issue-publisher.js";
+export { GitHubSignalSyncService } from "./github/signal-sync.js";
+export type {
+  GitHubSignalCheckConclusion,
+  GitHubSignalCheckRun,
+  GitHubSignalClient,
+  GitHubSignalIssue,
+  GitHubSignalPullRequest,
+  GitHubSignalSyncDeps,
+  GitHubSignalSyncInput,
+  GitHubSignalSyncResult,
+} from "./github/signal-sync.js";
 
 // API server
 export { startApiServer } from "./api/server.js";

@@ -64,6 +64,20 @@ Contains:
 - severity
 - regression status
 
+### GitHub Signal Report
+
+Observed GitHub delivery signal.
+
+Contains:
+
+- repository
+- issue count
+- pull request count
+- check-run count
+- failing checks
+- stale issues and pull requests
+- new internal opportunities
+
 ### Technical Plan
 
 Implementation plan.

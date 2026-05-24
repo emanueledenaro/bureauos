@@ -106,15 +106,15 @@ Every major capability described in the docs must become one of:
 | Growth review | scheduler/run stubs | partial |
 | Client account review | scheduler/run stubs | partial |
 | Threshold triggers | not implemented | designed |
-| Failing check detection | GitHub adapter foundation | designed |
-| Stale PR/issue detection | GitHub adapter foundation | designed |
+| Failing check detection | `GitHubSignalSyncService`, `github sync`, `github-signal-report` | partial |
+| Stale PR/issue detection | `GitHubSignalSyncService`, `github sync --stale-days` | partial |
 
 ## External Integrations
 
 | Documented capability | Runtime surface | Status |
 | --- | --- | --- |
 | GitHub labels | `github ensure-labels` | implemented |
-| GitHub issue sync | `github sync` | partial |
+| GitHub issue/PR/check sync | `github sync`, `github-signal-report` artifacts, audit signals | partial |
 | GitHub issue draft generation | `github draft-issues`, `/github/issue-drafts`, Electron project cards | implemented |
 | GitHub issue creation from drafts | `github create-issues`, `/github/create-issues`, Electron project cards | implemented |
 | GitHub PR creation | not implemented | designed |
@@ -142,7 +142,7 @@ Every major capability described in the docs must become one of:
 
 ## Current Priority Order
 
-1. Add GitHub check parsing and webhook ingestion.
+1. Add GitHub webhook ingestion and daemon project-repo polling.
 2. Add ElectronJS pages for clients, projects, approvals, reports, memory, settings.
 3. Add always-on scheduler tasks for daily report, project health, growth review, and client review.
 4. Add budget-aware and capability-aware routing.
