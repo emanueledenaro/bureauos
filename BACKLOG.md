@@ -323,30 +323,30 @@ Each role exists as an `AgentRuntime` and is reachable through `buildDefaultAgen
 Roles marked with [x] have a concrete stub that writes the role's signature artifact; full
 LLM-driven prompts arrive when the provider router is wired end to end.
 
-- [ ] Supreme Executive Coordinator
+- [x] Supreme Executive Coordinator
 - [x] Project Manager
 - [x] Product
-- [ ] UX/UI
+- [x] UX/UI
 - [x] Development
 - [x] QA
 - [x] Security
-- [ ] Reviewer
-- [ ] Release
+- [x] Reviewer
+- [x] Release
 
 ### Growth and revenue agents
 
-- [ ] Visibility
-- [ ] Content
-- [ ] Social
-- [ ] Creative
-- [ ] Ads
-- [ ] Marketing
-- [ ] Conversion
-- [ ] Sales
-- [ ] Pricing
-- [ ] Proposal
+- [x] Visibility
+- [x] Content
+- [x] Social
+- [x] Creative
+- [x] Ads
+- [x] Marketing
+- [x] Conversion
+- [x] Sales
+- [x] Pricing
+- [x] Proposal
 - [x] Compliance
-- [ ] Client Success
+- [x] Client Success
 
 ## Phase 10 — External Integrations (v1.0+)
 
