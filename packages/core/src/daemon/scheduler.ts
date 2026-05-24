@@ -1,5 +1,6 @@
 import type { BureauConfig } from "../config/schema.js";
 import type { RunEngine, RunType } from "../runs/engine.js";
+import { dispatchRun, type CoordinatorDeps } from "../runs/coordinator.js";
 
 /**
  * Always-on scheduler.
@@ -13,6 +14,8 @@ import type { RunEngine, RunType } from "../runs/engine.js";
 export interface SchedulerOptions {
   config: BureauConfig;
   runs: RunEngine;
+  workspaceRoot?: string;
+  coordinator?: CoordinatorDeps;
   logger?: (message: string) => void;
 }
 
@@ -85,7 +88,16 @@ export class Scheduler {
           triggerSource: job.name,
           scope: job.scope,
         });
-        this.log(`scheduler: ran ${job.name} -> ${run.id} (${run.status})`);
+        if (this.options.coordinator && this.options.workspaceRoot) {
+          const result = await dispatchRun(this.options.coordinator, {
+            workspaceRoot: this.options.workspaceRoot,
+            run,
+            scope: job.scope,
+          });
+          this.log(`scheduler: ran ${job.name} -> ${run.id} (${run.status}, ${result.steps.length} steps)`);
+        } else {
+          this.log(`scheduler: ran ${job.name} -> ${run.id} (${run.status})`);
+        }
       } catch (err) {
         this.log(`scheduler: ${job.name} failed: ${(err as Error).message}`);
       }
