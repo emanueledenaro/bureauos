@@ -9,6 +9,7 @@ import {
   CoordinatorIntakeService,
   GitHubIssueDraftService,
   GitHubIssuePublishService,
+  GitHubSignalTriggerService,
   GitHubSignalSyncService,
   InitError,
   OpportunityRegistry,
@@ -1054,9 +1055,17 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
       if (typeof flags.repo !== "string") return err("github sync: --repo required");
       const token = typeof flags.token === "string" ? flags.token : process.env["GITHUB_TOKEN"];
       if (!token) return err("github sync: provide --token or set GITHUB_TOKEN");
+      const config = await loadWorkspaceConfig(process.cwd());
+      const approvals = new ApprovalRegistry(process.cwd());
+      const policy = new PolicyEngine(config, approvals);
+      const audit = new AuditLog(workspacePaths(process.cwd()).auditLog);
+      const artifacts = new ArtifactStore(process.cwd());
+      const runs = new RunEngine(process.cwd(), { audit, artifacts, policy });
 
       const result = await new GitHubSignalSyncService(process.cwd(), {
         githubClient: new OctokitGitHubClient({ token }),
+        audit,
+        artifacts,
       }).sync({
         owner: flags.owner,
         repo: flags.repo,
@@ -1070,11 +1079,27 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
         includeChecks: flags["no-checks"] !== true,
         ...(typeof flags["stale-days"] === "number" ? { staleDays: flags["stale-days"] } : {}),
       });
+      const triggers = await new GitHubSignalTriggerService({
+        runs,
+        audit,
+        policy,
+        workspaceRoot: process.cwd(),
+        coordinator: { audit, artifacts, policy },
+      }).trigger({
+        repository: result.repository,
+        report: result.report,
+        failingChecks: result.failingChecks,
+        staleIssues: result.staleIssues,
+        stalePullRequests: result.stalePullRequests,
+      });
       process.stdout.write(
         `bureau: synced ${result.repository}: ${result.issues.length} issues, ${result.pullRequests.length} PRs, ${result.checks.length} checks\n`,
       );
       process.stdout.write(
         `signals: ${result.failingChecks.length} failing checks, ${result.staleIssues.length + result.stalePullRequests.length} stale items, ${result.createdOpportunities.length} new opportunities\n`,
+      );
+      process.stdout.write(
+        `triggers: ${triggers.triggered.length} runs started, ${triggers.skipped.length} skipped\n`,
       );
       process.stdout.write(`report: ${result.report.id}\n`);
       for (const i of result.issues.slice(0, 10)) {

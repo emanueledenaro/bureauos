@@ -173,6 +173,15 @@ export type {
   GitHubWebhookIngestResult,
   GitHubWebhookIngestionDeps,
 } from "./github/webhook-ingestion.js";
+export { GitHubSignalTriggerService } from "./github/signal-triggers.js";
+export type {
+  GitHubSignalTriggerDeps,
+  GitHubSignalTriggerInput,
+  GitHubSignalTriggerKind,
+  GitHubSignalTriggerResult,
+  SkippedGitHubSignal,
+  TriggeredGitHubRun,
+} from "./github/signal-triggers.js";
 
 // API server
 export { startApiServer } from "./api/server.js";

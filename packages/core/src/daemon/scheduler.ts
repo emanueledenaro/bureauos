@@ -4,6 +4,7 @@ import { dispatchRun, type CoordinatorDeps } from "../runs/coordinator.js";
 import { BusinessReportService } from "../reports/business.js";
 import { ProjectRegistry } from "../registries/project.js";
 import { GitHubSignalSyncService, type GitHubSignalClient } from "../github/signal-sync.js";
+import { GitHubSignalTriggerService } from "../github/signal-triggers.js";
 
 /**
  * Always-on scheduler.
@@ -180,10 +181,32 @@ export class Scheduler {
           }
         : {}),
     });
+    const trigger = this.options.coordinator
+      ? new GitHubSignalTriggerService({
+          runs: this.options.runs,
+          audit: this.options.coordinator.audit,
+          policy: this.options.coordinator.policy,
+          workspaceRoot: this.options.workspaceRoot,
+          coordinator: this.options.coordinator,
+        })
+      : undefined;
+    let triggered = 0;
     for (const repo of repositories.values()) {
-      await sync.sync({ owner: repo.owner, repo: repo.repo });
+      const result = await sync.sync({ owner: repo.owner, repo: repo.repo });
+      if (trigger) {
+        const runs = await trigger.trigger({
+          repository: result.repository,
+          report: result.report,
+          failingChecks: result.failingChecks,
+          staleIssues: result.staleIssues,
+          stalePullRequests: result.stalePullRequests,
+        });
+        triggered += runs.triggered.length;
+      }
     }
-    this.log(`scheduler: github_project_signal_sync synced ${repositories.size} repositories`);
+    this.log(
+      `scheduler: github_project_signal_sync synced ${repositories.size} repositories, triggered ${triggered} runs`,
+    );
   }
 
   private log(message: string): void {

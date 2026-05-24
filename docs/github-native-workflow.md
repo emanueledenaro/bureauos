@@ -147,7 +147,15 @@ The webhook path writes the same `github-signal-report` artifact type from pushe
 - `github.check_failed.detected`
 - `github.webhook.ingested`
 
-This is read-only. It does not push commits, comment on issues, or open PRs. Failed checks and stale PRs become internal operating signals for later health-check or bug triage runs.
+This ingestion is read-only against GitHub. It does not push commits, comment on issues, or open PRs.
+
+When `autonomy.start_triage_runs` allows it, BureauOS converts high-signal GitHub observations into internal threshold runs:
+
+- failing check runs start a `bug` run
+- stale issues start a `health_check` run
+- stale pull requests start a `health_check` run
+
+Trigger sources are idempotent, so the same failed check or stale PR does not create duplicate runs across daemon polls or repeated syncs.
 
 ## Issue Lifecycle
 

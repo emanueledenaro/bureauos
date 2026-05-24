@@ -25,6 +25,7 @@ import {
 } from "../github/issue-publisher.js";
 import { BusinessReportService } from "../reports/business.js";
 import { GitHubWebhookIngestionService } from "../github/webhook-ingestion.js";
+import { GitHubSignalTriggerService } from "../github/signal-triggers.js";
 import {
   ProviderAuthStore,
   buildConfiguredProviderRouter,
@@ -393,7 +394,25 @@ const ROUTES: Record<string, RouteHandler> = {
       ...(url.searchParams.get("client") ? { clientSlug: url.searchParams.get("client")! } : {}),
       source: "api",
     });
-    ok(res, result, 202);
+    const d = deps(options);
+    const triggers = await new GitHubSignalTriggerService({
+      runs: d.runs,
+      audit: d.audit,
+      policy: d.policy,
+      workspaceRoot: options.workspaceRoot,
+      coordinator: {
+        audit: d.audit,
+        artifacts: d.artifacts,
+        policy: d.policy,
+      },
+    }).trigger({
+      repository: result.repository,
+      report: result.report,
+      failingChecks: result.failingChecks,
+      staleIssues: [],
+      stalePullRequests: [],
+    });
+    ok(res, { ...result, triggers }, 202);
   },
 
   "POST /coordinator/intake": async ({ res, options, req }) => {

@@ -306,6 +306,11 @@ Goal: scheduler and event watchers so BureauOS works while the owner is offline.
 - [x] Implement scheduled triggers for project health, daily executive report, growth review, and client account review.
 - [x] Generate executive and business operating reports during the daily executive report job.
 - [ ] Implement threshold triggers (stale PR, blocked issue, unanswered client message, empty content pipeline).
+  - [x] GitHub failing check -> bug triage run.
+  - [x] GitHub stale PR/issue -> health-check run.
+  - [ ] Blocked issue threshold.
+  - [ ] Unanswered client message threshold.
+  - [ ] Empty content pipeline threshold.
 - [ ] Implement memory triggers (follow-ups due).
 - [x] Implement event ingestion from the GitHub adapter.
 - [x] Implement signal classification for GitHub issue, PR, and check-run events.

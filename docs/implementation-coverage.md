@@ -105,7 +105,7 @@ Every major capability described in the docs must become one of:
 | Project health checks | scheduler/run stubs | partial |
 | Growth review | scheduler/run stubs | partial |
 | Client account review | scheduler/run stubs | partial |
-| Threshold triggers | not implemented | designed |
+| Threshold triggers | `GitHubSignalTriggerService` starts idempotent bug/health-check runs from failing checks and stale GitHub work | partial |
 | Failing check detection | `GitHubSignalSyncService`, `GitHubWebhookIngestionService`, `github sync`, `/github/webhook`, `github-signal-report` | partial |
 | Stale PR/issue detection | `GitHubSignalSyncService`, `github sync --stale-days` | partial |
 
@@ -114,7 +114,7 @@ Every major capability described in the docs must become one of:
 | Documented capability | Runtime surface | Status |
 | --- | --- | --- |
 | GitHub labels | `github ensure-labels` | implemented |
-| GitHub issue/PR/check sync | `github sync`, `/github/webhook`, daemon project-repo polling, `github-signal-report` artifacts, audit signals, Electron timeline signal cards | partial |
+| GitHub issue/PR/check sync | `github sync`, `/github/webhook`, daemon project-repo polling, `github-signal-report` artifacts, audit signals, threshold-triggered runs, Electron timeline signal cards | partial |
 | GitHub issue draft generation | `github draft-issues`, `/github/issue-drafts`, Electron project cards | implemented |
 | GitHub issue creation from drafts | `github create-issues`, `/github/create-issues`, Electron project cards | implemented |
 | GitHub PR creation | not implemented | designed |
@@ -142,7 +142,7 @@ Every major capability described in the docs must become one of:
 
 ## Current Priority Order
 
-1. Add threshold-triggered runs from GitHub signal reports.
+1. Add remaining non-GitHub threshold triggers: blocked issue age, unanswered client message age, empty content pipeline.
 2. Add ElectronJS pages for clients, projects, approvals, reports, memory, settings.
 3. Add always-on scheduler tasks for daily report, project health, growth review, and client review.
 4. Add budget-aware and capability-aware routing.
