@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "outDir": "./out-main",
+    "noEmit": false,
+    "noUncheckedIndexedAccess": false,
+    "paths": {
+      "@bureauos/core": ["../core/src/index.ts"],
+      "@bureauos/memory": ["../memory/src/index.ts"]
+    }
+  },
+  "include": ["src/main/**/*", "src/preload/**/*", "electron.vite.config.ts"],
+  "references": [
+    { "path": "../core" },
+    { "path": "../memory" }
+  ]
+}

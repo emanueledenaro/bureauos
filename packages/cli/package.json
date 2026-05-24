@@ -28,7 +28,9 @@
     "lint": "echo 'lint pending'"
   },
   "dependencies": {
-    "@bureauos/core": "workspace:*"
+    "@bureauos/core": "workspace:*",
+    "@bureauos/memory": "workspace:*",
+    "@bureauos/providers": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

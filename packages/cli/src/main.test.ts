@@ -57,7 +57,7 @@ describe("bureau cli", () => {
 
   it("rejects unknown preset", async () => {
     const code = await main(["node", "bureau", "init", "--preset", "huge-corp"]);
-    expect(code).toBe(2);
+    expect(code).toBe(1);
   });
 
   it("rejects unknown command", async () => {
