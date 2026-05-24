@@ -56,6 +56,7 @@ Runs and audit:
   run new --type <t> --scope <s> [--client slug] [--project slug]
   run list
   audit tail [-n N]
+  audit search <q>
 
 Policy:
   policy explain <action> [--actor a] [--target t]
@@ -593,7 +594,45 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
   project: { create: handleProjectCreate, list: handleProjectList },
   opportunity: { create: handleOpportunityCreate, list: handleOpportunityList },
   run: { new: handleRunNew, list: handleRunList },
-  audit: { tail: handleAuditTail },
+  audit: {
+    tail: handleAuditTail,
+    search: async (args: readonly string[]) => {
+      const query = args.join(" ").trim().toLowerCase();
+      if (!query) return err("audit search: missing query");
+      const path = workspacePaths(process.cwd()).auditLog;
+      try {
+        const content = await readFile(path, "utf8");
+        const lines = content
+          .trim()
+          .split("\n")
+          .filter(Boolean)
+          .filter((l) => l.toLowerCase().includes(query));
+        if (lines.length === 0) {
+          process.stdout.write("(no matches)\n");
+          return 0;
+        }
+        for (const l of lines) {
+          try {
+            const e = JSON.parse(l) as {
+              timestamp: string;
+              actor: string;
+              action: string;
+              target?: string;
+              result: string;
+            };
+            process.stdout.write(
+              `${e.timestamp}  ${e.actor.padEnd(18)}  ${e.action.padEnd(28)}  ${e.target ?? ""}  [${e.result}]\n`,
+            );
+          } catch {
+            process.stdout.write(`${l}\n`);
+          }
+        }
+        return 0;
+      } catch {
+        return err("audit search: no audit log yet (run `bureau init` first)");
+      }
+    },
+  },
   policy: { explain: handlePolicyExplain },
   approvals: {
     list: handleApprovalsList,
