@@ -78,6 +78,8 @@ export type {
   StartRunInput,
   RunEngineDeps,
 } from "./runs/engine.js";
+export { dispatchRun } from "./runs/coordinator.js";
+export type { DispatchInput, DispatchOutput, CoordinatorDeps } from "./runs/coordinator.js";
 
 // Agents
 export { AGENT_ROLES, AGENT_INDEX, getAgent, agentsByCategory } from "./agents/roles.js";
