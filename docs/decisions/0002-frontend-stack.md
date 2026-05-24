@@ -1,4 +1,4 @@
-# ADR 0002: Frontend Stack for the Owner Interface
+# ADR 0002: ElectronJS Stack for the Owner Interface
 
 - Status: accepted
 - Date: 2026-05-24
@@ -18,7 +18,7 @@ The kernel was already committed to TypeScript on Node 20 in [ADR 0001](0001-run
 
 ## Decision
 
-Adopt **Electron + React + Tailwind CSS + electron-vite** for `@bureauos/interface`.
+Adopt **ElectronJS + React + Tailwind CSS + electron-vite** for `@bureauos/interface`.
 
 Stack:
 
@@ -29,13 +29,13 @@ Stack:
 - TypeScript 5.x with strict mode
 - IPC over `contextBridge.exposeInMainWorld("bureau", ...)`
 
-The Electron main process owns the lifecycle of the local HTTP API server from `@bureauos/core` and the renderer talks to it via fetch. The CLI's `bureau serve` is the headless alternative for users who prefer browser access.
+The ElectronJS main process owns the lifecycle of the local HTTP API server from `@bureauos/core` and the renderer talks to it via fetch. The CLI's `bureau serve` remains a headless developer/admin alternative, not the primary owner interface.
 
 ## Alternatives Considered
 
 - **Next.js or Vite web app, run locally on `localhost:N`**:
   - Pros: lighter bundle, no packaging, faster dev loop.
-  - Cons: no native daemon, no system tray, no native notifications, requires the user to keep a terminal open and a browser tab open. Loses on the always-on requirement.
+  - Cons: no native daemon, no system tray, no native notifications, requires the user to keep a terminal open and a browser tab open. Loses on the always-on requirement and is not the founder-requested ElectronJS product direction.
 - **Tauri**:
   - Pros: ~10MB bundle vs Electron's ~100MB; rust-based backend would be faster.
   - Cons: introduces Rust into the monorepo, violating ADR 0001's "one language" goal. Smaller ecosystem for the kinds of native dialogs and MCP integrations the kernel needs. Revisit later if bundle size becomes a real pain.

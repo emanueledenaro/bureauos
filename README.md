@@ -31,13 +31,13 @@ node /path/to/bureauos/packages/cli/dist/bin/bureau.js status
 node /path/to/bureauos/packages/cli/dist/bin/bureau.js audit tail -n 10
 ```
 
-### Owner Interface (Electron)
+### Owner Interface (ElectronJS)
 
 ```bash
 pnpm --filter @bureauos/interface run dev
 ```
 
-The Electron main process starts the local API server against
+The owner interface is an ElectronJS desktop app. The Electron main process starts the local API server against
 `$BUREAUOS_WORKSPACE` (default: `process.cwd()`) and the renderer connects
 to it. Layout matches `docs/ui-reference/operating-room.md`.
 
@@ -156,7 +156,7 @@ Advanced YAML should exist, but it should not be required for the first useful r
 
 ## Owner Command Center
 
-BureauOS needs an interface where the owner can see everything without reading raw files.
+BureauOS needs an ElectronJS desktop interface where the owner can see everything without reading raw files.
 
 The interface should show:
 
@@ -175,7 +175,7 @@ The interface should show:
 
 It should also provide one primary conversation surface: the supreme coordinator.
 
-The owner talks to the coordinator. The dashboard shows what the organization is doing.
+The owner talks to the coordinator. The ElectronJS Operating Room shows what the organization is doing.
 
 The coordinator does not keep all of that inside one prompt. It owns a structured persistent memory system:
 

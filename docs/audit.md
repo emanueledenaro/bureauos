@@ -34,7 +34,7 @@ It does not yet have:
 - provider router implementation
 - memory engine implementation
 - daemon implementation
-- owner dashboard implementation
+- ElectronJS owner interface implementation
 - GitHub integration code
 - automated tests
 - released package
@@ -145,7 +145,7 @@ The next engineering gaps are:
 9. GitHub adapter
 10. CLI commands
 11. Owner interface API
-12. Dashboard
+12. ElectronJS desktop Operating Room
 
 The first runtime should be local-first. Cloud sync can come later.
 
@@ -202,7 +202,7 @@ Add GitHub-native work:
 - parse checks
 - write run reports
 
-### Phase 5: Owner Interface
+### Phase 5: ElectronJS Owner Interface
 
 Add the adaptive command center:
 
@@ -286,4 +286,3 @@ memory + policy + provider routing + run lifecycle + artifacts + audit log
 ```
 
 Once that kernel exists, specialized agents, GitHub automation, growth workflows, and the adaptive interface can be added without losing control of the system.
-

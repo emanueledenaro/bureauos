@@ -4,6 +4,7 @@
   "private": true,
   "description": "BureauOS Operating Room - Electron desktop application",
   "license": "MIT",
+  "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",

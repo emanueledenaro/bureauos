@@ -44,13 +44,13 @@ Deliverables:
 - local artifact writer
 - provider adapter interface
 
-## v0.3: Owner Interface MVP
+## v0.3: ElectronJS Owner Interface MVP
 
 Goal: give the owner one place to see the agency.
 
 Deliverables:
 
-- local dashboard
+- ElectronJS desktop Operating Room
 - coordinator chat placeholder
 - clients view
 - projects view

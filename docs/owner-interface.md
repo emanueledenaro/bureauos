@@ -1,10 +1,10 @@
 # Owner Interface
 
-BureauOS needs an owner-facing interface.
+BureauOS needs an owner-facing ElectronJS desktop interface.
 
 The owner should not need to inspect Markdown files, GitHub issues, logs, and agent reports manually to understand the business.
 
-The interface is the command center for the AI agency.
+The ElectronJS Operating Room is the command center for the AI agency.
 
 ## Core Principle
 
@@ -16,7 +16,7 @@ Full business visibility.
 
 The owner talks to the supreme coordinator.
 
-The dashboard shows the state of the company.
+The desktop Operating Room shows the state of the company.
 
 ## Primary Views
 
@@ -170,7 +170,7 @@ The chat should be connected to the same memory and policy system as the daemon.
 
 The owner may use BureauOS from a phone.
 
-The interface should support:
+The ElectronJS interface should support:
 
 - quick status check
 - approvals
@@ -200,7 +200,7 @@ It should avoid constant low-value notifications.
 
 ## Interface Data Sources
 
-The interface reads from:
+The ElectronJS interface reads from:
 
 - `.bureauos/memory`
 - client intelligence
@@ -211,7 +211,7 @@ The interface reads from:
 - integrations when connected
 - business reports
 
-The interface should not become a second source of truth. It visualizes and updates the BureauOS memory and connected systems.
+The ElectronJS interface should not become a second source of truth. It visualizes and updates the BureauOS memory and connected systems.
 
 ## Suggested MVP
 
@@ -229,4 +229,3 @@ Settings
 ```
 
 The goal is not a complex enterprise UI. The goal is clarity for the owner.
-

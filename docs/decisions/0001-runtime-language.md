@@ -10,7 +10,7 @@ BureauOS needs a single primary runtime language for the kernel, CLI, local API 
 
 Constraints and forces:
 
-- The owner interface (see [docs/ui-reference/operating-room.md](../ui-reference/operating-room.md)) is a web application; TypeScript is the natural default for the frontend.
+- The owner interface (see [docs/ui-reference/operating-room.md](../ui-reference/operating-room.md)) is an ElectronJS desktop application with a React renderer; TypeScript is the natural default for the frontend and Electron main process.
 - The team is small. One language across the stack reduces cognitive overhead and lets the kernel share types with the interface.
 - The kernel must run locally on macOS, Linux, and Windows. The chosen runtime must work on all three without heroics.
 - Codex, Claude Code, Gemini CLI, and similar development runtimes are language-agnostic and are treated as **capabilities** consumed by the kernel, not as the kernel itself. The kernel's choice of language does not constrain those capabilities.
@@ -20,7 +20,7 @@ Constraints and forces:
 
 ## Decision
 
-Adopt **TypeScript on Node.js 20 LTS** for the entire BureauOS runtime: kernel, CLI, local API server, and owner interface.
+Adopt **TypeScript on Node.js 20 LTS** for the entire BureauOS runtime: kernel, CLI, local API server, and ElectronJS owner interface.
 
 Toolchain:
 
@@ -37,7 +37,7 @@ Python, Go, or other-language capabilities can be added later as **runtime adapt
 ## Alternatives Considered
 
 - **Python**: strong for data and ML, but splits the codebase from the interface and weakens type-sharing. The kernel does very little number crunching; this advantage is not relevant here.
-- **Go**: excellent single-binary distribution and great concurrency, but no type-sharing with the web interface and a smaller MCP ecosystem today.
+- **Go**: excellent single-binary distribution and great concurrency, but no type-sharing with the ElectronJS interface and a smaller MCP ecosystem today.
 - **Rust**: tempting for a long-running daemon, but premature optimization for v0.x. We can extract hot paths to Rust later if profiling demands it.
 - **Polyglot from day one** (TS interface + Python kernel): rejected because it doubles the build/test/deploy surface for no immediate benefit.
 
@@ -46,7 +46,7 @@ Python, Go, or other-language capabilities can be added later as **runtime adapt
 Positive:
 
 - One toolchain across packages.
-- Easy code sharing between kernel and interface (shared zod schemas, shared types).
+- Easy code sharing between kernel and ElectronJS interface (shared zod schemas, shared types).
 - Fast local installs via pnpm.
 - Aligned with most MCP servers and model provider SDKs.
 

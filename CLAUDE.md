@@ -91,7 +91,7 @@ The repo does not yet contain:
 - provider router implementation
 - memory engine implementation
 - daemon implementation
-- dashboard implementation
+- ElectronJS desktop interface implementation
 - GitHub adapter code
 - automated tests
 
@@ -146,11 +146,11 @@ Build order:
 10. GitHub adapter
 11. CLI
 12. Owner interface API
-13. Dashboard
+13. ElectronJS desktop Operating Room
 14. Always-on daemon
 15. External business actions
 
-Do not start from the dashboard. The dashboard must visualize kernel state, not become a second source of truth.
+Do not start from a standalone web dashboard. The owner-facing product is an ElectronJS desktop Operating Room that must visualize kernel state, not become a second source of truth.
 
 ## Memory Requirement
 
@@ -328,4 +328,3 @@ BureauOS fully runs your company automatically today.
 ```
 
 The strongest public angle is safe, inspectable, policy-driven autonomy for real business operations.
-
