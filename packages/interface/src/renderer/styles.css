@@ -8,6 +8,10 @@ body,
   height: 100%;
 }
 
+:root {
+  color-scheme: dark;
+}
+
 body {
   margin: 0;
   font-family:
@@ -24,11 +28,16 @@ body {
   background-color: #09090b;
 }
 
+* {
+  scrollbar-color: #3f3f46 #09090b;
+}
+
 button,
 input,
 select,
 textarea {
   font: inherit;
+  color: inherit;
 }
 
 button {
@@ -37,6 +46,29 @@ button {
 
 button:disabled {
   cursor: default;
+}
+
+input,
+select,
+textarea {
+  background-color: #09090b;
+  color: #f5f5f4;
+}
+
+select option {
+  background-color: #111113;
+  color: #f5f5f4;
+}
+
+input::file-selector-button {
+  border: 1px solid #27272a;
+  border-radius: 6px;
+  background: #18181b;
+  color: #d4d4d8;
+}
+
+::selection {
+  background: rgb(5 150 105 / 0.35);
 }
 
 .dashboard-panel {
@@ -71,7 +103,8 @@ button:disabled {
   position: relative;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 24px;
+  min-height: 182px;
+  gap: 20px;
 }
 
 .portfolio-column {
@@ -79,52 +112,58 @@ button:disabled {
   min-width: 0;
 }
 
-.portfolio-column:not(:first-child)::before {
-  content: "";
-  position: absolute;
-  top: 74px;
-  left: -24px;
-  width: 24px;
-  border-top: 2px solid #52525b;
+.portfolio-column-heading {
+  display: grid;
+  min-height: 36px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  margin-bottom: 9px;
 }
 
-.portfolio-column:not(:first-child)::after {
-  content: "";
-  position: absolute;
-  top: 74px;
-  left: -24px;
-  height: 76px;
-  border-left: 2px solid #52525b;
+.portfolio-stream-stack {
+  position: relative;
+  display: grid;
+  gap: 11px;
 }
 
 .workstream-card {
   position: relative;
-  min-height: 62px;
+  z-index: 1;
+  min-height: 72px;
+  overflow: visible;
   border: 1px solid #2f2f35;
   border-radius: 8px;
   background: #151518;
-  padding: 9px 11px;
+  padding: 10px 12px;
   box-shadow: 0 8px 20px rgb(0 0 0 / 0.2);
 }
 
-.workstream-card::before {
-  content: "";
+.connector-node {
   position: absolute;
-  top: 30px;
-  left: -7px;
-  width: 7px;
-  border-top: 2px solid #52525b;
+  top: 31px;
+  z-index: 4;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  border: 2px solid #111113;
+  background: #059669;
+  box-shadow: 0 0 0 1px #059669;
+  pointer-events: none;
 }
 
-.workstream-card::after {
+.connector-node--left {
+  left: -5px;
+}
+
+.connector-node--left:not(.connector-node--root)::before {
   content: "";
   position: absolute;
-  top: 26px;
-  left: -10px;
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: #059669;
+  top: 50%;
+  right: 100%;
+  width: 20px;
+  border-top: 1px solid #52525b;
+  transform: translateY(-50%);
 }
 
 .timeline-strip {

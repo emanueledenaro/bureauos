@@ -272,6 +272,13 @@ interface PortfolioLane {
   streams: Workstream[];
 }
 
+interface CapacitySegment {
+  label: string;
+  value: string;
+  width: number;
+  className: string;
+}
+
 function projectTone(status: string): Tone {
   if (status === "blocked" || status === "cancelled") return "red";
   if (status === "proposal" || status === "approved" || status === "intake") return "amber";
@@ -340,6 +347,23 @@ function agentAbbr(role: string): string {
     .slice(0, 3);
 }
 
+function isInternalClient(client?: ClientRecord): boolean {
+  if (!client) return false;
+  const value = `${client.name} ${client.industry}`.toLowerCase();
+  return value.includes("bureauos") || value.includes("internal");
+}
+
+function displayLaneLabel(client?: ClientRecord): { label: string; subtitle: string } {
+  if (!client) return { label: "Unassigned", subtitle: "No client memory" };
+  if (isInternalClient(client)) {
+    return { label: "Internal Product", subtitle: client.name };
+  }
+  return {
+    label: client.name,
+    subtitle: `${formatLabel(client.status)} - ${client.industry}`,
+  };
+}
+
 function buildPortfolioLanes(state: DashboardState): PortfolioLane[] {
   const clientsById = new Map(state.clients.map((client) => [client.id, client]));
   const laneMap = new Map<string, { client?: ClientRecord; streams: Workstream[] }>();
@@ -380,19 +404,71 @@ function buildPortfolioLanes(state: DashboardState): PortfolioLane[] {
   const totalStreams = [...laneMap.values()].reduce((sum, lane) => sum + lane.streams.length, 0);
   return [...laneMap.entries()]
     .filter(([, lane]) => lane.streams.length > 0)
+    .sort((left, right) => {
+      const leftInternal = isInternalClient(left[1].client ?? clientsById.get(left[0]));
+      const rightInternal = isInternalClient(right[1].client ?? clientsById.get(right[0]));
+      if (leftInternal !== rightInternal) return leftInternal ? -1 : 1;
+      return right[1].streams.length - left[1].streams.length;
+    })
     .slice(0, 4)
     .map(([key, lane]) => {
       const client = lane.client ?? clientsById.get(key);
+      const display = displayLaneLabel(client);
       const capacity = totalStreams
         ? `${Math.round((lane.streams.length / totalStreams) * 100)}% Workload`
         : "0% Workload";
       return {
-        label: client?.name ?? "Unassigned",
-        subtitle: client ? `${formatLabel(client.status)} - ${client.industry}` : "No client",
+        label: display.label,
+        subtitle: display.subtitle,
         capacity,
         streams: lane.streams.slice(0, 3),
       };
     });
+}
+
+function buildCapacitySegments(state: DashboardState): CapacitySegment[] {
+  const clientsById = new Map(state.clients.map((client) => [client.id, client]));
+  const internalProjects = state.projects.filter((project) =>
+    isInternalClient(clientsById.get(project.client_id)),
+  ).length;
+  const clientProjects = Math.max(0, state.projects.length - internalProjects);
+  const riskItems = state.approvals.length;
+  const weights = {
+    clientDelivery: clientProjects,
+    product: internalProjects,
+    growth: state.opportunities.length,
+    risk: riskItems,
+  };
+  const totalWeight = Object.values(weights).reduce((sum, item) => sum + item, 0);
+  const width = (weight: number): number =>
+    totalWeight > 0 ? Math.round((weight / totalWeight) * 100) : 0;
+
+  return [
+    {
+      label: "Client Delivery",
+      value: `${clientProjects} projects`,
+      width: width(weights.clientDelivery),
+      className: "bg-emerald-600",
+    },
+    {
+      label: "BureauOS Product",
+      value: `${internalProjects} projects`,
+      width: width(weights.product),
+      className: "bg-teal-700",
+    },
+    {
+      label: "Growth",
+      value: `${state.opportunities.length} opportunities`,
+      width: width(weights.growth),
+      className: "bg-neutral-700",
+    },
+    {
+      label: "Risk / Admin",
+      value: `${riskItems} approvals`,
+      width: width(weights.risk),
+      className: "bg-neutral-800",
+    },
+  ];
 }
 
 function completedRunCoverage(runs: RunRecord[]): number {
@@ -406,13 +482,13 @@ function toneDot(tone: Tone): string {
     case "green":
       return "bg-emerald-600";
     case "amber":
-      return "bg-amber-9500";
+      return "bg-amber-500";
     case "red":
       return "bg-rose-600";
     case "black":
       return "bg-neutral-950";
     case "muted":
-      return "bg-neutral-300";
+      return "bg-neutral-600";
   }
 }
 
@@ -677,9 +753,12 @@ function Sidebar({
   );
 }
 
-function WorkstreamCard({ item }: { item: Workstream }) {
+function WorkstreamCard({ item, laneIndex }: { item: Workstream; laneIndex: number }) {
   return (
     <div className="workstream-card">
+      {laneIndex > 0 ? (
+        <span className="connector-node connector-node--left" aria-hidden="true" />
+      ) : null}
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-[13px] font-medium text-neutral-50">{item.title}</div>
@@ -788,6 +867,7 @@ function sortNewest<T extends { created?: string; updated?: string }>(items: rea
 
 function PortfolioOperatingRoom({ state }: { state: DashboardState }) {
   const lanes = useMemo(() => buildPortfolioLanes(state), [state]);
+  const capacitySegments = useMemo(() => buildCapacitySegments(state), [state]);
   return (
     <section className="dashboard-panel portfolio-room">
       <div className="flex items-start justify-between border-b border-neutral-800 px-5 py-2.5">
@@ -828,18 +908,30 @@ function PortfolioOperatingRoom({ state }: { state: DashboardState }) {
       <div className="px-5 py-3">
         {lanes.length > 0 ? (
           <div className="operating-map">
-            {lanes.map((lane) => (
-              <div key={lane.label} className="portfolio-column">
-                <div className="mb-2 flex items-baseline justify-between">
-                  <div>
-                    <div className="text-[12px] font-semibold text-neutral-50">{lane.label}</div>
-                    <div className="text-[10px] text-neutral-500">{lane.subtitle}</div>
+            {lanes.map((lane, laneIndex) => (
+              <div
+                key={lane.label}
+                className={classes(
+                  "portfolio-column",
+                  laneIndex > 0 && "portfolio-column--connected",
+                )}
+              >
+                <div className="portfolio-column-heading">
+                  <div className="min-w-0">
+                    <div className="truncate text-[12px] font-semibold text-neutral-50">
+                      {lane.label}
+                    </div>
+                    <div className="truncate text-[10px] text-neutral-500">{lane.subtitle}</div>
                   </div>
-                  <div className="text-[10px] text-neutral-500">{lane.capacity}</div>
+                  <div className="shrink-0 text-[10px] text-neutral-500">{lane.capacity}</div>
                 </div>
-                <div className="space-y-3">
-                  {lane.streams.map((item) => (
-                    <WorkstreamCard key={item.title} item={item} />
+                <div className="portfolio-stream-stack">
+                  {lane.streams.map((item, index) => (
+                    <WorkstreamCard
+                      key={`${item.title}-${index}`}
+                      item={item}
+                      laneIndex={laneIndex}
+                    />
                   ))}
                 </div>
                 <div className="mt-2 flex min-h-6 flex-wrap items-center gap-1.5">
@@ -873,24 +965,20 @@ function PortfolioOperatingRoom({ state }: { state: DashboardState }) {
           </div>
           <div className="flex-1">
             <div className="flex h-2.5 overflow-hidden rounded-full bg-neutral-800">
-              <div
-                className="bg-emerald-600"
-                style={{
-                  width: `${state.projects.length ? Math.round((state.projects.length / Math.max(1, state.projects.length + state.opportunities.length)) * 100) : 0}%`,
-                }}
-              />
-              <div
-                className="bg-neutral-900"
-                style={{
-                  width: `${state.opportunities.length ? Math.round((state.opportunities.length / Math.max(1, state.projects.length + state.opportunities.length)) * 100) : 0}%`,
-                }}
-              />
+              {capacitySegments.map((segment) => (
+                <div
+                  key={segment.label}
+                  className={segment.className}
+                  style={{ width: `${segment.width}%` }}
+                />
+              ))}
             </div>
             <div className="mt-2 grid grid-cols-4 text-[10px] text-neutral-500">
-              <span>Projects {state.projects.length}</span>
-              <span>Opportunities {state.opportunities.length}</span>
-              <span>Approvals {state.approvals.length}</span>
-              <span>Runs {state.runs.length}</span>
+              {capacitySegments.map((segment) => (
+                <span key={segment.label}>
+                  <span className="text-neutral-300">{segment.label}</span> {segment.value}
+                </span>
+              ))}
             </div>
           </div>
         </div>
@@ -1315,19 +1403,6 @@ function Timeline({ events, artifacts }: { events: AuditEvent[]; artifacts: Arti
   );
 }
 
-function Sparkline() {
-  return (
-    <svg viewBox="0 0 80 32" className="h-8 w-20 text-emerald-400" aria-hidden="true">
-      <polyline
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        points="1,24 10,18 18,21 27,12 37,16 46,8 56,13 66,6 78,3"
-      />
-    </svg>
-  );
-}
-
 function RevenuePulse({
   pulse,
   clients,
@@ -1405,10 +1480,7 @@ function RevenuePulse({
             <div key={card[0]} className="rounded-md border border-neutral-800 p-3">
               <div className="text-[10px] text-neutral-500">{card[0]}</div>
               <div className="mt-2 text-xl font-semibold text-neutral-50">{card[1]}</div>
-              <div className="mt-2 flex items-end justify-between gap-2">
-                <div className="text-[10px] text-emerald-400">{card[2]}</div>
-                <Sparkline />
-              </div>
+              <div className="mt-2 text-[10px] text-emerald-400">{card[2]}</div>
             </div>
           ))}
         </div>
@@ -1975,7 +2047,7 @@ function SettingsView({
           <select
             value={provider}
             onChange={(event) => setProvider(event.target.value)}
-            className="h-9 rounded-md border border-neutral-800 bg-neutral-950 px-3 text-[11px]"
+            className="h-9 rounded-md border border-neutral-800 bg-neutral-950 px-3 text-[11px] text-neutral-100 outline-none focus:border-neutral-700"
           >
             <option value="openai-codex">OpenAI Codex OAuth</option>
             <option value="openai">OpenAI API</option>
@@ -1990,14 +2062,14 @@ function SettingsView({
               <input
                 value={accessToken}
                 onChange={(event) => setAccessToken(event.target.value)}
-                className="h-9 rounded-md border border-neutral-800 px-3 text-[11px]"
+                className="h-9 rounded-md border border-neutral-800 bg-neutral-950 px-3 text-[11px] text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-neutral-700"
                 placeholder="OAuth access token"
                 type="password"
               />
               <input
                 value={refreshToken}
                 onChange={(event) => setRefreshToken(event.target.value)}
-                className="h-9 rounded-md border border-neutral-800 px-3 text-[11px]"
+                className="h-9 rounded-md border border-neutral-800 bg-neutral-950 px-3 text-[11px] text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-neutral-700"
                 placeholder="OAuth refresh token"
                 type="password"
               />
@@ -2007,7 +2079,7 @@ function SettingsView({
             <input
               value={apiKey}
               onChange={(event) => setApiKey(event.target.value)}
-              className="h-9 rounded-md border border-neutral-800 px-3 text-[11px]"
+              className="h-9 rounded-md border border-neutral-800 bg-neutral-950 px-3 text-[11px] text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-neutral-700"
               placeholder="API key"
               type="password"
             />
@@ -2016,14 +2088,14 @@ function SettingsView({
             <input
               value={baseUrl}
               onChange={(event) => setBaseUrl(event.target.value)}
-              className="h-9 rounded-md border border-neutral-800 px-3 text-[11px]"
+              className="h-9 rounded-md border border-neutral-800 bg-neutral-950 px-3 text-[11px] text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-neutral-700"
               placeholder="Base URL"
             />
           ) : null}
           <input
             value={defaultModel}
             onChange={(event) => setDefaultModel(event.target.value)}
-            className="h-9 rounded-md border border-neutral-800 px-3 text-[11px]"
+            className="h-9 rounded-md border border-neutral-800 bg-neutral-950 px-3 text-[11px] text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-neutral-700"
             placeholder="model"
           />
           <button
