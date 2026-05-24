@@ -36,7 +36,11 @@ export interface ConfiguredProviderRouter {
 
 export type ProviderEnv = Record<string, string | undefined>;
 
-function registerCredential(router: ProviderRouter, credential: ProviderCredentialRecord): void {
+function registerCredential(
+  router: ProviderRouter,
+  credential: ProviderCredentialRecord,
+  authStore?: ProviderAuthStore,
+): void {
   const apiKey = credential.apiKey || undefined;
   const baseUrl = credential.baseUrl || undefined;
   const defaultModel = credential.defaultModel || undefined;
@@ -48,6 +52,21 @@ function registerCredential(router: ProviderRouter, credential: ProviderCredenti
           refreshToken: credential.refreshToken || undefined,
           expiresAt: credential.expiresAt || undefined,
           defaultModel,
+          ...(authStore
+            ? {
+                onTokenRefresh: async (token) => {
+                  await authStore.upsert({
+                    provider: credential.provider,
+                    id: credential.id,
+                    mode: "oauth",
+                    accessToken: token.accessToken,
+                    refreshToken: token.refreshToken,
+                    expiresAt: token.expiresAt,
+                    defaultModel: credential.defaultModel,
+                  });
+                },
+              }
+            : {}),
         }),
       );
       return;
@@ -189,11 +208,12 @@ export async function buildConfiguredProviderRouter(
   workspaceRoot: string,
   env: ProviderEnv,
 ): Promise<ConfiguredProviderRouter> {
-  const credentials = await ProviderAuthStore.forWorkspace(workspaceRoot).list();
+  const authStore = ProviderAuthStore.forWorkspace(workspaceRoot);
+  const credentials = await authStore.list();
   const router = new ProviderRouter();
   const connections = credentials.map(connectionFromCredential);
 
-  for (const credential of credentials) registerCredential(router, credential);
+  for (const credential of credentials) registerCredential(router, credential, authStore);
 
   const hasStored = (provider: ProviderType) =>
     credentials.some((credential) => credential.provider === provider);

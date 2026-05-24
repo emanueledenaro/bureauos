@@ -63,7 +63,7 @@ The singular `/provider/...` endpoints follow OpenCode's provider auth pattern: 
 
 ## Current Runtime State
 
-- OpenAI Codex OAuth: separate provider profile, browser PKCE login, token validation, no API-key fallback. Live OAuth model bridging remains adapter-level.
+- OpenAI Codex OAuth: separate provider profile, browser PKCE login, token validation, token refresh persistence, live ChatGPT Codex backend requests, SSE streaming, no API-key fallback.
 - OpenAI API: SDK-backed `generateText` and `stream`.
 - Anthropic: SDK-backed `generateText` and `stream`.
 - Google, OpenRouter, Local: registered adapters with credential validation, model calls still stubbed.
@@ -71,7 +71,6 @@ The singular `/provider/...` endpoints follow OpenCode's provider auth pattern: 
 
 ## Next Steps
 
-- Add Codex OAuth request bridging for live model calls.
 - Add optional device/headless OAuth login.
 - Add budget-aware and capability-aware routing.
 - Move production-grade secrets to OS keychain as an alternative to the local auth file.

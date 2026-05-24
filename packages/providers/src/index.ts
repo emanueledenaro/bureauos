@@ -50,7 +50,7 @@ export type {
 } from "./openai-codex-oauth.js";
 
 export { OpenAIAdapter, NotConfiguredError } from "./adapters/openai.js";
-export { OAuthBridgeNotConfiguredError, OpenAICodexOAuthAdapter } from "./adapters/openai-codex.js";
+export { OpenAICodexOAuthAdapter, OpenAICodexOAuthError } from "./adapters/openai-codex.js";
 export { AnthropicAdapter } from "./adapters/anthropic.js";
 export { GoogleAdapter } from "./adapters/google.js";
 export { LocalAdapter } from "./adapters/local.js";
