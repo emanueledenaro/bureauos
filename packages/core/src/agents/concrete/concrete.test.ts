@@ -51,17 +51,42 @@ describe("concrete agents", () => {
     }
   });
 
-  it("falls back to a StubAgent for roles without a concrete runtime", async () => {
+  it("every templated agent role writes its signature artifact", async () => {
     const audit = new AuditLog(workspacePaths(dir).auditLog);
     const artifacts = new ArtifactStore(dir);
     const policy = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
     const registry = buildDefaultAgentRegistry({ artifacts, audit, policy });
-    const agent = registry.get("visibility");
-    expect(agent.definition.id).toBe("visibility");
-    const out = await agent.execute({
-      context: { runId: "run_visibility", scope: "draft positioning" },
-      capabilities: new Map(),
-    });
-    expect(out.ok).toBe(true);
+
+    const templated: Record<string, string> = {
+      supreme_coordinator: "executive-report",
+      ux: "design-spec",
+      reviewer: "pr-review",
+      release: "run-report",
+      visibility: "brand-brief",
+      content: "social-post-brief",
+      social: "social-post-brief",
+      creative: "creative-brief",
+      ads: "ad-campaign-brief",
+      marketing: "campaign-brief",
+      conversion: "conversion-audit",
+      sales: "lead-qualification-report",
+      pricing: "pricing-brief",
+      proposal: "proposal-brief",
+      client_success: "client-account-plan",
+    };
+
+    for (const [roleId, expectedType] of Object.entries(templated)) {
+      const agent = registry.get(roleId);
+      expect(agent.definition.id).toBe(roleId);
+      const out = await agent.execute({
+        context: { runId: `run_${roleId}`, scope: "stub run" },
+        capabilities: new Map(),
+      });
+      expect(out.ok).toBe(true);
+      expect(out.artifactIds.length).toBe(1);
+      const written = await artifacts.read(out.artifactIds[0]!);
+      expect(written?.record.type).toBe(expectedType);
+      expect(written?.record.created_by).toBe(roleId);
+    }
   });
 });
