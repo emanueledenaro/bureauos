@@ -179,6 +179,17 @@ export interface ProjectDispatchResult {
   handoffs: AgentHandoff[];
   artifacts: ArtifactRecord[];
 }
+export interface ProviderConnection {
+  provider: string;
+  id: string;
+  source: "auth" | "env";
+  has_api_key: boolean;
+  api_key_masked: string;
+  base_url: string;
+  default_model: string;
+  status: "ok" | "missing";
+  reason?: string;
+}
 
 export const Api = {
   pulse: () => api<CompanyPulse>("/company-pulse"),
@@ -188,6 +199,7 @@ export const Api = {
   approvals: () => api<ApprovalRecord[]>("/approvals"),
   runs: () => api<RunRecord[]>("/runs"),
   agents: () => api<AgentDefinition[]>("/agents"),
+  providers: () => api<ProviderConnection[]>("/providers"),
   audit: (n = 50) => api<AuditEvent[]>(`/audit?n=${n}`),
   coordinatorIntake: (input: {
     message: string;
@@ -216,6 +228,21 @@ export const Api = {
     }),
   dispatchProject: (input: { projectSlug: string; runType?: string; scope?: string }) =>
     api<ProjectDispatchResult>("/projects/dispatch", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  providerLogin: (input: {
+    provider: string;
+    apiKey?: string;
+    baseUrl?: string;
+    defaultModel?: string;
+  }) =>
+    api<ProviderConnection[]>("/providers/auth/login", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  providerLogout: (input: { provider: string; id?: string }) =>
+    api<{ removed: boolean; providers: ProviderConnection[] }>("/providers/auth/logout", {
       method: "POST",
       body: JSON.stringify(input),
     }),

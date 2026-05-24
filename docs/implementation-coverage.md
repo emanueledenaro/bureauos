@@ -64,7 +64,7 @@ Every major capability described in the docs must become one of:
 | Approvals panel | React renderer + `/approvals/resolve` | partial |
 | Reports generation | `BusinessReportService`, `bureau report generate`, `/reports/generate` | implemented |
 | Reports view | report action in Revenue Pulse, `/reports` endpoint | partial |
-| Settings view | not implemented | designed |
+| Settings view | provider settings panel | partial |
 | Native tray, notifications, auto-start | not implemented | designed |
 
 ## Agent Organization
@@ -124,7 +124,7 @@ Every major capability described in the docs must become one of:
 | OpenRouter provider | provider adapter | partial |
 | Local provider | provider adapter | partial |
 | Provider auth/connect | `ProviderAuthStore`, `bureau auth login/list/logout`, `.bureauos/auth/providers.json` | implemented |
-| Electron provider settings | not implemented | designed |
+| Electron provider settings | Settings mode, `/providers`, `/providers/auth/login`, `/providers/auth/logout` | implemented |
 | Gmail/Slack/Drive/Calendar | not implemented | designed |
 | Supabase/Stripe/Vercel | not implemented | designed |
 | Ads platforms | draft-only policy, no adapter | designed |
@@ -141,10 +141,9 @@ Every major capability described in the docs must become one of:
 
 ## Current Priority Order
 
-1. Add ElectronJS Settings for provider auth/connect.
-2. Wire the provider router into concrete agents with role-specific defaults.
-3. Add GitHub check parsing and webhook ingestion.
-4. Add ElectronJS pages for clients, projects, approvals, reports, memory, settings.
-5. Add always-on scheduler tasks for daily report, project health, growth review, and client review.
-6. Add budget-aware and capability-aware routing.
-7. Add connector adapters behind draft-first policy gates.
+1. Wire the provider router into concrete agents with role-specific defaults.
+2. Add GitHub check parsing and webhook ingestion.
+3. Add ElectronJS pages for clients, projects, approvals, reports, memory, settings.
+4. Add always-on scheduler tasks for daily report, project health, growth review, and client review.
+5. Add budget-aware and capability-aware routing.
+6. Add connector adapters behind draft-first policy gates.

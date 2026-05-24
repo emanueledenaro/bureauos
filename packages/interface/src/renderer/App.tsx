@@ -11,6 +11,7 @@ import {
   type GitHubIssueDraftResult,
   type GitHubIssuePublishResult,
   type OpportunityRecord,
+  type ProviderConnection,
   type ProjectDispatchResult,
   type ProjectRecord,
   type RunRecord,
@@ -55,6 +56,7 @@ interface DashboardState {
   approvals: ApprovalRecord[];
   runs: RunRecord[];
   agents: AgentDefinition[];
+  providers: ProviderConnection[];
   audit: AuditEvent[];
   error?: string;
   loading: boolean;
@@ -67,6 +69,7 @@ const emptyState: DashboardState = {
   approvals: [],
   runs: [],
   agents: [],
+  providers: [],
   audit: [],
   loading: true,
 };
@@ -79,7 +82,7 @@ function useDashboard(): {
 
   const refresh = async (): Promise<void> => {
     try {
-      const [pulse, clients, projects, opportunities, approvals, runs, agents, audit] =
+      const [pulse, clients, projects, opportunities, approvals, runs, agents, providers, audit] =
         await Promise.all([
           Api.pulse(),
           Api.clients(),
@@ -88,6 +91,7 @@ function useDashboard(): {
           Api.approvals(),
           Api.runs(),
           Api.agents(),
+          Api.providers(),
           Api.audit(20),
         ]);
       setState({
@@ -98,6 +102,7 @@ function useDashboard(): {
         approvals,
         runs,
         agents,
+        providers,
         audit,
         loading: false,
       });
@@ -168,7 +173,7 @@ function StatusPill({
   );
 }
 
-type AdaptiveMode = "portfolio" | "today" | "goals";
+type AdaptiveMode = "portfolio" | "today" | "goals" | "settings";
 
 function Header({
   pulse,
@@ -186,7 +191,7 @@ function Header({
     year: "numeric",
   });
   const time = now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  const modes: AdaptiveMode[] = ["portfolio", "today", "goals"];
+  const modes: AdaptiveMode[] = ["portfolio", "today", "goals", "settings"];
   return (
     <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-3">
       <div>
@@ -956,6 +961,153 @@ function TodayView({ state }: { state: DashboardState }) {
   );
 }
 
+function SettingsView({
+  providers,
+  onProviderLogin,
+  onProviderLogout,
+}: {
+  providers: ProviderConnection[];
+  onProviderLogin: (input: {
+    provider: string;
+    apiKey?: string;
+    baseUrl?: string;
+    defaultModel?: string;
+  }) => Promise<void>;
+  onProviderLogout: (provider: string, id: string) => Promise<void>;
+}) {
+  const [provider, setProvider] = useState("openai");
+  const [apiKey, setApiKey] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
+  const [defaultModel, setDefaultModel] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | undefined>();
+
+  const connect = async (): Promise<void> => {
+    if (busy) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      await onProviderLogin({
+        provider,
+        ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+        ...(baseUrl.trim() ? { baseUrl: baseUrl.trim() } : {}),
+        ...(defaultModel.trim() ? { defaultModel: defaultModel.trim() } : {}),
+      });
+      setApiKey("");
+      setBaseUrl("");
+      setDefaultModel("");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="rounded-lg border border-neutral-200 bg-white">
+      <div className="border-b border-neutral-200 px-4 py-3">
+        <h2 className="text-sm font-semibold text-neutral-900">Settings</h2>
+        <p className="text-xs text-neutral-500">Providers and local authentication.</p>
+      </div>
+      <div className="grid gap-4 p-4 lg:grid-cols-[1fr_320px]">
+        <div className="overflow-hidden rounded-md border border-neutral-200">
+          <div className="grid grid-cols-[120px_1fr_80px_90px] border-b border-neutral-200 bg-neutral-50 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-neutral-500">
+            <span>Provider</span>
+            <span>Credential</span>
+            <span>Source</span>
+            <span>Status</span>
+          </div>
+          <div className="divide-y divide-neutral-100">
+            {providers.map((item) => (
+              <div
+                key={`${item.provider}:${item.id}`}
+                className="grid grid-cols-[120px_1fr_80px_90px] items-center px-3 py-2 text-xs"
+              >
+                <span className="font-medium text-neutral-900">{item.provider}</span>
+                <span className="truncate text-neutral-600">
+                  {item.id} {item.api_key_masked ? `- ${item.api_key_masked}` : ""}
+                  {item.base_url ? ` - ${item.base_url}` : ""}
+                  {item.default_model ? ` - ${item.default_model}` : ""}
+                </span>
+                <span className="text-neutral-500">{item.source}</span>
+                <span
+                  title={item.reason}
+                  className={classes(
+                    "w-fit rounded-full px-2 py-0.5 text-[10px] font-medium",
+                    item.status === "ok"
+                      ? "bg-ok-500/10 text-ok-600"
+                      : "bg-warn-500/10 text-warn-600",
+                  )}
+                >
+                  {item.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-md border border-neutral-200 p-3">
+          <div className="text-xs font-medium text-neutral-900">Connect provider</div>
+          <div className="mt-3 space-y-2">
+            <select
+              value={provider}
+              onChange={(e) => setProvider(e.target.value)}
+              className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-900 outline-none focus:border-neutral-400"
+            >
+              {["openai", "anthropic", "google", "openrouter", "local", "custom"].map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+            <input
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-900 outline-none focus:border-neutral-400"
+              placeholder="API key"
+              type="password"
+            />
+            <input
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-900 outline-none focus:border-neutral-400"
+              placeholder="Base URL"
+            />
+            <input
+              value={defaultModel}
+              onChange={(e) => setDefaultModel(e.target.value)}
+              className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-900 outline-none focus:border-neutral-400"
+              placeholder="Default model"
+            />
+            <button
+              onClick={() => void connect()}
+              disabled={busy}
+              className="w-full rounded-md bg-neutral-900 px-3 py-2 text-xs font-medium text-white hover:bg-neutral-700 disabled:bg-neutral-100 disabled:text-neutral-400"
+            >
+              {busy ? "Connecting..." : "Connect"}
+            </button>
+            {error && (
+              <div className="rounded-md bg-bad-500/10 px-3 py-2 text-xs text-bad-600">{error}</div>
+            )}
+          </div>
+          <div className="mt-4 space-y-1">
+            {providers
+              .filter((item) => item.source === "auth")
+              .map((item) => (
+                <button
+                  key={`${item.provider}:${item.id}:disconnect`}
+                  onClick={() => void onProviderLogout(item.provider, item.id)}
+                  className="w-full rounded-md border border-neutral-200 px-2 py-1.5 text-left text-[11px] text-neutral-700 hover:bg-neutral-100"
+                >
+                  Disconnect {item.provider}
+                </button>
+              ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function App() {
   const { state, refresh } = useDashboard();
   const [mode, setMode] = useState<AdaptiveMode>("portfolio");
@@ -1013,6 +1165,21 @@ export function App() {
     return result;
   };
 
+  const onProviderLogin = async (input: {
+    provider: string;
+    apiKey?: string;
+    baseUrl?: string;
+    defaultModel?: string;
+  }): Promise<void> => {
+    await Api.providerLogin(input);
+    await refresh();
+  };
+
+  const onProviderLogout = async (provider: string, id: string): Promise<void> => {
+    await Api.providerLogout({ provider, id });
+    await refresh();
+  };
+
   return (
     <div className="flex h-full min-h-screen">
       <Sidebar state={state} />
@@ -1030,6 +1197,13 @@ export function App() {
             )}
             {mode === "today" && <TodayView state={state} />}
             {mode === "goals" && <GoalsView state={state} />}
+            {mode === "settings" && (
+              <SettingsView
+                providers={state.providers}
+                onProviderLogin={onProviderLogin}
+                onProviderLogout={onProviderLogout}
+              />
+            )}
             <OperationsTimeline events={state.audit} />
             <RevenuePulse
               pulse={state.pulse}

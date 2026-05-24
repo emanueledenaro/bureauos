@@ -20,6 +20,12 @@ import {
   type GitHubIssuePublishClient,
 } from "../github/issue-publisher.js";
 import { BusinessReportService } from "../reports/business.js";
+import {
+  ProviderAuthStore,
+  buildConfiguredProviderRouter,
+  type ProviderConnection,
+  type ProviderType,
+} from "@bureauos/providers";
 
 /**
  * Local HTTP API server.
@@ -52,6 +58,20 @@ interface RouteContext {
 }
 
 type RouteHandler = (ctx: RouteContext) => Promise<void> | void;
+
+type ProviderStatus = ProviderConnection & {
+  status: "ok" | "missing";
+  reason?: string;
+};
+
+const PROVIDER_TYPES: ReadonlySet<ProviderType> = new Set([
+  "openai",
+  "anthropic",
+  "google",
+  "local",
+  "openrouter",
+  "custom",
+]);
 
 function ok(res: ServerResponse, payload: unknown, status = 200): void {
   res.statusCode = status;
@@ -109,6 +129,28 @@ function deps(options: ApiServerOptions) {
   };
 }
 
+function parseProvider(value: unknown): ProviderType | undefined {
+  if (typeof value !== "string") return undefined;
+  return PROVIDER_TYPES.has(value as ProviderType) ? (value as ProviderType) : undefined;
+}
+
+function defaultProviderId(provider: ProviderType): string {
+  return `${provider}-default`;
+}
+
+async function providerStatuses(workspaceRoot: string): Promise<ProviderStatus[]> {
+  const { router, connections } = await buildConfiguredProviderRouter(workspaceRoot, process.env);
+  const validations = await router.validate();
+  return connections.map((connection) => {
+    const validation = validations.get(connection.id);
+    return {
+      ...connection,
+      status: validation?.ok ? "ok" : "missing",
+      ...(validation?.reason ? { reason: validation.reason } : {}),
+    };
+  });
+}
+
 const ROUTES: Record<string, RouteHandler> = {
   "GET /health": ({ res }) => ok(res, { ok: true }),
 
@@ -152,6 +194,66 @@ const ROUTES: Record<string, RouteHandler> = {
   "GET /runs": async ({ res, options }) => ok(res, await deps(options).runs.list()),
   "GET /artifacts": async ({ res, options }) => ok(res, await deps(options).artifacts.list()),
   "GET /agents": ({ res }) => ok(res, AGENT_ROLES),
+
+  "GET /providers": async ({ res, options }) => {
+    ok(res, await providerStatuses(options.workspaceRoot));
+  },
+
+  "POST /providers/auth/login": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as {
+      provider?: string;
+      id?: string;
+      apiKey?: string;
+      baseUrl?: string;
+      defaultModel?: string;
+    };
+    const provider = parseProvider(body.provider);
+    if (!provider) {
+      ok(res, { error: "provider required" }, 400);
+      return;
+    }
+    const d = deps(options);
+    const record = await ProviderAuthStore.forWorkspace(options.workspaceRoot).upsert({
+      provider,
+      ...(body.id ? { id: body.id } : {}),
+      ...(body.apiKey ? { apiKey: body.apiKey } : {}),
+      ...(body.baseUrl ? { baseUrl: body.baseUrl } : {}),
+      ...(body.defaultModel ? { defaultModel: body.defaultModel } : {}),
+    });
+    await d.audit.append({
+      actor: "owner",
+      action: "provider.auth.login",
+      target: `${provider}:${record.id}`,
+      result: "ok",
+    });
+    ok(res, await providerStatuses(options.workspaceRoot), 201);
+  },
+
+  "POST /providers/auth/logout": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as {
+      provider?: string;
+      id?: string;
+    };
+    const provider = parseProvider(body.provider);
+    if (!provider) {
+      ok(res, { error: "provider required" }, 400);
+      return;
+    }
+    const id = body.id || defaultProviderId(provider);
+    const removed = await ProviderAuthStore.forWorkspace(options.workspaceRoot).remove(
+      provider,
+      id,
+    );
+    if (removed) {
+      await deps(options).audit.append({
+        actor: "owner",
+        action: "provider.auth.logout",
+        target: `${provider}:${id}`,
+        result: "ok",
+      });
+    }
+    ok(res, { removed, providers: await providerStatuses(options.workspaceRoot) });
+  },
 
   "GET /reports": async ({ res, options }) => {
     const artifacts = await deps(options).artifacts.list();

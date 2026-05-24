@@ -43,6 +43,16 @@ bureau providers list
 
 The command loads stored credentials first, then falls back to environment variables. It reports whether each adapter has enough credentials to run.
 
+## API and Electron
+
+The local API exposes provider auth for the desktop interface:
+
+- `GET /providers`
+- `POST /providers/auth/login`
+- `POST /providers/auth/logout`
+
+ElectronJS Settings uses those endpoints to connect and disconnect providers without exposing raw secrets in renderer responses.
+
 ## Current Runtime State
 
 - OpenAI: SDK-backed `generateText` and `stream`.
@@ -52,7 +62,6 @@ The command loads stored credentials first, then falls back to environment varia
 
 ## Next Steps
 
-- Add ElectronJS Settings for provider connect/disconnect.
 - Route agent prompts through `ProviderRouter`.
 - Add budget-aware and capability-aware routing.
 - Move production-grade secrets to OS keychain as an alternative to the local auth file.

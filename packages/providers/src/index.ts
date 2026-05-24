@@ -14,6 +14,13 @@ export type {
 } from "./types.js";
 
 export { ProviderRouter } from "./router.js";
+export { buildConfiguredProviderRouter } from "./configured-router.js";
+export type {
+  ConfiguredProviderRouter,
+  ProviderConnection,
+  ProviderConnectionSource,
+  ProviderEnv,
+} from "./configured-router.js";
 export { ProviderAuthStore, maskSecret, providerAuthPath } from "./auth-store.js";
 export type { ProviderCredentialInput, ProviderCredentialRecord } from "./auth-store.js";
 

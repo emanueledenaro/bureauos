@@ -73,6 +73,9 @@ importers:
       '@bureauos/memory':
         specifier: workspace:*
         version: link:../memory
+      '@bureauos/providers':
+        specifier: workspace:*
+        version: link:../providers
       js-yaml:
         specifier: ^4.1.0
         version: 4.1.1

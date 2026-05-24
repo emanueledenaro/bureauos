@@ -30,15 +30,9 @@ import {
 } from "@bureauos/core";
 import { LocalMemoryStore } from "@bureauos/memory";
 import {
-  AnthropicAdapter,
-  GoogleAdapter,
-  LocalAdapter,
-  OpenAIAdapter,
-  OpenRouterAdapter,
   ProviderAuthStore,
-  ProviderRouter,
+  buildConfiguredProviderRouter,
   maskSecret,
-  type ProviderCredentialRecord,
   type ProviderType,
 } from "@bureauos/providers";
 import { GITHUB_LABEL_TAXONOMY, OctokitGitHubClient } from "@bureauos/capabilities";
@@ -224,63 +218,6 @@ async function auditProviderAuth(action: string, target: string): Promise<void> 
     target,
     result: "ok",
   });
-}
-
-function registerCredential(router: ProviderRouter, credential: ProviderCredentialRecord): void {
-  const apiKey = credential.apiKey || undefined;
-  const baseUrl = credential.baseUrl || undefined;
-  const defaultModel = credential.defaultModel || undefined;
-  switch (credential.provider) {
-    case "openai":
-      router.register(new OpenAIAdapter(credential.id, { apiKey, baseUrl, defaultModel }));
-      return;
-    case "anthropic":
-      router.register(new AnthropicAdapter(credential.id, { apiKey, defaultModel }));
-      return;
-    case "google":
-      router.register(new GoogleAdapter(credential.id, { apiKey, defaultModel }));
-      return;
-    case "openrouter":
-      router.register(new OpenRouterAdapter(credential.id, { apiKey, defaultModel }));
-      return;
-    case "local":
-      router.register(new LocalAdapter(credential.id, { baseUrl, defaultModel }));
-      return;
-    case "custom":
-      router.register(new OpenAIAdapter(credential.id, { apiKey, baseUrl, defaultModel }));
-      return;
-  }
-}
-
-async function buildProviderRouter(): Promise<{
-  router: ProviderRouter;
-  stored: ProviderCredentialRecord[];
-}> {
-  const stored = await providerAuthStore().list();
-  const router = new ProviderRouter();
-  for (const credential of stored) registerCredential(router, credential);
-  const hasStored = (provider: ProviderType) =>
-    stored.some((credential) => credential.provider === provider);
-  if (!hasStored("openai")) {
-    router.register(new OpenAIAdapter("openai-default", { apiKey: process.env["OPENAI_API_KEY"] }));
-  }
-  if (!hasStored("anthropic")) {
-    router.register(
-      new AnthropicAdapter("anthropic-default", { apiKey: process.env["ANTHROPIC_API_KEY"] }),
-    );
-  }
-  if (!hasStored("google")) {
-    router.register(new GoogleAdapter("google-default", { apiKey: process.env["GOOGLE_API_KEY"] }));
-  }
-  if (!hasStored("openrouter")) {
-    router.register(
-      new OpenRouterAdapter("openrouter-default", { apiKey: process.env["OPENROUTER_API_KEY"] }),
-    );
-  }
-  if (!hasStored("local")) {
-    router.register(new LocalAdapter("local-default", { baseUrl: process.env["LOCAL_MODEL_URL"] }));
-  }
-  return { router, stored };
 }
 
 // --- Handlers ---
@@ -921,7 +858,7 @@ const handleAuthLogout: Handler = async (args) => {
 
 const handleProvidersList: Handler = async () => {
   const config = await loadWorkspaceConfig(process.cwd()).catch(() => defaultConfig("freelancer"));
-  const { router, stored } = await buildProviderRouter();
+  const { router, connections } = await buildConfiguredProviderRouter(process.cwd(), process.env);
   const validations = await router.validate();
   process.stdout.write(
     `Configured for: ${config.supreme_coordinator.provider} (${config.supreme_coordinator.model})\n\n`,
@@ -929,7 +866,8 @@ const handleProvidersList: Handler = async () => {
   for (const adapter of router.list()) {
     const v = validations.get(adapter.id);
     const status = v?.ok ? "OK" : `MISSING (${v?.reason ?? ""})`;
-    const source = stored.some((record) => record.id === adapter.id) ? "auth" : "env";
+    const connection = connections.find((record) => record.id === adapter.id);
+    const source = connection?.source ?? "env";
     process.stdout.write(
       `${adapter.type.padEnd(12)}  ${adapter.id.padEnd(22)}  ${source.padEnd(5)}  ${status}\n`,
     );

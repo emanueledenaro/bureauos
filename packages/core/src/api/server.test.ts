@@ -208,6 +208,51 @@ describe("API server", () => {
     expect(audit).toContain("project.dispatch.completed");
   });
 
+  it("connects and disconnects provider auth without leaking secrets to the API response", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const login = await fetch(`${server.url}/providers/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        provider: "openai",
+        apiKey: "sk-test-provider-secret",
+        defaultModel: "gpt-5",
+      }),
+    });
+
+    expect(login.status).toBe(201);
+    const loginBody = (await login.json()) as Array<{
+      provider: string;
+      source: string;
+      api_key_masked: string;
+      default_model: string;
+    }>;
+    const openai = loginBody.find((provider) => provider.provider === "openai");
+    expect(openai?.source).toBe("auth");
+    expect(openai?.api_key_masked).toBe("sk-t...cret");
+    expect(JSON.stringify(loginBody)).not.toContain("sk-test-provider-secret");
+
+    const providers = await fetch(`${server.url}/providers`);
+    expect(providers.status).toBe(200);
+    const providerBody = (await providers.json()) as Array<{ provider: string; source: string }>;
+    expect(providerBody.find((provider) => provider.provider === "openai")?.source).toBe("auth");
+
+    const logout = await fetch(`${server.url}/providers/auth/logout`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ provider: "openai" }),
+    });
+    expect(logout.status).toBe(200);
+    const logoutBody = (await logout.json()) as { removed: boolean };
+    expect(logoutBody.removed).toBe(true);
+
+    const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(audit).toContain("provider.auth.login");
+    expect(audit).toContain("provider.auth.logout");
+    expect(audit).not.toContain("sk-test-provider-secret");
+  });
+
   it("rejects GitHub issue creation when no API GitHub client is configured", async () => {
     server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
 

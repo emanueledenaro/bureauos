@@ -161,7 +161,7 @@ Goal: real model calls behind a provider-agnostic interface. The router selects 
 - [x] Implement the router with default + fallback chains.
 - [x] Add a `bureau providers list` CLI command.
 - [x] Add an OpenCode-style auth store and commands (`bureau auth login/list/logout`) for provider credentials.
-- [ ] Add provider connection management in ElectronJS Settings.
+- [x] Add provider connection management in ElectronJS Settings.
 - [ ] Wire real SDK calls (`generateText`, `stream`) for each adapter.
 - [ ] Add budget-aware and capability-aware routing.
 - [ ] Add OS keychain integration as an alternative credential source.
@@ -208,7 +208,7 @@ Goal: a local web app that visualizes kernel state, shaped like [docs/ui-referen
 ### 4.2 Local API Server
 
 - [x] Local HTTP server in `@bureauos/core` (node:http) exposing the kernel surfaces.
-- [x] Endpoints: `/company-pulse`, `/clients`, `/projects`, `/opportunities`, `/approvals`, `/runs`, `/agents`, `/audit`, `/approvals/resolve`, `/reports`, `/health`.
+- [x] Endpoints: `/company-pulse`, `/clients`, `/projects`, `/opportunities`, `/approvals`, `/runs`, `/agents`, `/providers`, `/audit`, `/approvals/resolve`, `/reports`, `/health`.
 - [x] CORS open for localhost during development.
 - [x] Token-based auth path (set `token` in options to enable).
 - [x] Implement Server-Sent Events for live timeline streaming.
