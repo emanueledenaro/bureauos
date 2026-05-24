@@ -92,8 +92,36 @@ function useDashboard(): {
 
   useEffect(() => {
     void refresh();
-    const t = setInterval(() => void refresh(), 8000);
-    return () => clearInterval(t);
+    const t = setInterval(() => void refresh(), 15000);
+
+    let es: EventSource | undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const base = await (window.bureau ? window.bureau.apiUrl() : Promise.resolve("http://127.0.0.1:3737"));
+        if (cancelled || !base) return;
+        es = new EventSource(`${base}/events`);
+        es.addEventListener("audit", (ev) => {
+          try {
+            const event = JSON.parse((ev as MessageEvent).data) as AuditEvent;
+            setState((s) => ({ ...s, audit: [...s.audit, event].slice(-50) }));
+          } catch {
+            // ignore malformed events
+          }
+        });
+        es.onerror = () => {
+          // EventSource auto-retries; nothing to do here.
+        };
+      } catch {
+        // SSE unavailable; polling keeps the dashboard fresh.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+      es?.close();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

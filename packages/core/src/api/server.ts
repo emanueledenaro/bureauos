@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { readFile } from "node:fs/promises";
+import { readFile, stat, open } from "node:fs/promises";
 import { URL } from "node:url";
 import type { BureauConfig } from "../config/schema.js";
 import { workspacePaths } from "../paths.js";
@@ -145,6 +145,65 @@ const ROUTES: Record<string, RouteHandler> = {
     } catch {
       ok(res, []);
     }
+  },
+
+  "GET /events": async ({ res, options }) => {
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.write("retry: 5000\n\n");
+
+    const auditPath = workspacePaths(options.workspaceRoot).auditLog;
+    let offset = 0;
+    let buffer = "";
+    try {
+      const s = await stat(auditPath);
+      offset = s.size;
+    } catch {
+      offset = 0;
+    }
+
+    const heartbeat = setInterval(() => res.write(": heartbeat\n\n"), 25_000);
+    const poll = setInterval(async () => {
+      try {
+        const s = await stat(auditPath);
+        if (s.size <= offset) return;
+        const fh = await open(auditPath, "r");
+        try {
+          const length = s.size - offset;
+          const buf = Buffer.alloc(length);
+          await fh.read(buf, 0, length, offset);
+          offset = s.size;
+          buffer += buf.toString("utf8");
+        } finally {
+          await fh.close();
+        }
+        let nl = buffer.indexOf("\n");
+        while (nl >= 0) {
+          const line = buffer.slice(0, nl).trim();
+          buffer = buffer.slice(nl + 1);
+          nl = buffer.indexOf("\n");
+          if (!line) continue;
+          try {
+            const parsed = JSON.parse(line);
+            res.write(`event: audit\ndata: ${JSON.stringify(parsed)}\n\n`);
+          } catch {
+            res.write(`event: raw\ndata: ${JSON.stringify({ raw: line })}\n\n`);
+          }
+        }
+      } catch {
+        // Log file may not exist yet; ignore until the first event lands.
+      }
+    }, 1000);
+
+    const teardown = () => {
+      clearInterval(heartbeat);
+      clearInterval(poll);
+    };
+    res.on("close", teardown);
+    res.on("error", teardown);
   },
 
   "POST /approvals/resolve": async ({ res, options, req }) => {
