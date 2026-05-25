@@ -57,6 +57,17 @@ export type { ApprovalRecord, ApprovalStatus, CreateApprovalInput } from "./regi
 export { CompanyRegistry } from "./registries/company.js";
 export type { CompanyRecord } from "./registries/company.js";
 
+// Client intelligence
+export { ClientIntelligenceService } from "./clients/intelligence.js";
+export type {
+  ClientAccountRisk,
+  ClientIntelligenceDeps,
+  ClientIntelligenceItem,
+  ClientIntelligenceSummary,
+  ClientOpportunitySnapshot,
+  ClientProjectSnapshot,
+} from "./clients/intelligence.js";
+
 // Memory helpers
 export { appendDailyNote } from "./memory/daily.js";
 export { appendDecision } from "./memory/decisions.js";

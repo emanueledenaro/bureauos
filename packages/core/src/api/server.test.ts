@@ -196,6 +196,43 @@ describe("API server", () => {
     expect(audit).toContain("growth.memory.updated");
   });
 
+  it("exposes client intelligence for the ElectronJS clients page", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    await fetch(`${server.url}/coordinator/intake`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        clientName: "Pizzeria Aurora",
+        message: "Ho parlato con una pizzeria: vuole sito con prenotazioni.",
+        expectedValue: 4500,
+        expectedMargin: 40,
+      }),
+    });
+
+    const response = await fetch(`${server.url}/clients/intelligence`);
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      totals: { clients: number; pipeline_value: number };
+      clients: Array<{
+        client: { slug: string };
+        revenue: { pipeline_value: number };
+        delivery: { projects_total: number };
+        memory_paths: { profile: string };
+      }>;
+    };
+    expect(body.totals.clients).toBe(1);
+    expect(body.totals.pipeline_value).toBe(4500);
+    expect(body.clients[0]).toMatchObject({
+      client: { slug: "pizzeria-aurora" },
+      revenue: { pipeline_value: 4500 },
+      delivery: { projects_total: 1 },
+      memory_paths: { profile: "clients/pizzeria-aurora/CLIENT.md" },
+    });
+    expect(JSON.stringify(body)).not.toContain(dir);
+  });
+
   it("persists coordinator message history for the ElectronJS chat", async () => {
     server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
 

@@ -4,6 +4,7 @@ import {
   ArtifactStore,
   AuditLog,
   BusinessReportService,
+  ClientIntelligenceService,
   ClientRegistry,
   ConfigError,
   CoordinatorIntakeService,
@@ -62,6 +63,7 @@ Memory:
 Registries:
   client create --name <n> [--status s] [--industry i]
   client list
+  client intelligence                       Show value, delivery, and relationship memory per client
   project create --name <n> --client <slug> [--status s] [--repo url] [--stack s] [--manager-agent id]
   project dispatch --project <slug> [--type feature] [--scope s]
   project list
@@ -400,6 +402,24 @@ const handleClientList: Handler = async () => {
   }
   for (const c of all) {
     process.stdout.write(`${c.id}  ${c.slug.padEnd(24)}  ${c.status.padEnd(10)}  ${c.name}\n`);
+  }
+  return 0;
+};
+
+const handleClientIntelligence: Handler = async () => {
+  const summary = await new ClientIntelligenceService(process.cwd()).summarize();
+  if (summary.clients.length === 0) {
+    process.stdout.write("(no clients)\n");
+    return 0;
+  }
+  process.stdout.write(
+    `clients: ${summary.totals.clients} | pipeline: ${summary.totals.pipeline_value} | won: ${summary.totals.won_value} | follow-ups due: ${summary.totals.follow_ups_due}\n`,
+  );
+  for (const item of summary.clients) {
+    process.stdout.write(
+      `${item.client.slug.padEnd(24)}  ${item.risk.padEnd(14)}  pipeline=${String(item.revenue.pipeline_value).padEnd(8)}  won=${String(item.revenue.won_value).padEnd(8)}  projects=${item.delivery.projects_total}\n`,
+    );
+    process.stdout.write(`  next: ${item.next_action}\n`);
   }
   return 0;
 };
@@ -1012,7 +1032,11 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
   intake: handleIntake,
   config: { validate: handleConfigValidate },
   memory: { search: handleMemorySearch },
-  client: { create: handleClientCreate, list: handleClientList },
+  client: {
+    create: handleClientCreate,
+    list: handleClientList,
+    intelligence: handleClientIntelligence,
+  },
   project: {
     create: handleProjectCreate,
     dispatch: handleProjectDispatch,

@@ -28,6 +28,7 @@ Every major capability described in the docs must become one of:
 | Supreme Coordinator as only owner-facing agent | `CoordinatorIntakeService`, `CoordinatorChatService`, `CoordinatorGlobalMemoryService`, ElectronJS Coordinator panel, `bureau intake`, `POST /coordinator/intake`, `GET/POST /coordinator/messages`, `GET /coordinator/memory` | partial |
 | Company memory | `.bureauos/memory/COMPANY.md`, `ROOT.md`, daily notes, decisions | partial |
 | Client memory | `ClientRegistry`, per-client memory files | implemented |
+| Client account intelligence | `ClientIntelligenceService`, `/clients/intelligence`, `bureau client intelligence`, ElectronJS Clients page | implemented |
 | Project memory | `ProjectRegistry`, per-project memory files | implemented |
 | Opportunity pipeline | `OpportunityRegistry`, revenue pulse | partial |
 | Run lifecycle | `RunEngine` | partial |
@@ -56,6 +57,7 @@ Every major capability described in the docs must become one of:
 | --- | --- | --- |
 | ElectronJS desktop app | `@bureauos/interface` | partial |
 | Portfolio view | React renderer | partial |
+| Clients view | `ClientIntelligenceService` backed account cards with pipeline, won value, delivery risk, follow-ups, and memory paths | implemented |
 | Today view | React renderer | partial |
 | Goals view | React renderer | partial |
 | Revenue pulse | React renderer + `/company-pulse` | partial |

@@ -157,6 +157,76 @@ export interface GrowthMemorySummary {
   missing_sections: string[];
   sections: GrowthMemorySection[];
 }
+export type ClientAccountRisk = "blocked" | "follow_up_due" | "proposal" | "active" | "cold";
+export interface ClientProjectSnapshot {
+  id: string;
+  slug: string;
+  name: string;
+  status: string;
+  repository: string;
+  stack: string;
+  updated?: string;
+}
+export interface ClientOpportunitySnapshot {
+  id: string;
+  title: string;
+  status: string;
+  expected_value: number;
+  expected_margin: number;
+  next_action: string;
+  updated?: string;
+}
+export interface ClientIntelligenceItem {
+  client: ClientRecord;
+  revenue: {
+    pipeline_value: number;
+    won_value: number;
+    lost_value: number;
+    average_expected_margin: number;
+    open_opportunities: number;
+    won_opportunities: number;
+    stalled_opportunities: number;
+  };
+  delivery: {
+    projects_total: number;
+    active_projects: number;
+    blocked_projects: number;
+    delivered_projects: number;
+    repositories_linked: number;
+    pending_approvals: number;
+  };
+  relationship: {
+    last_client_message_at: string;
+    last_owner_response_at: string;
+    next_follow_up_at: string;
+    follow_up_due: boolean;
+  };
+  risk: ClientAccountRisk;
+  next_action: string;
+  latest_activity_at: string;
+  memory_paths: {
+    profile: string;
+    projects: string;
+    revenue: string;
+    relationship: string;
+    opportunities: string;
+    risks: string;
+  };
+  projects: ClientProjectSnapshot[];
+  opportunities: ClientOpportunitySnapshot[];
+}
+export interface ClientIntelligenceSummary {
+  generated_at: string;
+  totals: {
+    clients: number;
+    pipeline_value: number;
+    won_value: number;
+    active_projects: number;
+    blocked_projects: number;
+    follow_ups_due: number;
+  };
+  clients: ClientIntelligenceItem[];
+}
 export interface ApprovalRecord {
   id: string;
   action: string;
@@ -433,6 +503,7 @@ export interface ProviderOAuthCallbackResult {
 export const Api = {
   pulse: () => api<CompanyPulse>("/company-pulse"),
   clients: () => api<ClientRecord[]>("/clients"),
+  clientIntelligence: () => api<ClientIntelligenceSummary>("/clients/intelligence"),
   projects: () => api<ProjectRecord[]>("/projects"),
   projectOwnership: () => api<ProjectOwnershipRecord[]>("/project-ownership"),
   opportunities: () => api<OpportunityRecord[]>("/opportunities"),

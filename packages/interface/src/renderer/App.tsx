@@ -8,6 +8,8 @@ import {
   type BusinessReportResult,
   type CapabilityDefinition,
   type CoordinatorAttachmentInput,
+  type ClientIntelligenceItem,
+  type ClientIntelligenceSummary,
   type ClientRecord,
   type CompanyPulse,
   type CoordinatorChatResult,
@@ -75,6 +77,7 @@ function formatBytes(value: number): string {
 interface DashboardState {
   pulse?: CompanyPulse;
   clients: ClientRecord[];
+  clientIntelligence?: ClientIntelligenceSummary;
   projects: ProjectRecord[];
   projectOwnership: ProjectOwnershipRecord[];
   opportunities: OpportunityRecord[];
@@ -174,6 +177,7 @@ function useDashboard(): { state: DashboardState; refresh: () => Promise<void> }
       const [
         pulse,
         clients,
+        clientIntelligence,
         projects,
         projectOwnership,
         opportunities,
@@ -191,6 +195,7 @@ function useDashboard(): { state: DashboardState; refresh: () => Promise<void> }
       ] = await Promise.all([
         Api.pulse(),
         Api.clients(),
+        Api.clientIntelligence(),
         Api.projects(),
         Api.projectOwnership(),
         Api.opportunities(),
@@ -209,6 +214,7 @@ function useDashboard(): { state: DashboardState; refresh: () => Promise<void> }
       setState({
         pulse,
         clients,
+        clientIntelligence,
         projects,
         projectOwnership,
         opportunities,
@@ -343,6 +349,13 @@ function opportunityTone(status: string): Tone {
     return "amber";
   }
   if (status === "won" || status === "qualified") return "green";
+  return "muted";
+}
+
+function clientRiskTone(risk: string): Tone {
+  if (risk === "blocked") return "red";
+  if (risk === "follow_up_due" || risk === "proposal") return "amber";
+  if (risk === "active") return "green";
   return "muted";
 }
 
@@ -876,6 +889,15 @@ function MetricTile({ label, value, detail }: { label: string; value: string; de
       <div className="text-[10px] font-medium uppercase text-neutral-500">{label}</div>
       <div className="mt-2 text-2xl font-semibold text-neutral-50">{value}</div>
       <div className="mt-2 text-[11px] text-neutral-500">{detail}</div>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-neutral-800 bg-neutral-900/40 p-2">
+      <div className="truncate text-[9px] uppercase text-neutral-600">{label}</div>
+      <div className="mt-1 truncate text-[11px] font-semibold text-neutral-100">{value}</div>
     </div>
   );
 }
@@ -1604,7 +1626,7 @@ function TodayView({ state }: { state: DashboardState }) {
   const blocked = state.projects.filter((project) => project.status === "blocked").length;
   return (
     <SectionShell title="Today" description="A real operating view of what needs attention now.">
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <MetricTile
           label="Approvals waiting"
           value={String(state.approvals.length)}
@@ -1875,54 +1897,146 @@ function GrowthWorkspace({ state }: { state: DashboardState }) {
 }
 
 function ClientsWorkspace({ state }: { state: DashboardState }) {
+  const intelligence = state.clientIntelligence;
+  const clients = intelligence?.clients ?? [];
   return (
     <SectionShell
       title="Clients"
       description="Client memory, project history, and commercial value."
     >
       <div className="grid grid-cols-3 gap-4">
-        <MetricTile label="Clients" value={String(state.clients.length)} detail="Memory profiles" />
         <MetricTile
-          label="Active"
-          value={String(state.clients.filter((client) => client.status === "active").length)}
-          detail="Active status"
+          label="Clients"
+          value={String(intelligence?.totals.clients ?? state.clients.length)}
+          detail="Memory profiles"
         />
         <MetricTile
-          label="Industries"
-          value={String(new Set(state.clients.map((client) => client.industry)).size)}
-          detail="Distinct categories"
+          label="Pipeline"
+          value={formatMoney(intelligence?.totals.pipeline_value ?? 0)}
+          detail="Open opportunity value"
+        />
+        <MetricTile
+          label="Won value"
+          value={formatMoney(intelligence?.totals.won_value ?? 0)}
+          detail="Closed won opportunities"
         />
       </div>
-      <div className="mt-5 divide-y divide-neutral-800 rounded-md border border-neutral-800">
-        {state.clients.map((client) => (
-          <div
-            key={client.id}
-            className="grid grid-cols-[1fr_120px_120px_140px] items-center gap-4 px-4 py-3 text-[11px]"
-          >
-            <div>
-              <div className="font-medium text-neutral-50">{client.name}</div>
-              <div className="mt-1 text-neutral-500">{client.slug}</div>
-            </div>
-            <span>{client.industry}</span>
-            <StatusPill
-              value={formatLabel(client.status)}
-              tone={client.status === "active" ? "green" : "muted"}
-            />
-            <span className="text-neutral-500">
-              {state.projects.filter((project) => project.client_id === client.id).length} projects
-            </span>
-          </div>
+      <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-3">
+        <MetricTile
+          label="Active projects"
+          value={String(intelligence?.totals.active_projects ?? 0)}
+          detail="Across all clients"
+        />
+        <MetricTile
+          label="Blocked projects"
+          value={String(intelligence?.totals.blocked_projects ?? 0)}
+          detail="Client delivery risk"
+        />
+        <MetricTile
+          label="Follow-ups due"
+          value={String(intelligence?.totals.follow_ups_due ?? 0)}
+          detail="Relationship memory"
+        />
+      </div>
+      <div className="mt-5 grid grid-cols-1 gap-3 2xl:grid-cols-2">
+        {clients.map((item) => (
+          <ClientAccountCard key={item.client.id} item={item} />
         ))}
-        {state.clients.length === 0 ? (
-          <div className="p-4">
-            <EmptyState
-              title="No clients yet"
-              description="A client memory profile is created from the coordinator intake."
-            />
-          </div>
+        {clients.length === 0 ? (
+          <EmptyState
+            title="No clients yet"
+            description="A client memory profile is created from the coordinator intake."
+          />
         ) : null}
       </div>
     </SectionShell>
+  );
+}
+
+function ClientAccountCard({ item }: { item: ClientIntelligenceItem }) {
+  const topProject = item.projects[0];
+  const topOpportunity = item.opportunities[0];
+  const memoryPaths = [
+    item.memory_paths.profile,
+    item.memory_paths.revenue,
+    item.memory_paths.relationship,
+    item.memory_paths.risks,
+  ];
+
+  return (
+    <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="truncate text-[13px] font-semibold text-neutral-50">
+            {item.client.name}
+          </div>
+          <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-neutral-500">
+            <span>{item.client.industry}</span>
+            <span>{item.client.slug}</span>
+            <span>
+              {item.latest_activity_at
+                ? `Updated ${timeAgo(item.latest_activity_at)}`
+                : "No activity"}
+            </span>
+          </div>
+        </div>
+        <StatusPill value={formatLabel(item.risk)} tone={clientRiskTone(item.risk)} />
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-2 xl:grid-cols-4">
+        <MiniStat label="Pipeline" value={formatMoney(item.revenue.pipeline_value)} />
+        <MiniStat label="Won" value={formatMoney(item.revenue.won_value)} />
+        <MiniStat label="Projects" value={String(item.delivery.projects_total)} />
+        <MiniStat label="Open opps" value={String(item.revenue.open_opportunities)} />
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3 text-[10px]">
+        <div className="rounded-md border border-neutral-800 bg-neutral-900/40 p-3">
+          <div className="text-neutral-600">Delivery</div>
+          <div className="mt-2 text-neutral-300">
+            {item.delivery.active_projects} active · {item.delivery.blocked_projects} blocked
+          </div>
+          <div className="mt-1 text-neutral-500">
+            {item.delivery.repositories_linked} repos · {item.delivery.pending_approvals} approvals
+          </div>
+          {topProject ? (
+            <div className="mt-3 truncate text-neutral-500">
+              {topProject.name} · {formatLabel(topProject.status)}
+            </div>
+          ) : null}
+        </div>
+        <div className="rounded-md border border-neutral-800 bg-neutral-900/40 p-3">
+          <div className="text-neutral-600">Revenue</div>
+          <div className="mt-2 text-neutral-300">
+            {Math.round(item.revenue.average_expected_margin)}% average margin
+          </div>
+          <div className="mt-1 text-neutral-500">
+            {item.revenue.won_opportunities} won · {item.revenue.stalled_opportunities} stalled
+          </div>
+          {topOpportunity ? (
+            <div className="mt-3 truncate text-neutral-500">
+              {topOpportunity.title} · {formatMoney(topOpportunity.expected_value)}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-md border border-neutral-800 bg-neutral-900/40 p-3">
+        <div className="text-[10px] text-neutral-600">Next action</div>
+        <div className="mt-1 text-[11px] leading-relaxed text-neutral-300">{item.next_action}</div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {memoryPaths.map((path) => (
+          <span
+            key={path}
+            className="max-w-full truncate rounded border border-neutral-800 px-2 py-1 text-[10px] text-neutral-500"
+          >
+            {path}
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 

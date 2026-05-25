@@ -209,6 +209,7 @@ Goal: a local web app that visualizes kernel state, shaped like [docs/ui-referen
 
 - [x] Local HTTP server in `@bureauos/core` (node:http) exposing the kernel surfaces.
 - [x] Endpoints: `/company-pulse`, `/clients`, `/projects`, `/project-ownership`, `/opportunities`, `/approvals`, `/approvals/resolved`, `/runs`, `/agents`, `/providers`, `/audit`, `/approvals/resolve`, `/reports`, `/health`.
+- [x] Add `/clients/intelligence` for account-level value, delivery, relationship, and memory-path summaries.
 - [x] CORS open for localhost during development.
 - [x] Token-based auth path (set `token` in options to enable).
 - [x] Implement Server-Sent Events for live timeline streaming.

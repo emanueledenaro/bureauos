@@ -28,6 +28,7 @@ import {
   type GitHubIssuePublishClient,
 } from "../github/issue-publisher.js";
 import { BusinessReportService } from "../reports/business.js";
+import { ClientIntelligenceService } from "../clients/intelligence.js";
 import { GrowthMemoryService } from "../growth/memory.js";
 import { GitHubWebhookIngestionService } from "../github/webhook-ingestion.js";
 import { GitHubSignalTriggerService } from "../github/signal-triggers.js";
@@ -369,6 +370,8 @@ const ROUTES: Record<string, RouteHandler> = {
   },
 
   "GET /clients": async ({ res, options }) => ok(res, await deps(options).clients.list()),
+  "GET /clients/intelligence": async ({ res, options }) =>
+    ok(res, await new ClientIntelligenceService(options.workspaceRoot).summarize()),
   "GET /projects": async ({ res, options }) => ok(res, await deps(options).projects.list()),
   "GET /project-ownership": async ({ res, options }) =>
     ok(res, await deps(options).projects.listOwnership()),

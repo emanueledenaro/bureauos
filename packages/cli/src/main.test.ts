@@ -126,6 +126,27 @@ describe("bureau cli", () => {
     expect(bodies.some((body) => body.includes("Cross-Project Executive Report"))).toBe(true);
   });
 
+  it("prints client intelligence from real registries", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+    await main([
+      "node",
+      "bureau",
+      "intake",
+      "--client",
+      "Pizzeria Aurora",
+      "--message",
+      "Ho parlato con una pizzeria: vuole sito con prenotazioni.",
+      "--value",
+      "4500",
+      "--margin",
+      "40",
+    ]);
+
+    const code = await main(["node", "bureau", "client", "intelligence"]);
+
+    expect(code).toBe(0);
+  });
+
   it("reads and updates growth memory from CLI", async () => {
     await main(["node", "bureau", "init", "--name", "BOS"]);
 
