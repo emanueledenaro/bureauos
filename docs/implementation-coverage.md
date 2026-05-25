@@ -63,6 +63,7 @@ Every major capability described in the docs must become one of:
 | Revenue pulse | React renderer + `/company-pulse` | partial |
 | Live operations timeline | SSE `/events` + audit log | implemented |
 | Supreme Coordinator chat | React renderer + `/coordinator/messages`, workspace-backed chat history, memory packet assembly, provider-router-backed answer path with deterministic local fallback | partial |
+| Memory view | React renderer + `GET /coordinator/memory`, audited global-memory packet, query hits, root memory preview, and relative memory paths | implemented |
 | Approvals panel and page | React renderer + `/approvals`, `/approvals/resolved`, `/approvals/resolve`, pending rail, filtered history page | implemented |
 | Reports generation | `BusinessReportService`, `bureau report generate`, `/reports/generate` | implemented |
 | Cross-project executive reports | `cross-project-executive-report` artifact from project, ownership, approval, run, and pipeline registries | implemented |

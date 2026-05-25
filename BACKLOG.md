@@ -277,6 +277,12 @@ Goal: a local web app that visualizes kernel state, shaped like [docs/ui-referen
 - [ ] KPI strip becomes a horizontally scrollable row.
 - [ ] Agent Layer collapses into a menu.
 
+### 4.11 Memory Page
+
+- [x] Add an ElectronJS Memory page backed by the audited Supreme Coordinator global-memory packet.
+- [x] Show root memory preview, ranked hits, relative paths, and the audit event for each memory search.
+- [x] Keep memory search manual so dashboard polling does not generate repeated global-memory audit events.
+
 ## Phase 5 — Project Teams (v0.5)
 
 Goal: real multi-project support with isolated project memory and project-manager agents.

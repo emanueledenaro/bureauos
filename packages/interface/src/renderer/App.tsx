@@ -13,6 +13,7 @@ import {
   type ClientRecord,
   type CompanyPulse,
   type CoordinatorChatResult,
+  type CoordinatorGlobalMemoryPacket,
   type CoordinatorMessageRecord,
   type GrowthMemorySummary,
   type OpportunityRecord,
@@ -108,6 +109,7 @@ interface ChatAttachment {
 type ChatMessage = CoordinatorMessageRecord;
 
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const DEFAULT_MEMORY_QUERY = "company clients projects revenue growth";
 
 function isTextAttachment(file: File): boolean {
   return (
@@ -2209,9 +2211,76 @@ function ApprovalsWorkspace({
 }
 
 function MemoryWorkspace({ state }: { state: DashboardState }) {
+  const [query, setQuery] = useState(DEFAULT_MEMORY_QUERY);
+  const [packet, setPacket] = useState<CoordinatorGlobalMemoryPacket | undefined>();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | undefined>();
+  const search = async (nextQuery = query): Promise<void> => {
+    const normalized = nextQuery.trim();
+    if (!normalized || loading) return;
+    setLoading(true);
+    setError(undefined);
+    try {
+      const result = await Api.coordinatorMemory(normalized, 12);
+      setPacket(result);
+      setQuery(normalized);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    Api.coordinatorMemory(DEFAULT_MEMORY_QUERY, 12)
+      .then((result) => {
+        if (!cancelled) setPacket(result);
+      })
+      .catch((e) => {
+        if (!cancelled) setError((e as Error).message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const rootPreview = packet?.rootMemory
+    .split("\n")
+    .filter((line) => line.trim())
+    .slice(0, 10)
+    .join("\n");
+
   return (
-    <SectionShell title="Memory" description="The durable company memory written by the kernel.">
-      <div className="grid grid-cols-4 gap-3">
+    <SectionShell
+      title="Memory"
+      description="The durable company memory written by the kernel."
+      action={
+        <div className="flex max-w-[520px] flex-1 justify-end gap-2">
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void search();
+            }}
+            className="h-9 w-full max-w-80 rounded-md border border-neutral-800 bg-neutral-950 px-3 text-[11px] text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-neutral-700"
+            placeholder="Search memory"
+          />
+          <button
+            onClick={() => void search()}
+            disabled={loading || !query.trim()}
+            className="h-9 rounded-md border border-neutral-800 bg-neutral-950 px-4 text-[11px] font-medium text-neutral-100 disabled:text-neutral-600"
+          >
+            {loading ? "Searching" : "Search"}
+          </button>
+        </div>
+      }
+    >
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-4">
         <MetricTile label="Clients" value={String(state.clients.length)} detail="Profiles" />
         <MetricTile
           label="Projects"
@@ -2229,7 +2298,128 @@ function MemoryWorkspace({ state }: { state: DashboardState }) {
           detail="Recent stream"
         />
       </div>
-      <div className="mt-5 grid grid-cols-3 gap-3">
+
+      <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-[12px] font-semibold text-neutral-50">
+                Supreme Coordinator Memory Packet
+              </div>
+              <div className="mt-1 text-[10px] text-neutral-500">
+                {packet
+                  ? `${packet.topHits.length} hits · ${timeAgo(packet.generatedAt)}`
+                  : "Waiting for memory packet"}
+              </div>
+            </div>
+            {packet ? <StatusPill value="Audited" tone="green" /> : null}
+          </div>
+          {error ? (
+            <div className="mt-4 rounded-md border border-rose-950 bg-rose-950/20 p-3 text-[11px] text-rose-300">
+              {error}
+            </div>
+          ) : null}
+          {rootPreview ? (
+            <pre className="mt-4 max-h-56 overflow-auto whitespace-pre-wrap rounded-md border border-neutral-800 bg-neutral-900/40 p-3 text-[10px] leading-relaxed text-neutral-400">
+              {rootPreview}
+            </pre>
+          ) : (
+            <div className="mt-4 rounded-md border border-dashed border-neutral-800 p-4">
+              <div className="text-[11px] font-semibold text-neutral-50">
+                No memory packet loaded
+              </div>
+              <div className="mt-1 text-[10px] text-neutral-500">
+                Global memory appears here after the coordinator assembles a packet.
+              </div>
+            </div>
+          )}
+          {packet ? (
+            <div className="mt-4 grid grid-cols-1 gap-2 2xl:grid-cols-2">
+              {packet.topHits.map((hit) => (
+                <div
+                  key={`${hit.path}:${hit.score}`}
+                  className="rounded-md border border-neutral-800 p-3"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="truncate text-[10px] font-semibold text-neutral-300">
+                      {hit.path}
+                    </div>
+                    <span className="text-[9px] text-neutral-600">{hit.score}</span>
+                  </div>
+                  <p className="mt-2 line-clamp-3 text-[10px] leading-relaxed text-neutral-500">
+                    {hit.snippet}
+                  </p>
+                </div>
+              ))}
+              {packet.topHits.length === 0 ? (
+                <div className="rounded-md border border-dashed border-neutral-800 p-4">
+                  <div className="text-[11px] font-semibold text-neutral-50">No memory hits</div>
+                  <div className="mt-1 text-[10px] text-neutral-500">
+                    The query did not match any current workspace memory.
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+          <div className="text-[12px] font-semibold text-neutral-50">Audit Trail</div>
+          <div className="mt-3 space-y-2 text-[10px] text-neutral-500">
+            <div className="flex justify-between gap-3">
+              <span>Actor</span>
+              <span className="truncate text-neutral-300">
+                {packet?.audit.actor ?? "supreme_coordinator"}
+              </span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span>Action</span>
+              <span className="truncate text-neutral-300">
+                {packet?.audit.action ?? "memory.global.search"}
+              </span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span>Result</span>
+              <span
+                className={packet?.audit.result === "ok" ? "text-emerald-400" : "text-neutral-300"}
+              >
+                {packet?.audit.result ?? "pending"}
+              </span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span>Timestamp</span>
+              <span className="truncate text-neutral-300">
+                {packet?.audit.timestamp ? timeAgo(packet.audit.timestamp) : "not loaded"}
+              </span>
+            </div>
+          </div>
+          <div className="mt-4 border-t border-neutral-800 pt-4">
+            <div className="text-[10px] uppercase text-neutral-600">Recent memory artifacts</div>
+            <div className="mt-3 space-y-2">
+              {sortNewest(state.artifacts)
+                .slice(0, 5)
+                .map((artifact) => (
+                  <div
+                    key={artifact.id}
+                    className="rounded-md border border-neutral-800 bg-neutral-900/40 p-3"
+                  >
+                    <div className="truncate text-[10px] font-semibold text-neutral-300">
+                      {formatLabel(artifact.type)}
+                    </div>
+                    <div className="mt-1 truncate text-[10px] text-neutral-600">{artifact.id}</div>
+                  </div>
+                ))}
+              {state.artifacts.length === 0 ? (
+                <div className="rounded-md border border-dashed border-neutral-800 p-3 text-[10px] text-neutral-600">
+                  No artifacts yet.
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-5 grid grid-cols-1 gap-3 xl:grid-cols-3">
         {sortNewest(state.artifacts)
           .slice(0, 9)
           .map((artifact) => (
