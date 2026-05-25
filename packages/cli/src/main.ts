@@ -5,6 +5,7 @@ import {
   ArtifactStore,
   AuditLog,
   BusinessReportService,
+  ClientAccountPlanService,
   ClientIntelligenceService,
   ClientRegistry,
   ConfigError,
@@ -66,6 +67,7 @@ Registries:
   client create --name <n> [--status s] [--industry i]
   client list
   client intelligence                       Show value, delivery, and relationship memory per client
+  client account-plan [--client slug]       Generate client account plan artifacts from intelligence
   project create --name <n> --client <slug> [--status s] [--repo url] [--stack s] [--manager-agent id]
   project dispatch --project <slug> [--type feature] [--scope s]
   project list
@@ -425,6 +427,33 @@ const handleClientIntelligence: Handler = async () => {
       `${item.client.slug.padEnd(24)}  ${item.risk.padEnd(14)}  pipeline=${String(item.revenue.pipeline_value).padEnd(8)}  won=${String(item.revenue.won_value).padEnd(8)}  projects=${item.delivery.projects_total}\n`,
     );
     process.stdout.write(`  next: ${item.next_action}\n`);
+  }
+  return 0;
+};
+
+const handleClientAccountPlan: Handler = async (args) => {
+  const flags = parseFlags(args, {
+    client: { type: "string", alias: "c" },
+    run: { type: "string" },
+  });
+  if (typeof flags === "string") return err(`client account-plan: ${flags}`);
+  let clientId: string | undefined;
+  if (typeof flags.client === "string") {
+    const client = await new ClientRegistry(process.cwd()).get(flags.client);
+    if (!client) return err(`client account-plan: client "${flags.client}" not found`);
+    clientId = client.id;
+  }
+  const result = await new ClientAccountPlanService(process.cwd()).generate({
+    ...(clientId ? { clientId } : {}),
+    ...(typeof flags.run === "string" ? { runId: flags.run } : {}),
+  });
+  process.stdout.write(`bureau: generated ${result.plans.length} client account plan(s)\n`);
+  for (const plan of result.plans) {
+    process.stdout.write(
+      `${plan.id}  ${String(plan.client_name ?? plan.client_id).padEnd(24)}  score=${String(
+        plan.value_score ?? "unknown",
+      ).padEnd(7)}  risk=${String(plan.risk ?? "unknown")}\n`,
+    );
   }
   return 0;
 };
@@ -1193,6 +1222,7 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
     create: handleClientCreate,
     list: handleClientList,
     intelligence: handleClientIntelligence,
+    "account-plan": handleClientAccountPlan,
   },
   project: {
     create: handleProjectCreate,

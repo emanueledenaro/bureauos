@@ -233,6 +233,47 @@ describe("API server", () => {
     expect(JSON.stringify(body)).not.toContain(dir);
   });
 
+  it("generates client account plans for the ElectronJS clients page", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    await fetch(`${server.url}/coordinator/intake`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        clientName: "Pizzeria Aurora",
+        message: "Ho parlato con una pizzeria: vuole sito con prenotazioni.",
+        expectedValue: 4500,
+        expectedMargin: 40,
+      }),
+    });
+
+    const generated = await fetch(`${server.url}/client-account-plans/generate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ clientSlug: "pizzeria-aurora" }),
+    });
+
+    expect(generated.status).toBe(201);
+    const result = (await generated.json()) as {
+      plans: Array<{ type: string; client_name: string; value_score: number }>;
+    };
+    expect(result.plans).toHaveLength(1);
+    expect(result.plans[0]).toMatchObject({
+      type: "client-account-plan",
+      client_name: "Pizzeria Aurora",
+    });
+
+    const listed = await fetch(`${server.url}/client-account-plans`);
+    expect(listed.status).toBe(200);
+    const plans = (await listed.json()) as Array<{ id: string; type: string }>;
+    expect(plans).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: "client-account-plan" })]),
+    );
+
+    const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(audit).toContain("client.account_plan.generated");
+  });
+
   it("persists coordinator message history for the ElectronJS chat", async () => {
     server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
 

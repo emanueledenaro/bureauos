@@ -97,7 +97,7 @@ Every major capability described in the docs must become one of:
 | Proposal drafts | `proposal-brief` artifact | partial |
 | Pricing drafts | `pricing-brief` artifact | partial |
 | Conversion audits | artifact type exists | designed |
-| Client account plans | `ClientAccountPlanService`, `client-account-plan` artifact from real client intelligence | implemented |
+| Client account plans | `ClientAccountPlanService`, `client-account-plan` artifact from real client intelligence, `bureau client account-plan`, `/client-account-plans/generate` | implemented |
 | Paid ads launch | policy-gated, not automated | blocked |
 | Public posting | policy-gated, not automated | blocked |
 

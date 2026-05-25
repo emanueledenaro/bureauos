@@ -29,6 +29,7 @@ import {
 } from "../github/issue-publisher.js";
 import { BusinessReportService } from "../reports/business.js";
 import { ClientIntelligenceService } from "../clients/intelligence.js";
+import { ClientAccountPlanService } from "../clients/account-plans.js";
 import { GrowthMemoryService } from "../growth/memory.js";
 import { GitHubWebhookIngestionService } from "../github/webhook-ingestion.js";
 import { GitHubSignalTriggerService } from "../github/signal-triggers.js";
@@ -378,6 +379,29 @@ const ROUTES: Record<string, RouteHandler> = {
   "GET /clients": async ({ res, options }) => ok(res, await deps(options).clients.list()),
   "GET /clients/intelligence": async ({ res, options }) =>
     ok(res, await new ClientIntelligenceService(options.workspaceRoot).summarize()),
+  "GET /client-account-plans": async ({ res, options }) =>
+    ok(res, await deps(options).artifacts.list({ type: "client-account-plan" })),
+  "POST /client-account-plans/generate": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as {
+      clientId?: string;
+      clientSlug?: string;
+      runId?: string;
+    };
+    let clientId = typeof body.clientId === "string" ? body.clientId : undefined;
+    if (!clientId && typeof body.clientSlug === "string") {
+      const client = await deps(options).clients.get(body.clientSlug);
+      if (!client) {
+        ok(res, { error: "client not found" }, 404);
+        return;
+      }
+      clientId = client.id;
+    }
+    const result = await new ClientAccountPlanService(options.workspaceRoot).generate({
+      ...(clientId ? { clientId } : {}),
+      ...(typeof body.runId === "string" ? { runId: body.runId } : {}),
+    });
+    ok(res, result, 201);
+  },
   "GET /projects": async ({ res, options }) => ok(res, await deps(options).projects.list()),
   "GET /project-ownership": async ({ res, options }) =>
     ok(res, await deps(options).projects.listOwnership()),

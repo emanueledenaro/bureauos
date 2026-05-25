@@ -192,6 +192,42 @@ describe("bureau cli", () => {
     expect(code).toBe(0);
   });
 
+  it("generates client account plans from CLI", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+    await main([
+      "node",
+      "bureau",
+      "intake",
+      "--client",
+      "Pizzeria Aurora",
+      "--message",
+      "Ho parlato con una pizzeria: vuole sito con prenotazioni.",
+      "--value",
+      "4500",
+      "--margin",
+      "40",
+    ]);
+
+    const code = await main([
+      "node",
+      "bureau",
+      "client",
+      "account-plan",
+      "--client",
+      "pizzeria-aurora",
+    ]);
+
+    expect(code).toBe(0);
+    const artifactsDir = join(dir, ".bureauos", "memory", "artifacts");
+    const artifacts = await readdir(artifactsDir);
+    const bodies = await Promise.all(
+      artifacts.map((artifact) => readFile(join(artifactsDir, artifact), "utf8")),
+    );
+    expect(bodies.some((body) => body.includes("# Client Account Plan"))).toBe(true);
+    const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
+    expect(audit).toContain("client.account_plan.generated");
+  });
+
   it("reads and updates growth memory from CLI", async () => {
     await main(["node", "bureau", "init", "--name", "BOS"]);
 
