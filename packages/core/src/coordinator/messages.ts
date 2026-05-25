@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 import { newId } from "../ids.js";
 import { workspacePaths } from "../paths.js";
 import type { CoordinatorIntakeResult } from "./intake.js";
+import { coordinatorIdleAnswer, isLegacyLowContextCoordinatorAnswer } from "./idle.js";
 
 export interface CoordinatorMessageAttachment {
   name: string;
@@ -38,6 +39,18 @@ function parseLine(line: string): CoordinatorMessageRecord | undefined {
   } catch {
     return undefined;
   }
+}
+
+function normalizeMessage(record: CoordinatorMessageRecord): CoordinatorMessageRecord {
+  if (!isLegacyLowContextCoordinatorAnswer(record)) return record;
+  return {
+    ...record,
+    text: coordinatorIdleAnswer(),
+    meta: {
+      ...record.meta,
+      migrated_from: "legacy_low_context_idle_answer",
+    },
+  };
 }
 
 export class CoordinatorMessageStore {
@@ -91,7 +104,8 @@ export class CoordinatorMessageStore {
         .map((line) => line.trim())
         .filter(Boolean)
         .map(parseLine)
-        .filter((record): record is CoordinatorMessageRecord => record !== undefined);
+        .filter((record): record is CoordinatorMessageRecord => record !== undefined)
+        .map(normalizeMessage);
       return messages.slice(-limit);
     } catch {
       return [];

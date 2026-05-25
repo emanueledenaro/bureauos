@@ -79,4 +79,81 @@ describe("CoordinatorChatService", () => {
     expect(result.coordinatorMessage.text.toLowerCase()).not.toContain("pizzeria");
     expect(result.coordinatorMessage.text.toLowerCase()).not.toContain("prenotazioni");
   });
+
+  it("treats small talk as low context and does not ask a provider to improvise", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    let providerWasAsked = false;
+    const fakeProvider: ProviderAdapter = {
+      id: "fake-provider",
+      type: "custom",
+      name: "Fake Provider",
+      async listModels() {
+        return ["fake-model"];
+      },
+      async validateCredentials() {
+        return { ok: true };
+      },
+      async generateText() {
+        providerWasAsked = true;
+        return {
+          model: "fake-model",
+          text: "**Crafting a friendly Italian reply**\n\nI need to respond to the user. Ciao. Sono operativo.",
+        };
+      },
+      async *stream() {
+        yield "unused";
+      },
+    };
+    const service = new CoordinatorChatService(dir, {
+      config: defaultConfig("freelancer"),
+      providerSelector: async () => ({ provider: fakeProvider, model: "fake-model" }),
+    });
+
+    const result = await service.process({
+      source: "test",
+      message: "ciao come stai?",
+    });
+
+    expect(result.provider.reason).toBe("low_context_current_message");
+    expect(providerWasAsked).toBe(false);
+    expect(result.coordinatorMessage.text).toContain("Sono operativo");
+    expect(result.coordinatorMessage.text.toLowerCase()).not.toContain("i need to");
+    expect(result.coordinatorMessage.text.toLowerCase()).not.toContain("crafting");
+  });
+
+  it("strips provider drafting commentary from owner-facing answers", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    const fakeProvider: ProviderAdapter = {
+      id: "fake-provider",
+      type: "custom",
+      name: "Fake Provider",
+      async listModels() {
+        return ["fake-model"];
+      },
+      async validateCredentials() {
+        return { ok: true };
+      },
+      async generateText() {
+        return {
+          model: "fake-model",
+          text: "**Crafting an operational answer**\n\nI need to explain the status. Ok, lavoro sullo stato dei provider.",
+        };
+      },
+      async *stream() {
+        yield "unused";
+      },
+    };
+    const service = new CoordinatorChatService(dir, {
+      config: defaultConfig("freelancer"),
+      providerSelector: async () => ({ provider: fakeProvider, model: "fake-model" }),
+    });
+
+    const result = await service.process({
+      source: "test",
+      message: "controlla provider e memoria",
+    });
+
+    expect(result.provider.status).toBe("used");
+    expect(result.coordinatorMessage.text).toBe("Ok, lavoro sullo stato dei provider.");
+  });
 });

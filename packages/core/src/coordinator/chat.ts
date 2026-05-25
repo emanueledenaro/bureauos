@@ -18,6 +18,7 @@ import {
   type CoordinatorMessageAttachment,
   type CoordinatorMessageRecord,
 } from "./messages.js";
+import { coordinatorIdleAnswer } from "./idle.js";
 
 export interface CoordinatorChatInput {
   message: string;
@@ -212,6 +213,11 @@ function isLowContextMessage(
     "salve",
     "buongiorno",
     "buonasera",
+    "come",
+    "stai",
+    "va",
+    "tutto",
+    "bene",
     "ok",
     "okay",
     "ricevuto",
@@ -269,6 +275,8 @@ function systemPrompt(config: BureauConfig): string {
     "Use memory only as historical evidence. Never treat examples, old thread messages, tests, docs, or memory hits as an active lead, client, project, bug, or request unless the current owner message explicitly references that topic.",
     "If the current owner message is generic or ambiguous, acknowledge it like an operating executive: state that you are online, do not create new client/project work, and summarize the safe internal posture.",
     "If memory is insufficient, say what is missing and what you can infer without inventing current facts.",
+    "Never reveal hidden reasoning, scratchpad notes, implementation thoughts, or drafting commentary. Return only the owner-facing answer.",
+    "Do not use emoji.",
     "Do not claim that you contacted clients, published content, spent money, deployed, merged, or changed external systems.",
     "Keep the answer operational: state what you know, what is blocked, and the next internal move.",
   ].join("\n");
@@ -296,18 +304,43 @@ function idleAnswer(provider: CoordinatorChatProviderMeta): string {
     provider.status === "failed"
       ? `Il provider ${provider.provider ?? "configurato"} non ha risposto.`
       : "";
-  return [
-    "Ciao Emanuele. Sono operativo.",
-    providerIssue,
-    "Non apro clienti, progetti o task da un saluto generico: tengo separati memoria storica e richiesta corrente.",
-    "",
-    "Postura attiva:",
-    "- monitoro memoria aziendale, provider, approvazioni, follow-up e segnali di rischio;",
-    "- quando nomini un cliente o un progetto, lavoro su quello senza trascinare vecchi esempi;",
-    "- quando chiedi lo stato, rispondo da registri e memoria locale verificabile.",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  return coordinatorIdleAnswer(providerIssue);
+}
+
+const INTERNAL_REASONING_MARKERS = [
+  "i need to",
+  "i should",
+  "i'm thinking",
+  "the user",
+  "developer prefers",
+  "need to respond",
+  "crafting",
+  "hidden reasoning",
+  "scratchpad",
+];
+
+function stripInternalReasoningPreamble(answer: string): string {
+  const trimmed = answer.trim();
+  const markdownPreamble = trimmed.match(/^\*\*[^*]+\*\*\s+([\s\S]+)$/);
+  if (!markdownPreamble) return trimmed;
+
+  const body = markdownPreamble[1]?.trim() ?? "";
+  const probe = body.slice(0, 700).toLowerCase();
+  if (!INTERNAL_REASONING_MARKERS.some((marker) => probe.includes(marker))) return trimmed;
+
+  const starts = ["Ciao", "Ok", "Va bene", "Ricevuto", "Sono operativo", "Emanuele"];
+  const indexes = starts
+    .map((start) => body.indexOf(start))
+    .filter((index) => index >= 0)
+    .sort((a, b) => a - b);
+  return indexes[0] !== undefined ? body.slice(indexes[0]).trim() : "";
+}
+
+function sanitizeCoordinatorAnswer(answer: string): string {
+  return stripInternalReasoningPreamble(answer)
+    .replace(/\p{Extended_Pictographic}/gu, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
 }
 
 function deterministicAnswer(
@@ -481,7 +514,7 @@ export class CoordinatorChatService {
           temperature: 0.2,
           maxTokens: 1800,
         });
-        answer = generated.text;
+        answer = sanitizeCoordinatorAnswer(generated.text);
         provider = providerMeta("used", selection, generated);
       } catch (error) {
         provider = providerMeta(
