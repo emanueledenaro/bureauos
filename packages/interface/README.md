@@ -6,6 +6,7 @@ Layout matches [docs/ui-reference/operating-room.md](../../docs/ui-reference/ope
 
 - Left sidebar (Home, Revenue, Delivery, Growth, Clients, Risk, Memory, Agents, Inbox, Approvals, Reports, Settings)
 - Header with adaptive selector and three status pills
+- Today mode action queue for approvals, blockers, follow-ups, run failures, provider setup, and growth memory gaps
 - Portfolio Operating Room with client columns and capacity allocation
 - Project ownership chips from per-project `OWNERSHIP.md`
 - Live Operations Timeline (backed by the kernel audit log)
@@ -51,4 +52,4 @@ pnpm --filter @bureauos/interface run dist
 
 ## Status
 
-The dashboard reads live kernel state and supports provider-routed coordinator chat with durable history and audited global memory packets, opportunity intake, ownership-aware project dispatch, approval resolution with filtered history, cross-project executive report generation, client intelligence, memory packet search, growth memory for brand/offers/channels, safe workspace settings, provider auth settings with connector catalog/default model/model-list visibility, capability inspection, GitHub issue draft generation, and policy-gated GitHub issue creation when a repository and token are configured. Remaining work is tracked under Phase 4 in the [BACKLOG](../../BACKLOG.md).
+The dashboard reads live kernel state and supports an adaptive Today queue, provider-routed coordinator chat with durable history and audited global memory packets, opportunity intake, ownership-aware project dispatch, approval resolution with filtered history, cross-project executive report generation, client intelligence, memory packet search, growth memory for brand/offers/channels, safe workspace settings, provider auth settings with connector catalog/default model/model-list visibility, capability inspection, GitHub issue draft generation, and policy-gated GitHub issue creation when a repository and token are configured. Remaining work is tracked under Phase 4 in the [BACKLOG](../../BACKLOG.md).

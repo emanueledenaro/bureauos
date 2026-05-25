@@ -58,7 +58,7 @@ Every major capability described in the docs must become one of:
 | ElectronJS desktop app | `@bureauos/interface` | partial |
 | Portfolio view | React renderer | partial |
 | Clients view | `ClientIntelligenceService` backed account cards with pipeline, won value, delivery risk, follow-ups, and memory paths | implemented |
-| Today view | React renderer | partial |
+| Today view | React renderer action queue from approvals, blocked projects, problematic runs, client follow-ups, stalled opportunities, provider status, and growth memory readiness | implemented |
 | Goals view | React renderer | partial |
 | Revenue pulse | React renderer + `/company-pulse` | partial |
 | Live operations timeline | SSE `/events` + audit log | implemented |

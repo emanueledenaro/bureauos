@@ -317,6 +317,18 @@ interface CapacitySegment {
   className: string;
 }
 
+interface TodayAction {
+  id: string;
+  priority: number;
+  tone: Tone;
+  source: string;
+  title: string;
+  detail: string;
+  meta: string;
+  route: AdaptiveMode;
+  created?: string;
+}
+
 function projectTone(status: string): Tone {
   if (status === "blocked" || status === "cancelled") return "red";
   if (status === "proposal" || status === "approved" || status === "intake") return "amber";
@@ -359,6 +371,20 @@ function clientRiskTone(risk: string): Tone {
   if (risk === "follow_up_due" || risk === "proposal") return "amber";
   if (risk === "active") return "green";
   return "muted";
+}
+
+function runTone(status: string): Tone {
+  if (status === "failed" || status === "blocked") return "red";
+  if (status === "needs_human") return "amber";
+  if (status === "completed") return "green";
+  return "muted";
+}
+
+function actionStateLabel(tone: Tone): string {
+  if (tone === "red") return "urgent";
+  if (tone === "amber") return "review";
+  if (tone === "green") return "clear";
+  return "watch";
 }
 
 function opportunityProgress(status: string): number {
@@ -534,6 +560,132 @@ function completedRunCoverage(runs: RunRecord[]): number {
 
 function enabledCount(values: Record<string, boolean>): number {
   return Object.values(values).filter(Boolean).length;
+}
+
+function buildTodayActions(state: DashboardState): TodayAction[] {
+  const actions: TodayAction[] = [];
+  const clientById = new Map(state.clients.map((client) => [client.id, client]));
+
+  for (const approval of state.approvals) {
+    actions.push({
+      id: `approval:${approval.id}`,
+      priority: 10,
+      tone: "amber",
+      source: "Approval",
+      title: formatLabel(approval.action),
+      detail: approval.scope || approval.target || "Owner decision required",
+      meta: approval.created ? timeAgo(approval.created) : approval.actor,
+      route: "approvals",
+      created: approval.created ?? approval.updated,
+    });
+  }
+
+  for (const project of state.projects.filter((item) => item.status === "blocked")) {
+    const client = clientById.get(project.client_id);
+    actions.push({
+      id: `project:${project.id}`,
+      priority: 20,
+      tone: "red",
+      source: "Delivery",
+      title: project.name,
+      detail: client ? `${client.name} - project blocked` : "Project blocked",
+      meta: project.updated ? timeAgo(project.updated) : project.stack || "blocked",
+      route: "delivery",
+      created: project.updated ?? project.created,
+    });
+  }
+
+  for (const run of state.runs.filter((item) =>
+    ["needs_human", "blocked", "failed"].includes(item.status),
+  )) {
+    actions.push({
+      id: `run:${run.id}`,
+      priority: run.status === "needs_human" ? 30 : 25,
+      tone: runTone(run.status),
+      source: "Run",
+      title: formatLabel(run.type),
+      detail: run.scope,
+      meta: run.created ? timeAgo(run.created) : formatLabel(run.status),
+      route: "risk",
+      created: run.created,
+    });
+  }
+
+  for (const item of state.clientIntelligence?.clients ?? []) {
+    if (!["follow_up_due", "blocked", "proposal"].includes(item.risk)) continue;
+    actions.push({
+      id: `client:${item.client.id}:${item.risk}`,
+      priority: item.risk === "blocked" ? 22 : item.risk === "follow_up_due" ? 35 : 45,
+      tone: clientRiskTone(item.risk),
+      source: "Client",
+      title: item.client.name,
+      detail: item.next_action,
+      meta:
+        item.relationship.next_follow_up_at && item.relationship.follow_up_due
+          ? `Due ${timeAgo(item.relationship.next_follow_up_at)}`
+          : formatLabel(item.risk),
+      route: "clients",
+      created: item.latest_activity_at,
+    });
+  }
+
+  for (const opportunity of state.opportunities.filter((item) =>
+    ["stalled", "proposal_draft", "proposal_sent"].includes(item.status),
+  )) {
+    actions.push({
+      id: `opportunity:${opportunity.id}`,
+      priority: opportunity.status === "stalled" ? 40 : 50,
+      tone: opportunityTone(opportunity.status),
+      source: "Revenue",
+      title: opportunity.title,
+      detail:
+        opportunity.next_action ||
+        `${formatMoney(opportunity.expected_value || 0)} pipeline - ${formatLabel(opportunity.status)}`,
+      meta: opportunity.updated ? timeAgo(opportunity.updated) : "opportunity",
+      route: "revenue",
+      created: opportunity.updated ?? opportunity.created,
+    });
+  }
+
+  for (const provider of state.providers.filter((item) => item.status === "missing")) {
+    actions.push({
+      id: `provider:${provider.provider}:${provider.id}`,
+      priority: 60,
+      tone: "amber",
+      source: "Provider",
+      title: provider.provider_name || provider.provider,
+      detail: provider.reason || "Provider credentials need attention",
+      meta: provider.auth_mode,
+      route: "settings",
+    });
+  }
+
+  if (state.growthMemory && !state.growthMemory.ready) {
+    actions.push({
+      id: "growth-memory:incomplete",
+      priority: 70,
+      tone: "muted",
+      source: "Growth",
+      title: "Growth memory incomplete",
+      detail: `Missing ${state.growthMemory.missing_sections.map(formatLabel).join(", ")}`,
+      meta: `${state.growthMemory.sections.filter((section) => section.status === "configured").length}/3 configured`,
+      route: "growth",
+      created: state.growthMemory.generated_at,
+    });
+  }
+
+  return actions.sort((left, right) => {
+    return (
+      left.priority - right.priority ||
+      (right.created ?? "").localeCompare(left.created ?? "") ||
+      left.title.localeCompare(right.title)
+    );
+  });
+}
+
+function adaptiveDefaultMode(state: DashboardState): AdaptiveMode {
+  if (state.loading) return "portfolio";
+  return buildTodayActions(state).length > 0 ? "today" : "portfolio";
 }
 
 function toneDot(tone: Tone): string {
@@ -1624,49 +1776,132 @@ function AgentLayer({ agents }: { agents: AgentDefinition[] }) {
   );
 }
 
-function TodayView({ state }: { state: DashboardState }) {
+function TodayView({
+  state,
+  onModeChange,
+}: {
+  state: DashboardState;
+  onModeChange: (mode: AdaptiveMode) => void;
+}) {
+  const actions = buildTodayActions(state);
   const blocked = state.projects.filter((project) => project.status === "blocked").length;
+  const followUpsDue =
+    state.clientIntelligence?.clients.filter((item) => item.relationship.follow_up_due).length ?? 0;
+  const runIssues = state.runs.filter((run) =>
+    ["needs_human", "blocked", "failed"].includes(run.status),
+  ).length;
+
   return (
     <SectionShell title="Today" description="A real operating view of what needs attention now.">
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <MetricTile
-          label="Approvals waiting"
-          value={String(state.approvals.length)}
-          detail="Owner gates"
+          label="Action queue"
+          value={String(actions.length)}
+          detail={`${state.approvals.length} approvals waiting`}
         />
-        <MetricTile label="Blocked work" value={String(blocked)} detail="Project status blocked" />
-        <MetricTile label="Runs" value={String(state.runs.length)} detail="All persisted runs" />
+        <MetricTile
+          label="Delivery blockers"
+          value={String(blocked)}
+          detail={`${runIssues} runs need attention`}
+        />
+        <MetricTile
+          label="Client follow-ups"
+          value={String(followUpsDue)}
+          detail="Due relationship work"
+        />
       </div>
-      <div className="mt-5 divide-y divide-neutral-800 rounded-md border border-neutral-800">
-        {sortNewest(state.runs)
-          .slice(0, 8)
-          .map((run) => (
-            <div
-              key={run.id}
-              className="grid grid-cols-[120px_1fr_120px] items-center gap-4 px-4 py-3 text-[11px]"
-            >
-              <span className="font-medium text-neutral-50">{formatLabel(run.type)}</span>
-              <span className="truncate text-neutral-500">{run.scope}</span>
-              <StatusPill
-                value={formatLabel(run.status)}
-                tone={
-                  run.status === "completed"
-                    ? "green"
-                    : run.status === "needs_human"
-                      ? "amber"
-                      : "muted"
-                }
-              />
+      <div className="mt-5 overflow-hidden rounded-md border border-neutral-800">
+        <div className="grid grid-cols-[110px_100px_1fr_150px_100px] bg-neutral-900 px-4 py-2 text-[10px] font-semibold uppercase text-neutral-500">
+          <span>Source</span>
+          <span>State</span>
+          <span>Work</span>
+          <span>Signal</span>
+          <span />
+        </div>
+        {actions.slice(0, 12).map((action) => (
+          <div
+            key={action.id}
+            className="grid grid-cols-[110px_100px_1fr_150px_100px] items-center gap-3 border-t border-neutral-800 px-4 py-3 text-[11px]"
+          >
+            <span className="truncate font-medium text-neutral-50">{action.source}</span>
+            <StatusPill value={formatLabel(actionStateLabel(action.tone))} tone={action.tone} />
+            <div className="min-w-0">
+              <div className="truncate font-medium text-neutral-100">{action.title}</div>
+              <div className="mt-1 truncate text-[10px] text-neutral-500">{action.detail}</div>
             </div>
-          ))}
-        {state.runs.length === 0 ? (
-          <div className="p-4">
+            <span className="truncate text-neutral-500">{action.meta}</span>
+            <button
+              onClick={() => onModeChange(action.route)}
+              className="h-8 rounded-md border border-neutral-800 px-3 text-[10px] font-medium text-neutral-300"
+            >
+              Open
+            </button>
+          </div>
+        ))}
+        {actions.length === 0 ? (
+          <div className="border-t border-neutral-800 p-5">
             <EmptyState
-              title="No runs yet"
-              description="Coordinator intake, scheduled jobs, and GitHub signals will create runs here."
+              title="No action required"
+              description="Approvals, blockers, overdue follow-ups, and failed runs will appear here."
             />
           </div>
         ) : null}
+      </div>
+
+      <div className="mt-5 grid grid-cols-1 gap-3 xl:grid-cols-2">
+        <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+          <div className="text-[12px] font-semibold text-neutral-50">Active Runs</div>
+          <div className="mt-3 divide-y divide-neutral-800">
+            {sortNewest(state.runs)
+              .filter((run) => !["completed", "cancelled"].includes(run.status))
+              .slice(0, 6)
+              .map((run) => (
+                <div
+                  key={run.id}
+                  className="grid grid-cols-[96px_1fr_96px] items-center gap-3 py-3 text-[11px]"
+                >
+                  <span className="font-medium text-neutral-50">{formatLabel(run.type)}</span>
+                  <span className="truncate text-neutral-500">{run.scope}</span>
+                  <StatusPill value={formatLabel(run.status)} tone={runTone(run.status)} />
+                </div>
+              ))}
+            {state.runs.filter((run) => !["completed", "cancelled"].includes(run.status)).length ===
+            0 ? (
+              <div className="py-4 text-[11px] text-neutral-500">No active runs.</div>
+            ) : null}
+          </div>
+        </div>
+        <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+          <div className="text-[12px] font-semibold text-neutral-50">Recent Signals</div>
+          <div className="mt-3 divide-y divide-neutral-800">
+            {[...state.audit]
+              .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+              .slice(0, 6)
+              .map((event) => (
+                <div
+                  key={`${event.timestamp}:${event.action}:${event.target ?? ""}`}
+                  className="grid grid-cols-[1fr_80px] gap-3 py-3 text-[11px]"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate font-medium text-neutral-100">
+                      {formatLabel(event.action)}
+                    </div>
+                    <div className="mt-1 truncate text-[10px] text-neutral-500">
+                      {event.actor}
+                      {event.target ? ` - ${event.target}` : ""}
+                    </div>
+                  </div>
+                  <StatusPill
+                    value={formatLabel(event.result)}
+                    tone={event.result === "ok" ? "green" : "amber"}
+                  />
+                </div>
+              ))}
+            {state.audit.length === 0 ? (
+              <div className="py-4 text-[11px] text-neutral-500">No audit signals yet.</div>
+            ) : null}
+          </div>
+        </div>
       </div>
     </SectionShell>
   );
@@ -3047,6 +3282,18 @@ function SettingsView({
 export function App() {
   const { state, refresh } = useDashboard();
   const [mode, setMode] = useState<AdaptiveMode>("portfolio");
+  const [modeTouched, setModeTouched] = useState(false);
+
+  useEffect(() => {
+    if (!modeTouched && !state.loading) {
+      setMode(adaptiveDefaultMode(state));
+    }
+  }, [modeTouched, state]);
+
+  const onModeChange = (nextMode: AdaptiveMode): void => {
+    setModeTouched(true);
+    setMode(nextMode);
+  };
 
   const onResolve = async (id: string, status: "approved" | "rejected"): Promise<void> => {
     await Api.resolveApproval(id, status);
@@ -3091,14 +3338,14 @@ export function App() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-neutral-950 text-neutral-50">
-      <Sidebar state={state} mode={mode} onModeChange={setMode} />
+      <Sidebar state={state} mode={mode} onModeChange={onModeChange} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <Header state={state} mode={mode} onModeChange={setMode} />
+        <Header state={state} mode={mode} onModeChange={onModeChange} />
         <main className="flex-1 overflow-hidden p-4">
           <div className="dashboard-scale dashboard-grid">
             <div className="min-w-0">
               {mode === "portfolio" ? <PortfolioOperatingRoom state={state} /> : null}
-              {mode === "today" ? <TodayView state={state} /> : null}
+              {mode === "today" ? <TodayView state={state} onModeChange={onModeChange} /> : null}
               {mode === "goals" ? <GoalsView state={state} /> : null}
               {mode === "revenue" ? <RevenueWorkspace state={state} /> : null}
               {mode === "delivery" ? <DeliveryWorkspace state={state} /> : null}
@@ -3132,7 +3379,7 @@ export function App() {
               <PendingApprovals
                 approvals={state.approvals}
                 onResolve={onResolve}
-                onOpen={() => setMode("approvals")}
+                onOpen={() => onModeChange("approvals")}
               />
             </div>
             <div className="dashboard-revenue">

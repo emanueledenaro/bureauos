@@ -265,9 +265,9 @@ Goal: a local web app that visualizes kernel state, shaped like [docs/ui-referen
 
 ### 4.9 Adaptive Modes
 
-- [ ] Implement `Today` mode: surface only what needs action today (approvals, blockers, urgent risks).
+- [x] Implement `Today` mode: surface only what needs action today (approvals, blockers, urgent risks).
 - [ ] Implement `Goals` mode: company goals, OKRs, milestone progress.
-- [ ] Implement the rule that decides which mode to default to based on kernel state.
+- [x] Implement the rule that decides which mode to default to based on kernel state.
 
 ### 4.10 Mobile Pass
 
