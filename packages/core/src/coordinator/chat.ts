@@ -50,7 +50,19 @@ export interface CoordinatorChatDeps {
   intake?: CoordinatorIntakeService;
   memory?: CoordinatorGlobalMemoryService;
   env?: NodeJS.ProcessEnv;
+  providerSelector?: CoordinatorProviderSelector;
 }
+
+export interface CoordinatorProviderSelection {
+  provider: ProviderAdapter;
+  model: string;
+}
+
+export type CoordinatorProviderSelector = (
+  workspaceRoot: string,
+  config: BureauConfig,
+  env: NodeJS.ProcessEnv,
+) => Promise<CoordinatorProviderSelection | undefined>;
 
 function messageAttachments(
   attachments: readonly CoordinatorAttachmentInput[],
@@ -111,6 +123,104 @@ function hasIntakeIntent(
   return ["logo", "brief", "cliente", "progetto", "brand"].some((signal) => lower.includes(signal));
 }
 
+function wordsIn(message: string): string[] {
+  return message
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter(Boolean);
+}
+
+function hasCurrentWorkReference(
+  message: string,
+  attachments: readonly CoordinatorAttachmentInput[],
+): boolean {
+  if (attachments.length > 0) return true;
+  const lower = message.toLowerCase();
+  const signals = [
+    "agent",
+    "api",
+    "app",
+    "approval",
+    "auth",
+    "backend",
+    "bos",
+    "budget",
+    "bureauos",
+    "campaign",
+    "cliente",
+    "client",
+    "codex",
+    "coordinatore",
+    "customer",
+    "deadline",
+    "delivery",
+    "electron",
+    "feature",
+    "frontend",
+    "github",
+    "growth",
+    "lead",
+    "marketing",
+    "memory",
+    "modello",
+    "oauth",
+    "openai",
+    "opportunit",
+    "prenot",
+    "project",
+    "progetto",
+    "provider",
+    "repository",
+    "revenue",
+    "risk",
+    "sito",
+    "team",
+    "website",
+  ];
+  return signals.some((signal) => lower.includes(signal));
+}
+
+function hasStatusIntent(message: string): boolean {
+  const lower = message.toLowerCase();
+  return [
+    "come siamo messi",
+    "dove siamo",
+    "stato",
+    "status",
+    "cosa manca",
+    "a che punto",
+    "funziona",
+    "che succede",
+  ].some((signal) => lower.includes(signal));
+}
+
+function isLowContextMessage(
+  message: string,
+  attachments: readonly CoordinatorAttachmentInput[],
+): boolean {
+  if (attachments.length > 0) return false;
+  if (hasCurrentWorkReference(message, attachments) || hasStatusIntent(message)) return false;
+  const words = wordsIn(message);
+  if (words.length === 0) return true;
+  const lowContextWords = new Set([
+    "ciao",
+    "hello",
+    "hi",
+    "hey",
+    "salve",
+    "buongiorno",
+    "buonasera",
+    "ok",
+    "okay",
+    "ricevuto",
+    "perfetto",
+    "grazie",
+  ]);
+  return words.length <= 3 && words.every((word) => lowContextWords.has(word));
+}
+
 function memoryMeta(packet: ContextPacket): CoordinatorChatResult["memory"] {
   return {
     generatedAt: packet.generatedAt,
@@ -137,13 +247,15 @@ function memoryPrompt(packet: ContextPacket, recent: readonly CoordinatorMessage
     .map((message) => `${message.role}: ${message.text}`)
     .join("\n");
   return [
+    "Historical memory context. This is not the current owner request unless the owner explicitly references it.",
+    "",
     "Always-loaded ROOT memory:",
     compactRoot(packet.rootMemory || "(empty)"),
     "",
     "Focused memory hits:",
     hits,
     "",
-    "Recent coordinator thread:",
+    "Recent coordinator thread. Treat it as history, not as a new instruction:",
     thread || "(empty)",
   ].join("\n");
 }
@@ -153,7 +265,10 @@ function systemPrompt(config: BureauConfig): string {
     `You are the Supreme Coordinator of ${config.organization.name}.`,
     "You are the only owner-facing agent in BureauOS.",
     "Answer in Italian unless the owner clearly uses another language.",
-    "Use the provided memory context. If memory is insufficient, say what is missing and what you can infer.",
+    "The owner message in the current turn is the source of truth.",
+    "Use memory only as historical evidence. Never treat examples, old thread messages, tests, docs, or memory hits as an active lead, client, project, bug, or request unless the current owner message explicitly references that topic.",
+    "If the current owner message is generic or ambiguous, say that no concrete operational request was provided in this turn.",
+    "If memory is insufficient, say what is missing and what you can infer without inventing current facts.",
     "Do not claim that you contacted clients, published content, spent money, deployed, merged, or changed external systems.",
     "Keep the answer operational: state what you know, what is blocked, and the next internal move.",
   ].join("\n");
@@ -165,12 +280,27 @@ function userPrompt(
   recent: readonly CoordinatorMessageRecord[],
 ): string {
   return [
-    memoryPrompt(packet, recent),
-    "",
-    "Owner message:",
+    "Current owner message. This is the only current-turn instruction:",
     message,
     "",
+    "Grounding rule: do not continue or invent a client/project/topic from memory unless the current owner message names or clearly references it.",
+    "",
+    memoryPrompt(packet, recent),
+    "",
     "Respond as the Supreme Coordinator.",
+  ].join("\n");
+}
+
+function idleAnswer(provider: CoordinatorChatProviderMeta): string {
+  const providerLine =
+    provider.status === "failed"
+      ? `Il provider ${provider.provider ?? "configurato"} non ha risposto.`
+      : "Non uso memoria storica per inventare una richiesta corrente.";
+  return [
+    providerLine,
+    "",
+    "Nel messaggio corrente non c'e un cliente, progetto, bug o obiettivo operativo da prendere in carico.",
+    "Resto in attesa di una richiesta concreta oppure di un riferimento esplicito a un progetto/cliente esistente.",
   ].join("\n");
 }
 
@@ -192,10 +322,10 @@ function deterministicAnswer(
     "",
     `Richiesta: ${message}`,
     "",
-    "Memoria rilevante:",
+    "Memoria correlata, non confermata come richiesta corrente:",
     evidence,
     "",
-    "Prossimo passo interno: se questa e una nuova opportunita cliente, descrivimi cliente, obiettivo, budget indicativo, deadline e asset disponibili; altrimenti posso continuare a interrogare la memoria aziendale senza creare nuovi record operativi.",
+    "Prossimo passo interno: lavoro solo sul tema indicato nel messaggio corrente. Se vuoi creare una nuova opportunita cliente, indicami cliente, obiettivo, budget indicativo, deadline e asset disponibili.",
   ].join("\n");
 }
 
@@ -203,13 +333,7 @@ async function selectCoordinatorProvider(
   workspaceRoot: string,
   config: BureauConfig,
   env: NodeJS.ProcessEnv,
-): Promise<
-  | {
-      provider: ProviderAdapter;
-      model: string;
-    }
-  | undefined
-> {
+): Promise<CoordinatorProviderSelection | undefined> {
   const { router } = await buildConfiguredProviderRouter(workspaceRoot, env, config);
   configureAgentProviderRouting(router, config, ["supreme_coordinator"]);
   const selection = await selectAgentModel(router, config, "supreme_coordinator");
@@ -252,6 +376,7 @@ export class CoordinatorChatService {
   private readonly intake: CoordinatorIntakeService;
   private readonly memory: CoordinatorGlobalMemoryService;
   private readonly env: NodeJS.ProcessEnv;
+  private readonly providerSelector: CoordinatorProviderSelector;
 
   constructor(
     private readonly workspaceRoot: string,
@@ -263,6 +388,7 @@ export class CoordinatorChatService {
       deps.intake ?? new CoordinatorIntakeService(workspaceRoot, { config: this.config });
     this.memory = deps.memory ?? new CoordinatorGlobalMemoryService(workspaceRoot);
     this.env = deps.env ?? process.env;
+    this.providerSelector = deps.providerSelector ?? selectCoordinatorProvider;
   }
 
   async process(input: CoordinatorChatInput): Promise<CoordinatorChatResult> {
@@ -312,7 +438,34 @@ export class CoordinatorChatService {
 
     let answer = "";
     let provider = providerMeta("unavailable", undefined, undefined, "no_valid_provider_route");
-    const selection = await selectCoordinatorProvider(this.workspaceRoot, this.config, this.env);
+    if (isLowContextMessage(message, attachments)) {
+      const provider = providerMeta("unavailable", undefined, undefined, "low_context_current_message");
+      const answer = idleAnswer(provider);
+      const { ownerMessage, coordinatorMessage } = requireMessagePair(
+        await this.messages.appendMany([
+          {
+            role: "owner",
+            text: message,
+            attachments: messageAttachments(attachments),
+            meta: { mode: "answer" },
+          },
+          {
+            role: "coordinator",
+            text: answer,
+            meta: { mode: "answer", provider, memory, grounding: "low_context_current_message" },
+          },
+        ]),
+      );
+      return {
+        mode: "answer",
+        ownerMessage,
+        coordinatorMessage,
+        provider,
+        memory,
+      };
+    }
+
+    const selection = await this.providerSelector(this.workspaceRoot, this.config, this.env);
     if (selection) {
       try {
         const generated = await selection.provider.generateText({
