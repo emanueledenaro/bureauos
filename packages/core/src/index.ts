@@ -35,7 +35,14 @@ export { ClientRegistry } from "./registries/client.js";
 export type { ClientRecord, ClientStatus, CreateClientInput } from "./registries/client.js";
 
 export { ProjectRegistry } from "./registries/project.js";
-export type { ProjectRecord, ProjectStatus, CreateProjectInput } from "./registries/project.js";
+export type {
+  CreateProjectInput,
+  ProjectOwnershipInput,
+  ProjectOwnershipRecord,
+  ProjectOwnershipStatus,
+  ProjectRecord,
+  ProjectStatus,
+} from "./registries/project.js";
 
 export { OpportunityRegistry } from "./registries/opportunity.js";
 export type {

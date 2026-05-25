@@ -113,6 +113,20 @@ export interface ProjectRecord {
   created?: string;
   updated?: string;
 }
+export interface ProjectOwnershipRecord {
+  id: string;
+  project_id: string;
+  project_slug: string;
+  client_id: string;
+  manager_agent_id: string;
+  manager_role: string;
+  team_id: string;
+  status: string;
+  assigned_agents: string[];
+  escalation_agent_id: string;
+  created?: string;
+  updated?: string;
+}
 export interface OpportunityRecord {
   id: string;
   title: string;
@@ -301,6 +315,7 @@ export interface ProjectDispatchResult {
   summary: string;
   next_actions: string[];
   project: ProjectRecord;
+  ownership: ProjectOwnershipRecord;
   client?: ClientRecord;
   run: RunRecord;
   pipeline: string[];
@@ -386,6 +401,7 @@ export const Api = {
   pulse: () => api<CompanyPulse>("/company-pulse"),
   clients: () => api<ClientRecord[]>("/clients"),
   projects: () => api<ProjectRecord[]>("/projects"),
+  projectOwnership: () => api<ProjectOwnershipRecord[]>("/project-ownership"),
   opportunities: () => api<OpportunityRecord[]>("/opportunities"),
   approvals: () => api<ApprovalRecord[]>("/approvals"),
   approvalsResolved: () => api<ApprovalRecord[]>("/approvals/resolved"),

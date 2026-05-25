@@ -27,6 +27,7 @@ import {
   startApiServer,
   workspacePaths,
   type BureauConfig,
+  type CreateProjectInput,
   type Preset,
   type RunType,
 } from "@bureauos/core";
@@ -60,7 +61,7 @@ Memory:
 Registries:
   client create --name <n> [--status s] [--industry i]
   client list
-  project create --name <n> --client <slug> [--status s] [--repo url] [--stack s]
+  project create --name <n> --client <slug> [--status s] [--repo url] [--stack s] [--manager-agent id]
   project dispatch --project <slug> [--type feature] [--scope s]
   project list
   opportunity create --title <t> --source <s> --client <slug> [--value v] [--margin m]
@@ -407,6 +408,8 @@ const handleProjectCreate: Handler = async (args) => {
     status: { type: "string" },
     repo: { type: "string" },
     stack: { type: "string" },
+    "manager-agent": { type: "string" },
+    "team-agents": { type: "string" },
   });
   if (typeof flags === "string") return err(`project create: ${flags}`);
   if (typeof flags.name !== "string") return err("project create: --name is required");
@@ -415,7 +418,7 @@ const handleProjectCreate: Handler = async (args) => {
   const client = await clientRegistry.get(flags.client);
   if (!client) return err(`project create: client "${flags.client}" not found`);
   const registry = new ProjectRegistry(process.cwd());
-  const record = await registry.create({
+  const input: CreateProjectInput = {
     name: flags.name,
     clientId: client.id,
     ...(typeof flags.status === "string"
@@ -432,7 +435,20 @@ const handleProjectCreate: Handler = async (args) => {
       : {}),
     ...(typeof flags.repo === "string" ? { repository: flags.repo } : {}),
     ...(typeof flags.stack === "string" ? { stack: flags.stack } : {}),
-  });
+    ...(typeof flags["manager-agent"] === "string"
+      ? { managerAgentId: flags["manager-agent"] }
+      : {}),
+    ...(typeof flags["team-agents"] === "string"
+      ? {
+          assignedAgents: flags["team-agents"]
+            .split(",")
+            .map((agent) => agent.trim())
+            .filter(Boolean),
+        }
+      : {}),
+  };
+  const record = await registry.create(input);
+  const ownership = await registry.getOwnership(record.slug);
   await new AuditLog(workspacePaths(process.cwd()).auditLog).append({
     actor: "cli",
     action: "project.create",
@@ -442,18 +458,25 @@ const handleProjectCreate: Handler = async (args) => {
   process.stdout.write(
     `bureau: created project ${record.id} (${record.slug}) for client ${client.id}\n`,
   );
+  process.stdout.write(`pm:         ${ownership?.manager_agent_id ?? "project_manager"}\n`);
   return 0;
 };
 
 const handleProjectList: Handler = async () => {
   const registry = new ProjectRegistry(process.cwd());
   const all = await registry.list();
+  const ownership = new Map(
+    (await registry.listOwnership()).map((item) => [item.project_id, item.manager_agent_id]),
+  );
   if (all.length === 0) {
     process.stdout.write("(no projects)\n");
     return 0;
   }
   for (const p of all) {
-    process.stdout.write(`${p.id}  ${p.slug.padEnd(24)}  ${p.status.padEnd(12)}  ${p.name}\n`);
+    const pm = ownership.get(p.id) ?? "project_manager";
+    process.stdout.write(
+      `${p.id}  ${p.slug.padEnd(24)}  ${p.status.padEnd(12)}  ${pm.padEnd(18)}  ${p.name}\n`,
+    );
   }
   return 0;
 };
@@ -483,6 +506,7 @@ const handleProjectDispatch: Handler = async (args) => {
   });
 
   process.stdout.write(`bureau: ${result.summary}\n`);
+  process.stdout.write(`pm:       ${result.ownership.manager_agent_id}\n`);
   process.stdout.write(`run:      ${result.run.id}\n`);
   process.stdout.write(`packet:   ${result.packet.id}\n`);
   process.stdout.write(`pipeline: ${result.pipeline.join(", ")}\n`);

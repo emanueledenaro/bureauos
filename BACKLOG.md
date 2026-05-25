@@ -208,7 +208,7 @@ Goal: a local web app that visualizes kernel state, shaped like [docs/ui-referen
 ### 4.2 Local API Server
 
 - [x] Local HTTP server in `@bureauos/core` (node:http) exposing the kernel surfaces.
-- [x] Endpoints: `/company-pulse`, `/clients`, `/projects`, `/opportunities`, `/approvals`, `/approvals/resolved`, `/runs`, `/agents`, `/providers`, `/audit`, `/approvals/resolve`, `/reports`, `/health`.
+- [x] Endpoints: `/company-pulse`, `/clients`, `/projects`, `/project-ownership`, `/opportunities`, `/approvals`, `/approvals/resolved`, `/runs`, `/agents`, `/providers`, `/audit`, `/approvals/resolve`, `/reports`, `/health`.
 - [x] CORS open for localhost during development.
 - [x] Token-based auth path (set `token` in options to enable).
 - [x] Implement Server-Sent Events for live timeline streaming.
@@ -282,7 +282,7 @@ Goal: real multi-project support with isolated project memory and project-manage
 
 - [x] Implement Project Manager dispatch with project-scoped memory packet.
 - [x] Implement context-packet generation per agent (bounded context, not full memory).
-- [ ] Add per-project Project Manager configuration and ownership records.
+- [x] Add per-project Project Manager configuration and ownership records.
 - [x] Enforce project memory isolation at capability/runtime boundaries.
 - [x] Implement the coordinator's global memory access path (with audit).
 - [ ] Implement cross-project executive reports.

@@ -42,6 +42,11 @@ describe("ProjectDispatchService", () => {
 
     expect(result.project.id).toBe(intake.project.id);
     expect(result.client?.id).toBe(intake.client.id);
+    expect(result.ownership).toMatchObject({
+      project_id: intake.project.id,
+      manager_agent_id: "project_manager",
+      escalation_agent_id: "supreme_coordinator",
+    });
     expect(result.pipeline).toEqual(["product", "ux", "development", "qa", "security", "reviewer"]);
     expect(result.packet.type).toBe("project-dispatch-packet");
     expect(result.handoffs).toHaveLength(6);
@@ -70,6 +75,8 @@ describe("ProjectDispatchService", () => {
     const packet = await new ArtifactStore(dir).read(result.packet.id);
     expect(packet?.body).toContain("Memory Boundary");
     expect(packet?.body).toContain("Allowed project memory");
+    expect(packet?.body).toContain("Project Manager Ownership");
+    expect(packet?.body).toContain("Manager agent: project_manager");
     expect(packet?.body).toContain("Source Artifacts");
 
     const runs = await readFile(
@@ -77,6 +84,7 @@ describe("ProjectDispatchService", () => {
       "utf8",
     );
     expect(runs).toContain(`Dispatch ${result.run.id}`);
+    expect(runs).toContain("Project Manager: project_manager");
     expect(runs).toContain(result.packet.id);
 
     const audit = await readFile(workspacePaths(dir).auditLog, "utf8");

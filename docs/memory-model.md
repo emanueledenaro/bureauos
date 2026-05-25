@@ -68,6 +68,7 @@ Recommended shape:
   projects/
     project-webapp/
       PROJECT.md
+      OWNERSHIP.md
       ARCHITECTURE.md
       BACKLOG.md
       DECISIONS.md
@@ -206,6 +207,9 @@ Project-specific knowledge.
 
 Contains:
 
+- project manager ownership
+- assigned specialist agents
+- escalation path to the supreme coordinator
 - repository URL
 - stack
 - architecture
@@ -319,6 +323,7 @@ Runtime enforcement:
 
 - every dispatch builds an agent-specific memory boundary
 - the Supreme Coordinator receives global memory access
+- a Project Manager is assigned through the project's `OWNERSHIP.md` record
 - a Project Manager receives assigned project memory, linked client memory, company policy, current run memory, and bounded context artifacts
 - specialist project agents receive only company policy, current run memory, and their bounded context artifacts
 - the official `memory` capability rejects reads and searches outside the boundary and records the boundary application in the audit log

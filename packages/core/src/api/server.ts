@@ -369,6 +369,8 @@ const ROUTES: Record<string, RouteHandler> = {
 
   "GET /clients": async ({ res, options }) => ok(res, await deps(options).clients.list()),
   "GET /projects": async ({ res, options }) => ok(res, await deps(options).projects.list()),
+  "GET /project-ownership": async ({ res, options }) =>
+    ok(res, await deps(options).projects.listOwnership()),
   "GET /opportunities": async ({ res, options }) =>
     ok(res, await deps(options).opportunities.list()),
   "GET /approvals": async ({ res, options }) =>

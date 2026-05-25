@@ -17,6 +17,7 @@ import {
   type ProviderConnection,
   type ProviderConnector,
   type ProviderModelList,
+  type ProjectOwnershipRecord,
   type ProjectRecord,
   type RunRecord,
   type SettingsSummary,
@@ -74,6 +75,7 @@ interface DashboardState {
   pulse?: CompanyPulse;
   clients: ClientRecord[];
   projects: ProjectRecord[];
+  projectOwnership: ProjectOwnershipRecord[];
   opportunities: OpportunityRecord[];
   approvals: ApprovalRecord[];
   resolvedApprovals: ApprovalRecord[];
@@ -148,6 +150,7 @@ async function toCoordinatorAttachment(file: File): Promise<CoordinatorAttachmen
 const emptyState: DashboardState = {
   clients: [],
   projects: [],
+  projectOwnership: [],
   opportunities: [],
   approvals: [],
   resolvedApprovals: [],
@@ -170,6 +173,7 @@ function useDashboard(): { state: DashboardState; refresh: () => Promise<void> }
         pulse,
         clients,
         projects,
+        projectOwnership,
         opportunities,
         approvals,
         resolvedApprovals,
@@ -185,6 +189,7 @@ function useDashboard(): { state: DashboardState; refresh: () => Promise<void> }
         Api.pulse(),
         Api.clients(),
         Api.projects(),
+        Api.projectOwnership(),
         Api.opportunities(),
         Api.approvals(),
         Api.approvalsResolved(),
@@ -201,6 +206,7 @@ function useDashboard(): { state: DashboardState; refresh: () => Promise<void> }
         pulse,
         clients,
         projects,
+        projectOwnership,
         opportunities,
         approvals,
         resolvedApprovals,
@@ -385,6 +391,9 @@ function displayLaneLabel(client?: ClientRecord): { label: string; subtitle: str
 
 function buildPortfolioLanes(state: DashboardState): PortfolioLane[] {
   const clientsById = new Map(state.clients.map((client) => [client.id, client]));
+  const ownershipByProjectId = new Map(
+    state.projectOwnership.map((ownership) => [ownership.project_id, ownership]),
+  );
   const laneMap = new Map<string, { client?: ClientRecord; streams: Workstream[] }>();
 
   for (const client of state.clients) {
@@ -394,14 +403,21 @@ function buildPortfolioLanes(state: DashboardState): PortfolioLane[] {
   for (const project of state.projects) {
     const key = project.client_id || "unassigned";
     if (!laneMap.has(key)) laneMap.set(key, { streams: [] });
+    const ownership = ownershipByProjectId.get(project.id);
+    const manager = ownership?.manager_agent_id ?? "project_manager";
+    const specialistBadges = (ownership?.assigned_agents ?? ["development", "qa"])
+      .filter((agent) => agent !== manager)
+      .map(agentAbbr)
+      .filter(Boolean)
+      .slice(0, 2);
     laneMap.get(key)?.streams.push({
       title: project.name,
       status: formatLabel(project.status),
       tone: projectTone(project.status),
       progress: projectProgress(project.status),
-      meta: project.stack || project.repository || "Project memory",
+      meta: `${formatLabel(manager)} - ${project.stack || project.repository || "Project memory"}`,
       github: project.repository ? "Repo linked" : "Repo pending",
-      badges: ["PM", "DEV", "QA", project.repository ? "GH" : "MEM"],
+      badges: [agentAbbr(manager) || "PM", ...specialistBadges, project.repository ? "GH" : "MEM"],
     });
   }
 
@@ -788,6 +804,9 @@ function WorkstreamCard({ item, laneIndex }: { item: Workstream; laneIndex: numb
           <div className={classes("mt-1 flex items-center gap-2 text-[10px]", toneText(item.tone))}>
             <span className={classes("h-1.5 w-1.5 rounded-full", toneDot(item.tone))} />
             {item.status}
+          </div>
+          <div className="mt-1 max-w-[220px] truncate text-[10px] text-neutral-500">
+            {item.meta}
           </div>
         </div>
       </div>

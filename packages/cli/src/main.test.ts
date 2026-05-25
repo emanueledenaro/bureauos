@@ -174,12 +174,25 @@ describe("bureau cli", () => {
     ]);
 
     expect(code).toBe(0);
+    const ownership = await readFile(
+      join(
+        dir,
+        ".bureauos",
+        "memory",
+        "projects",
+        "pizzeria-aurora-booking-website",
+        "OWNERSHIP.md",
+      ),
+      "utf8",
+    );
+    expect(ownership).toContain("manager_agent_id: project_manager");
     const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
     expect(audit).toContain("project.dispatch.completed");
     const runs = await readFile(
       join(dir, ".bureauos", "memory", "projects", "pizzeria-aurora-booking-website", "RUNS.md"),
       "utf8",
     );
+    expect(runs).toContain("Project Manager: project_manager");
     expect(runs).toContain("Pipeline: product, ux, development, qa, security, reviewer");
   });
 

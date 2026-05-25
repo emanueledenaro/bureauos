@@ -72,7 +72,7 @@ Every major capability described in the docs must become one of:
 | Documented capability | Runtime surface | Status |
 | --- | --- | --- |
 | Agent role catalog | `AGENT_ROLES` | implemented |
-| PM agent per project | concrete PM agent with provider-backed drafting and deterministic local template when selected route is unavailable | partial |
+| PM agent per project | concrete PM agent with provider-backed drafting, per-project `OWNERSHIP.md`, and deterministic local template when selected route is unavailable | partial |
 | Delivery agents | concrete/template agents with provider-backed drafting and deterministic local template when selected route is unavailable | partial |
 | Growth agents | template agents with provider-backed drafting and deterministic local template when selected route is unavailable | partial |
 | Compliance agent | concrete compliance agent with provider-backed drafting and deterministic local template when selected route is unavailable | partial |
@@ -135,12 +135,12 @@ Every major capability described in the docs must become one of:
 
 | Documented capability | Runtime surface | Status |
 | --- | --- | --- |
-| Project Manager dispatch | `project dispatch`, `/projects/dispatch`, Electron project cards | implemented |
+| Project Manager dispatch | `project dispatch`, `/projects/dispatch`, Electron project cards, ownership-aware run creator | implemented |
 | Project-scoped memory packet | `project-dispatch-packet` artifact | implemented |
 | Per-agent handoff packet | `agent-handoff` artifact | implemented |
 | Runtime-enforced memory isolation | `MemoryBoundaryService`, `ScopedMemoryStore`, dispatcher `memory` capability | implemented |
 | Supreme Coordinator global memory access | `CoordinatorGlobalMemoryService`, `GET /coordinator/memory`, audited `memory.global.search` events, relative memory paths | implemented |
-| Per-project PM ownership config | not implemented | designed |
+| Per-project PM ownership config | `ProjectRegistry` creates/repairs `OWNERSHIP.md`, `GET /project-ownership`, CLI project create/list/dispatch PM visibility, Electron portfolio PM chips | implemented |
 
 ## Current Priority Order
 

@@ -568,10 +568,25 @@ describe("API server", () => {
       packet: { type: string };
       handoffs: unknown[];
       pipeline: string[];
+      ownership: { manager_agent_id: string; project_id: string };
     };
     expect(body.packet.type).toBe("project-dispatch-packet");
     expect(body.handoffs).toHaveLength(6);
     expect(body.pipeline).toEqual(["product", "ux", "development", "qa", "security", "reviewer"]);
+    expect(body.ownership.manager_agent_id).toBe("project_manager");
+
+    const ownership = await fetch(`${server.url}/project-ownership`);
+    expect(ownership.status).toBe(200);
+    const ownershipBody = (await ownership.json()) as Array<{
+      manager_agent_id: string;
+      assigned_agents: string[];
+    }>;
+    expect(ownershipBody[0]).toMatchObject({
+      manager_agent_id: "project_manager",
+    });
+    expect(ownershipBody[0]?.assigned_agents).toEqual(
+      expect.arrayContaining(["development", "qa"]),
+    );
 
     const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(audit).toContain("project.dispatch.completed");

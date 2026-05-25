@@ -14,7 +14,11 @@ import { workspacePaths } from "../paths.js";
 import { PolicyEngine } from "../policy/engine.js";
 import { ApprovalRegistry, type ApprovalRecord } from "../registries/approval.js";
 import { ClientRegistry, type ClientRecord } from "../registries/client.js";
-import { ProjectRegistry, type ProjectRecord } from "../registries/project.js";
+import {
+  ProjectRegistry,
+  type ProjectOwnershipRecord,
+  type ProjectRecord,
+} from "../registries/project.js";
 import { dispatchRun, pipelineForRunType, type DispatchOutput } from "../runs/coordinator.js";
 import { RunEngine, type RunRecord, type RunType } from "../runs/engine.js";
 import { AGENT_INDEX, type AgentDefinition } from "../agents/roles.js";
@@ -36,6 +40,7 @@ export interface ProjectDispatchResult {
   summary: string;
   next_actions: string[];
   project: ProjectRecord;
+  ownership: ProjectOwnershipRecord;
   client?: ClientRecord;
   run: RunRecord;
   pipeline: readonly string[];
@@ -84,10 +89,12 @@ function packetBody(args: {
   pipeline: readonly string[];
   sourceArtifacts: readonly ArtifactRecord[];
   approvals: readonly ApprovalRecord[];
+  ownership: ProjectOwnershipRecord;
   briefing: string;
   paths: ReturnType<typeof workspacePaths>;
 }): string {
-  const { project, client, run, pipeline, sourceArtifacts, approvals, briefing, paths } = args;
+  const { project, client, run, pipeline, sourceArtifacts, approvals, ownership, briefing, paths } =
+    args;
   const projectDir = join(paths.projectsDir, project.slug);
   const clientDir = client ? join(paths.clientsDir, client.slug) : "";
   return `# Project Dispatch Packet
@@ -118,6 +125,15 @@ ${briefing}
 - Stack: ${project.stack || "tbd"}
 - Repository: ${project.repository || "not connected"}
 - Allowed project memory: ${projectDir}
+
+## Project Manager Ownership
+
+- Manager agent: ${ownership.manager_agent_id}
+- Manager role: ${ownership.manager_role}
+- Team: ${ownership.team_id}
+- Ownership status: ${ownership.status}
+- Escalation: ${ownership.escalation_agent_id}
+- Assigned agents: ${ownership.assigned_agents.join(", ")}
 
 ## Pipeline
 
@@ -236,6 +252,8 @@ export class ProjectDispatchService {
   async dispatch(input: ProjectDispatchInput): Promise<ProjectDispatchResult> {
     const project = await this.projects.get(input.projectSlug);
     if (!project) throw new Error(`project not found: ${input.projectSlug}`);
+    const ownership = await this.projects.getOwnership(project.slug);
+    if (!ownership) throw new Error(`project ownership not found: ${project.slug}`);
 
     const allClients = await this.clients.list();
     const client = allClients.find((item) => item.id === project.client_id);
@@ -250,7 +268,7 @@ export class ProjectDispatchService {
       triggerType: "owner_request",
       triggerSource: input.source ?? "project_dispatch",
       scope,
-      createdBy: "project_manager",
+      createdBy: ownership.manager_agent_id,
       ...(client ? { clientId: client.id } : {}),
       projectId: project.id,
     });
@@ -261,12 +279,14 @@ export class ProjectDispatchService {
     const paths = workspacePaths(this.workspaceRoot);
     const packet = await this.artifacts.write({
       type: "project-dispatch-packet",
-      createdBy: "project_manager",
+      createdBy: ownership.manager_agent_id,
       runId: run.id,
       projectId: project.id,
       ...(client ? { clientId: client.id } : {}),
       metadata: {
         roles: [...pipeline],
+        manager_agent_id: ownership.manager_agent_id,
+        team_id: ownership.team_id,
         source_artifacts: sourceArtifacts.map((artifact) => artifact.id),
         pending_approvals: pendingApprovals.map((approval) => approval.id),
       },
@@ -277,6 +297,7 @@ export class ProjectDispatchService {
         pipeline,
         sourceArtifacts,
         approvals: pendingApprovals,
+        ownership,
         briefing,
         paths,
       }),
@@ -290,13 +311,15 @@ export class ProjectDispatchService {
         role: roleId,
         artifact: await this.artifacts.write({
           type: "agent-handoff",
-          createdBy: "project_manager",
+          createdBy: ownership.manager_agent_id,
           runId: run.id,
           projectId: project.id,
           ...(client ? { clientId: client.id } : {}),
           metadata: {
             role: roleId,
             dispatch_packet: packet.id,
+            manager_agent_id: ownership.manager_agent_id,
+            team_id: ownership.team_id,
             source_artifacts: sourceArtifacts.map((artifact) => artifact.id),
           },
           body: handoffBody({
@@ -345,11 +368,11 @@ export class ProjectDispatchService {
 
     await appendFile(
       join(paths.projectsDir, project.slug, "RUNS.md"),
-      `\n\n## Dispatch ${run.id}\n\n- Type: ${run.type}\n- Packet: ${packet.id}\n- Pipeline: ${pipeline.join(", ")}\n- Handoffs: ${handoffs.map((handoff) => handoff.artifact.id).join(", ")}\n- Outputs: ${producedArtifactIds.join(", ")}\n`,
+      `\n\n## Dispatch ${run.id}\n\n- Type: ${run.type}\n- Project Manager: ${ownership.manager_agent_id}\n- Team: ${ownership.team_id}\n- Packet: ${packet.id}\n- Pipeline: ${pipeline.join(", ")}\n- Handoffs: ${handoffs.map((handoff) => handoff.artifact.id).join(", ")}\n- Outputs: ${producedArtifactIds.join(", ")}\n`,
       "utf8",
     );
     await this.audit.append({
-      actor: "project_manager",
+      actor: ownership.manager_agent_id,
       action: "project.dispatch.completed",
       target: project.id,
       artifact_id: packet.id,
@@ -364,6 +387,7 @@ export class ProjectDispatchService {
         "Use the dispatch packet as the project-scoped context source for follow-up runs.",
       ],
       project,
+      ownership,
       ...(client ? { client } : {}),
       run: updatedRun,
       pipeline,
