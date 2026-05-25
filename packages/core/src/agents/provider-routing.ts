@@ -19,7 +19,7 @@ export interface AgentModelSelection {
 }
 
 const PROVIDER_DEFAULT_MODELS: Record<ProviderType, string> = {
-  "openai-codex": "gpt-5.3-codex",
+  "openai-codex": "gpt-5.5",
   openai: "gpt-5.5",
   anthropic: "claude-opus-4-7",
   google: "gemini-3.5-flash",

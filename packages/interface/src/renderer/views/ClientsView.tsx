@@ -1,19 +1,87 @@
-import { AlertTriangle, Briefcase, DollarSign, Users } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, Briefcase, DollarSign, FileText, RefreshCw, Users } from "lucide-react";
 import { SectionShell } from "../components/dashboard/SectionShell";
 import { MetricTile } from "../components/dashboard/MetricTile";
 import { ClientAccountCard } from "../components/dashboard/ClientAccountCard";
 import { EmptyState } from "../components/dashboard/EmptyState";
+import { Button } from "../components/ui/button";
 import { formatMoney } from "../lib/format";
+import type { ClientSuccessStatusResult, MemoryTriggerResult } from "../lib/api";
 import type { DashboardState } from "../lib/types";
 
-export function ClientsView({ state }: { state: DashboardState }) {
+export function ClientsView({
+  state,
+  onGenerateSuccessStatus,
+  onMemoryTriggerScan,
+}: {
+  state: DashboardState;
+  onGenerateSuccessStatus: () => Promise<ClientSuccessStatusResult>;
+  onMemoryTriggerScan: () => Promise<MemoryTriggerResult>;
+}) {
   const intelligence = state.clientIntelligence;
   const clients = intelligence?.clients ?? [];
+  const [busy, setBusy] = useState<"status" | "scan" | undefined>();
+  const [lastAction, setLastAction] = useState<string | undefined>();
+
+  const generateSuccessStatus = async (): Promise<void> => {
+    setBusy("status");
+    try {
+      const result = await onGenerateSuccessStatus();
+      setLastAction(`${result.reports.length} client success report(s) generated`);
+    } catch (error) {
+      setLastAction(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const scanMemoryTriggers = async (): Promise<void> => {
+    setBusy("scan");
+    try {
+      const result = await onMemoryTriggerScan();
+      setLastAction(
+        `${result.triggered.length} follow-up run(s), ${result.skipped.length} skipped`,
+      );
+    } catch (error) {
+      setLastAction(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
   return (
     <SectionShell
       title="Clients"
       description="Client memory, project history, and commercial value."
+      action={
+        <>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void generateSuccessStatus()}
+            disabled={Boolean(busy) || clients.length === 0}
+          >
+            <FileText className="h-3 w-3" />
+            {busy === "status" ? "Generating" : "Status reports"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void scanMemoryTriggers()}
+            disabled={Boolean(busy) || clients.length === 0}
+          >
+            <RefreshCw className="h-3 w-3" />
+            {busy === "scan" ? "Scanning" : "Scan due"}
+          </Button>
+        </>
+      }
     >
+      {lastAction ? (
+        <div className="mb-3 rounded-md border border-border/60 bg-surface-subtle px-3 py-2 text-[11px] text-muted-foreground">
+          {lastAction}
+        </div>
+      ) : null}
+
       <div className="grid gap-3 sm:grid-cols-3">
         <MetricTile
           label="Clients"

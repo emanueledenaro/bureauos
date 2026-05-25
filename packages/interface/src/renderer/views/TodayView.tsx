@@ -1,4 +1,5 @@
-import { Activity, AlarmClock, ArrowRight, ListChecks, ShieldAlert } from "lucide-react";
+import { useState } from "react";
+import { Activity, AlarmClock, ArrowRight, ListChecks, RefreshCw, ShieldAlert } from "lucide-react";
 import { SectionShell } from "../components/dashboard/SectionShell";
 import { MetricTile } from "../components/dashboard/MetricTile";
 import { StatusPill } from "../components/dashboard/StatusPill";
@@ -7,14 +8,17 @@ import { Button } from "../components/ui/button";
 import { actionStateLabel, runTone } from "../lib/tone";
 import { buildTodayActions, sortNewest } from "../lib/builders";
 import { formatLabel } from "../lib/format";
+import type { MemoryTriggerResult } from "../lib/api";
 import type { AdaptiveMode, DashboardState } from "../lib/types";
 
 export function TodayView({
   state,
   onModeChange,
+  onMemoryTriggerScan,
 }: {
   state: DashboardState;
   onModeChange: (mode: AdaptiveMode) => void;
+  onMemoryTriggerScan: () => Promise<MemoryTriggerResult>;
 }) {
   const actions = buildTodayActions(state);
   const blocked = state.projects.filter((project) => project.status === "blocked").length;
@@ -23,9 +27,45 @@ export function TodayView({
   const runIssues = state.runs.filter((run) =>
     ["needs_human", "blocked", "failed"].includes(run.status),
   ).length;
+  const [scanning, setScanning] = useState(false);
+  const [scanResult, setScanResult] = useState<string | undefined>();
+
+  const scanMemoryTriggers = async (): Promise<void> => {
+    setScanning(true);
+    try {
+      const result = await onMemoryTriggerScan();
+      setScanResult(
+        `${result.triggered.length} follow-up run(s), ${result.skipped.length} skipped`,
+      );
+    } catch (error) {
+      setScanResult(error instanceof Error ? error.message : String(error));
+    } finally {
+      setScanning(false);
+    }
+  };
 
   return (
-    <SectionShell title="Today" description="A real operating view of what needs attention now.">
+    <SectionShell
+      title="Today"
+      description="A real operating view of what needs attention now."
+      action={
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void scanMemoryTriggers()}
+          disabled={scanning}
+        >
+          <RefreshCw className="h-3 w-3" />
+          {scanning ? "Scanning" : "Run follow-up scan"}
+        </Button>
+      }
+    >
+      {scanResult ? (
+        <div className="mb-3 rounded-md border border-border/60 bg-surface-subtle px-3 py-2 text-[11px] text-muted-foreground">
+          {scanResult}
+        </div>
+      ) : null}
+
       <div className="grid gap-3 sm:grid-cols-3">
         <MetricTile
           label="Action queue"

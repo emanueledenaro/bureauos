@@ -36,7 +36,17 @@ describe("provider connector catalog", () => {
       "gpt-5.5",
     );
     expect(connectors.find((connector) => connector.id === "openai-codex")?.defaultModel).toBe(
-      "gpt-5.3-codex",
+      "gpt-5.5",
+    );
+    expect(connectors.find((connector) => connector.id === "openai-codex")?.models).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "gpt-5.5" }),
+        expect.objectContaining({ id: "gpt-5.4" }),
+        expect.objectContaining({ id: "gpt-5.4-mini" }),
+        expect.objectContaining({ id: "gpt-5.3-codex" }),
+        expect.objectContaining({ id: "gpt-5.2" }),
+        expect.objectContaining({ id: "gpt-5.3-codex-spark" }),
+      ]),
     );
     expect(defaultProviderCredentialId("anthropic")).toBe("anthropic-default");
     expect(defaultProviderAuthMode("local")).toBe("local");

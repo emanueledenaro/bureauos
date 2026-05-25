@@ -150,7 +150,29 @@ describe("OpenAICodexOAuthAdapter", () => {
       defaultModel: "gpt-5",
     });
 
-    await expect(adapter.listModels()).resolves.toEqual(["gpt-5.3-codex"]);
+    await expect(adapter.listModels()).resolves.toEqual([
+      "gpt-5.5",
+      "gpt-5.4",
+      "gpt-5.4-mini",
+      "gpt-5.3-codex",
+      "gpt-5.2",
+      "gpt-5.3-codex-spark",
+    ]);
+  });
+
+  it("keeps a saved supported Codex OAuth default first", async () => {
+    const adapter = new OpenAICodexOAuthAdapter("openai-codex-test", {
+      defaultModel: "gpt-5.4-mini",
+    });
+
+    await expect(adapter.listModels()).resolves.toEqual([
+      "gpt-5.4-mini",
+      "gpt-5.5",
+      "gpt-5.4",
+      "gpt-5.3-codex",
+      "gpt-5.2",
+      "gpt-5.3-codex-spark",
+    ]);
   });
 
   it("streams Codex SSE deltas without duplicating the final response text", async () => {

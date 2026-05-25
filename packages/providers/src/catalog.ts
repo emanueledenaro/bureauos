@@ -1,4 +1,8 @@
 import type { ProviderBudgetTier, ProviderRouteProfile, ProviderType } from "./types.js";
+import {
+  OPENAI_CODEX_OAUTH_DEFAULT_MODEL,
+  OPENAI_CODEX_OAUTH_MODELS,
+} from "./openai-codex-models.js";
 
 export type ProviderConnectorAuthMode = "oauth" | "api-key" | "local";
 
@@ -109,15 +113,8 @@ const CONNECTORS: readonly ProviderConnector[] = [
     description: "Browser OAuth route for ChatGPT Plus/Pro Codex access.",
     source: "builtin",
     defaultAuthMode: "oauth",
-    defaultModel: "gpt-5.3-codex",
-    models: [
-      {
-        id: "gpt-5.3-codex",
-        name: "GPT-5.3 Codex",
-        capabilities: ["chat", "reasoning", "coding", "vision", "streaming", "tool-use", "oauth"],
-        budgetTier: "high",
-      },
-    ],
+    defaultModel: OPENAI_CODEX_OAUTH_DEFAULT_MODEL,
+    models: OPENAI_CODEX_OAUTH_MODELS,
     authMethods: [{ type: "oauth", label: "ChatGPT Plus/Pro (browser)" }],
     env: {
       accessToken: ["OPENAI_CODEX_ACCESS_TOKEN"],

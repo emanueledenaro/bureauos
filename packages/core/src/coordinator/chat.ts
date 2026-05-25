@@ -267,7 +267,7 @@ function systemPrompt(config: BureauConfig): string {
     "Answer in Italian unless the owner clearly uses another language.",
     "The owner message in the current turn is the source of truth.",
     "Use memory only as historical evidence. Never treat examples, old thread messages, tests, docs, or memory hits as an active lead, client, project, bug, or request unless the current owner message explicitly references that topic.",
-    "If the current owner message is generic or ambiguous, say that no concrete operational request was provided in this turn.",
+    "If the current owner message is generic or ambiguous, acknowledge it like an operating executive: state that you are online, do not create new client/project work, and summarize the safe internal posture.",
     "If memory is insufficient, say what is missing and what you can infer without inventing current facts.",
     "Do not claim that you contacted clients, published content, spent money, deployed, merged, or changed external systems.",
     "Keep the answer operational: state what you know, what is blocked, and the next internal move.",
@@ -292,16 +292,22 @@ function userPrompt(
 }
 
 function idleAnswer(provider: CoordinatorChatProviderMeta): string {
-  const providerLine =
+  const providerIssue =
     provider.status === "failed"
       ? `Il provider ${provider.provider ?? "configurato"} non ha risposto.`
-      : "Non uso memoria storica per inventare una richiesta corrente.";
+      : "";
   return [
-    providerLine,
+    "Ciao Emanuele. Sono operativo.",
+    providerIssue,
+    "Non apro clienti, progetti o task da un saluto generico: tengo separati memoria storica e richiesta corrente.",
     "",
-    "Nel messaggio corrente non c'e un cliente, progetto, bug o obiettivo operativo da prendere in carico.",
-    "Resto in attesa di una richiesta concreta oppure di un riferimento esplicito a un progetto/cliente esistente.",
-  ].join("\n");
+    "Postura attiva:",
+    "- monitoro memoria aziendale, provider, approvazioni, follow-up e segnali di rischio;",
+    "- quando nomini un cliente o un progetto, lavoro su quello senza trascinare vecchi esempi;",
+    "- quando chiedi lo stato, rispondo da registri e memoria locale verificabile.",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function deterministicAnswer(

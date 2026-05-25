@@ -11,6 +11,7 @@ const REPORT_TYPES = new Set([
   "cross-project-executive-report",
   "business-operating-report",
   "client-account-plan",
+  "client-success-status-report",
   "revenue-pipeline-report",
 ]);
 
@@ -19,7 +20,7 @@ export function ReportsView({ state }: { state: DashboardState }) {
   return (
     <SectionShell
       title="Reports"
-      description="Executive, cross-project, and business reports generated from current registries."
+      description="Executive, client, revenue, and business reports generated from current registries."
     >
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {sortNewest(reports).map((artifact) => (

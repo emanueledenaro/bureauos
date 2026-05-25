@@ -286,6 +286,11 @@ export interface ArtifactRecord {
   type: string;
   status: string;
   created?: string;
+  client_id?: string;
+  client_name?: string;
+  risk?: string;
+  follow_up_due?: boolean;
+  next_follow_up_at?: string;
   project_count?: number;
   missing_count?: number;
   unsupported_count?: number;
@@ -516,6 +521,24 @@ export interface AutonomousRetryResult {
   }>;
   report?: ArtifactRecord;
 }
+export interface ClientSuccessStatusResult {
+  generated_at: string;
+  reports: ArtifactRecord[];
+  clients: ClientIntelligenceItem[];
+}
+export interface MemoryTriggerResult {
+  triggered: Array<{
+    kind: "client_follow_up_due";
+    triggerSource: string;
+    run: RunRecord;
+    artifactIds: string[];
+  }>;
+  skipped: Array<{
+    kind: "client_follow_up_due";
+    triggerSource: string;
+    reason: "duplicate" | "policy_blocked";
+  }>;
+}
 export interface AgentHandoff {
   role: string;
   artifact: ArtifactRecord;
@@ -620,6 +643,11 @@ export const Api = {
   pulse: () => api<CompanyPulse>("/company-pulse"),
   clients: () => api<ClientRecord[]>("/clients"),
   clientIntelligence: () => api<ClientIntelligenceSummary>("/clients/intelligence"),
+  generateClientSuccessStatus: (input: { clientSlug?: string; clientId?: string } = {}) =>
+    api<ClientSuccessStatusResult>("/client-success-status/generate", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   projects: () => api<ProjectRecord[]>("/projects"),
   projectOwnership: () => api<ProjectOwnershipRecord[]>("/project-ownership"),
   opportunities: () => api<OpportunityRecord[]>("/opportunities"),
@@ -697,6 +725,10 @@ export const Api = {
     api<AutonomousRetryResult>("/autonomy/retries/scan", {
       method: "POST",
       body: JSON.stringify(input),
+    }),
+  memoryTriggerScan: () =>
+    api<MemoryTriggerResult>("/autonomy/memory-triggers/scan", {
+      method: "POST",
     }),
   dispatchProject: (input: { projectSlug: string; runType?: string; scope?: string }) =>
     api<ProjectDispatchResult>("/projects/dispatch", {

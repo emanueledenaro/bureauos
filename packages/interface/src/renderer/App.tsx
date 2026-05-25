@@ -27,9 +27,11 @@ import {
   Api,
   type AutonomousRetryResult,
   type BusinessReportResult,
+  type ClientSuccessStatusResult,
   type CoordinatorAttachmentInput,
   type CoordinatorChatResult,
   type GrowthContentPipelineResult,
+  type MemoryTriggerResult,
   type ProjectRepositoryVerificationResult,
   type RevenuePipelineResult,
 } from "./lib/api";
@@ -104,6 +106,18 @@ export function App() {
     return result;
   };
 
+  const onGenerateClientSuccessStatus = async (): Promise<ClientSuccessStatusResult> => {
+    const result = await Api.generateClientSuccessStatus();
+    await refresh();
+    return result;
+  };
+
+  const onMemoryTriggerScan = async (): Promise<MemoryTriggerResult> => {
+    const result = await Api.memoryTriggerScan();
+    await refresh();
+    return result;
+  };
+
   const onProviderLogin = async (input: {
     provider: string;
     mode?: "oauth" | "api-key" | "local";
@@ -153,6 +167,8 @@ export function App() {
                 onProviderLogout={onProviderLogout}
                 onVerifyRepositories={onVerifyRepositories}
                 onRetryScan={onRetryScan}
+                onGenerateClientSuccessStatus={onGenerateClientSuccessStatus}
+                onMemoryTriggerScan={onMemoryTriggerScan}
                 onGenerateGrowthContent={onGenerateGrowthContent}
                 onGenerateRevenuePipeline={onGenerateRevenuePipeline}
                 onRefresh={refresh}
@@ -209,6 +225,8 @@ function DashboardLayout({
   onProviderLogout,
   onVerifyRepositories,
   onRetryScan,
+  onGenerateClientSuccessStatus,
+  onMemoryTriggerScan,
   onGenerateGrowthContent,
   onGenerateRevenuePipeline,
   onRefresh,
@@ -230,6 +248,8 @@ function DashboardLayout({
   onProviderLogout: (provider: string, id: string) => Promise<void>;
   onVerifyRepositories: (projectSlug?: string) => Promise<ProjectRepositoryVerificationResult>;
   onRetryScan: () => Promise<AutonomousRetryResult>;
+  onGenerateClientSuccessStatus: () => Promise<ClientSuccessStatusResult>;
+  onMemoryTriggerScan: () => Promise<MemoryTriggerResult>;
   onGenerateGrowthContent: () => Promise<GrowthContentPipelineResult>;
   onGenerateRevenuePipeline: () => Promise<RevenuePipelineResult>;
   onRefresh: () => Promise<void>;
@@ -243,6 +263,8 @@ function DashboardLayout({
     onProviderLogout,
     onVerifyRepositories,
     onRetryScan,
+    onGenerateClientSuccessStatus,
+    onMemoryTriggerScan,
     onGenerateGrowthContent,
     onGenerateRevenuePipeline,
     onRefresh,
@@ -271,6 +293,8 @@ function renderMainView({
   onProviderLogout,
   onVerifyRepositories,
   onRetryScan,
+  onGenerateClientSuccessStatus,
+  onMemoryTriggerScan,
   onGenerateGrowthContent,
   onGenerateRevenuePipeline,
   onRefresh,
@@ -291,6 +315,8 @@ function renderMainView({
   onProviderLogout: (provider: string, id: string) => Promise<void>;
   onVerifyRepositories: (projectSlug?: string) => Promise<ProjectRepositoryVerificationResult>;
   onRetryScan: () => Promise<AutonomousRetryResult>;
+  onGenerateClientSuccessStatus: () => Promise<ClientSuccessStatusResult>;
+  onMemoryTriggerScan: () => Promise<MemoryTriggerResult>;
   onGenerateGrowthContent: () => Promise<GrowthContentPipelineResult>;
   onGenerateRevenuePipeline: () => Promise<RevenuePipelineResult>;
   onRefresh: () => Promise<void>;
@@ -299,7 +325,13 @@ function renderMainView({
     case "portfolio":
       return <PortfolioView state={state} />;
     case "today":
-      return <TodayView state={state} onModeChange={onModeChange} />;
+      return (
+        <TodayView
+          state={state}
+          onModeChange={onModeChange}
+          onMemoryTriggerScan={onMemoryTriggerScan}
+        />
+      );
     case "goals":
       return <GoalsView state={state} onModeChange={onModeChange} />;
     case "revenue":
@@ -309,7 +341,13 @@ function renderMainView({
     case "growth":
       return <GrowthView state={state} onGenerateContent={onGenerateGrowthContent} />;
     case "clients":
-      return <ClientsView state={state} />;
+      return (
+        <ClientsView
+          state={state}
+          onGenerateSuccessStatus={onGenerateClientSuccessStatus}
+          onMemoryTriggerScan={onMemoryTriggerScan}
+        />
+      );
     case "risk":
       return <RiskView state={state} onRetryScan={onRetryScan} />;
     case "approvals":

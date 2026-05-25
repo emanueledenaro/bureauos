@@ -52,6 +52,13 @@ export type {
   ProviderCredentialRecord,
 } from "./auth-store.js";
 export {
+  OPENAI_CODEX_OAUTH_DEFAULT_MODEL,
+  OPENAI_CODEX_OAUTH_MODELS,
+  listOpenAICodexOAuthModelIDs,
+  normalizeOpenAICodexOAuthModel,
+} from "./openai-codex-models.js";
+export type { OpenAICodexOAuthModel } from "./openai-codex-models.js";
+export {
   OPENAI_CODEX_AUTHORIZE_URL,
   OPENAI_CODEX_CLIENT_ID,
   OPENAI_CODEX_DEFAULT_REDIRECT_URI,
