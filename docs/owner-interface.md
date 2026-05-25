@@ -168,6 +168,11 @@ The chat should be connected to the same memory and policy system as the daemon.
 
 The thread is durable. Owner messages, coordinator replies, attachment metadata, and linked intake results are stored under the workspace so the coordinator panel can reload the conversation after a refresh or app restart.
 
+The same chat endpoint handles two paths:
+
+- opportunity-like messages create the client, project, opportunity, artifacts, and approval gates;
+- general questions assemble a memory packet and answer through the configured Supreme Coordinator provider when available, with a deterministic local-memory answer when no valid provider route exists.
+
 ## Mobile-First Requirement
 
 The owner may use BureauOS from a phone.

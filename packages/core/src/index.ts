@@ -95,6 +95,19 @@ export type {
   CoordinatorIntakeResult,
   IntakeClassification,
 } from "./coordinator/intake.js";
+export { CoordinatorChatService } from "./coordinator/chat.js";
+export type {
+  CoordinatorChatDeps,
+  CoordinatorChatInput,
+  CoordinatorChatProviderMeta,
+  CoordinatorChatResult,
+} from "./coordinator/chat.js";
+export { CoordinatorMessageStore } from "./coordinator/messages.js";
+export type {
+  CoordinatorMessageAttachment,
+  CoordinatorMessageInput,
+  CoordinatorMessageRecord,
+} from "./coordinator/messages.js";
 
 // Project dispatch
 export { ProjectDispatchService } from "./dispatch/project-dispatch.js";

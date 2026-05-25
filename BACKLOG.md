@@ -213,6 +213,7 @@ Goal: a local web app that visualizes kernel state, shaped like [docs/ui-referen
 - [x] Token-based auth path (set `token` in options to enable).
 - [x] Implement Server-Sent Events for live timeline streaming.
 - [x] Add `GET /coordinator/messages` so the ElectronJS Coordinator panel can reload durable chat history.
+- [x] Add `POST /coordinator/messages` so chat can either answer from memory or route opportunity messages into intake.
 - [ ] Add the missing endpoint: `/settings`.
 - [x] Add `POST /coordinator/intake` so the ElectronJS Coordinator panel can create client/project/opportunity work.
 - [x] Add `POST /projects/dispatch` so Project Manager can create scoped packets and specialist handoffs.
@@ -237,7 +238,7 @@ Goal: a local web app that visualizes kernel state, shaped like [docs/ui-referen
 
 - [x] Chat surface connected to real coordinator intake.
 - [x] Persist coordinator chat history in the workspace and reload it in ElectronJS.
-- [ ] Wire full conversational memory to the provider router once a provider has credentials.
+- [x] Wire conversational memory to the provider router once a provider has credentials.
 - [ ] Stream tokens via SSE.
 
 ### 4.6 Pending Approvals Panel

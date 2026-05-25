@@ -170,6 +170,23 @@ export interface CoordinatorMessageRecord {
   created: string;
   attachments?: Array<{ name: string; size: number; type: string }>;
   result?: CoordinatorIntakeResult;
+  meta?: Record<string, unknown>;
+}
+export interface CoordinatorChatResult {
+  mode: "intake" | "answer";
+  ownerMessage: CoordinatorMessageRecord;
+  coordinatorMessage: CoordinatorMessageRecord;
+  result?: CoordinatorIntakeResult;
+  provider: {
+    status: "used" | "unavailable" | "failed";
+    provider?: string;
+    model?: string;
+    reason?: string;
+  };
+  memory: {
+    generatedAt: string;
+    hits: Array<{ path: string; snippet: string; score: number }>;
+  };
 }
 export interface BusinessReportResult {
   generated_at: string;
@@ -324,6 +341,11 @@ export const Api = {
     api<ProviderModelList>(`/provider/models?provider=${encodeURIComponent(provider)}`),
   coordinatorMessages: (limit = 50) =>
     api<CoordinatorMessageRecord[]>(`/coordinator/messages?limit=${limit}`),
+  coordinatorChat: (input: { message: string; attachments?: CoordinatorAttachmentInput[] }) =>
+    api<CoordinatorChatResult>("/coordinator/messages", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   audit: (n = 50) => api<AuditEvent[]>(`/audit?n=${n}`),
   coordinatorIntake: (input: {
     message: string;

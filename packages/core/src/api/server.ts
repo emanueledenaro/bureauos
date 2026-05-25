@@ -18,6 +18,7 @@ import {
   CoordinatorIntakeService,
   type CoordinatorAttachmentInput,
 } from "../coordinator/intake.js";
+import { CoordinatorChatService } from "../coordinator/chat.js";
 import { CoordinatorMessageStore } from "../coordinator/messages.js";
 import { ProjectDispatchService } from "../dispatch/project-dispatch.js";
 import { GitHubIssueDraftService } from "../github/issue-drafts.js";
@@ -323,6 +324,30 @@ const ROUTES: Record<string, RouteHandler> = {
       ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 200)
       : 50;
     ok(res, await new CoordinatorMessageStore(options.workspaceRoot).list(limit));
+  },
+
+  "POST /coordinator/messages": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as {
+      message?: string;
+      source?: string;
+      attachments?: unknown;
+    };
+    if (!body.message || !body.message.trim()) {
+      ok(res, { error: "message required" }, 400);
+      return;
+    }
+    const service = new CoordinatorChatService(options.workspaceRoot, {
+      config: options.config,
+    });
+    ok(
+      res,
+      await service.process({
+        message: body.message,
+        source: body.source ?? "electron",
+        attachments: parseAttachments(body.attachments),
+      }),
+      201,
+    );
   },
 
   "GET /providers": async ({ res, options }) => {

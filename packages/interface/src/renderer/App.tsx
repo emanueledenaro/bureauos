@@ -10,7 +10,7 @@ import {
   type CoordinatorAttachmentInput,
   type ClientRecord,
   type CompanyPulse,
-  type CoordinatorIntakeResult,
+  type CoordinatorChatResult,
   type CoordinatorMessageRecord,
   type OpportunityRecord,
   type ProviderAuthAuthorization,
@@ -996,13 +996,12 @@ function PortfolioOperatingRoom({ state }: { state: DashboardState }) {
 }
 
 function CoordinatorPanel({
-  onIntake,
+  onMessage,
 }: {
-  onIntake: (
+  onMessage: (
     message: string,
-    clientName?: string,
     attachments?: CoordinatorAttachmentInput[],
-  ) => Promise<CoordinatorIntakeResult>;
+  ) => Promise<CoordinatorChatResult>;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const attachmentsRef = useRef<ChatAttachment[]>([]);
@@ -1073,10 +1072,11 @@ function CoordinatorPanel({
       size: item.size,
       type: item.type,
     }));
+    const optimisticId = `${submittedAt}-owner`;
     setMessages((current) => [
       ...current,
       {
-        id: `${submittedAt}-owner`,
+        id: optimisticId,
         role: "owner",
         text: messageText || "Attached files",
         created: submittedAt,
@@ -1087,16 +1087,11 @@ function CoordinatorPanel({
       const payload = await Promise.all(
         attachments.map((attachment) => toCoordinatorAttachment(attachment.file)),
       );
-      const result = await onIntake(messageText || "Attached files", undefined, payload);
+      const result = await onMessage(messageText || "Attached files", payload);
       setMessages((current) => [
-        ...current,
-        {
-          id: `${new Date().toISOString()}-coordinator`,
-          role: "coordinator",
-          text: result.summary,
-          created: new Date().toISOString(),
-          result,
-        },
+        ...current.filter((message) => message.id !== optimisticId),
+        result.ownerMessage,
+        result.coordinatorMessage,
       ]);
       setDraft("");
       setAttachments((current) => {
@@ -2424,14 +2419,12 @@ export function App() {
     await refresh();
   };
 
-  const onCoordinatorIntake = async (
+  const onCoordinatorMessage = async (
     message: string,
-    clientName?: string,
     attachments?: CoordinatorAttachmentInput[],
-  ): Promise<CoordinatorIntakeResult> => {
-    const result = await Api.coordinatorIntake({
+  ): Promise<CoordinatorChatResult> => {
+    const result = await Api.coordinatorChat({
       message,
-      ...(clientName ? { clientName } : {}),
       ...(attachments?.length ? { attachments } : {}),
     });
     await refresh();
@@ -2492,7 +2485,7 @@ export function App() {
               ) : null}
             </div>
             <div className="min-w-0">
-              <CoordinatorPanel onIntake={onCoordinatorIntake} />
+              <CoordinatorPanel onMessage={onCoordinatorMessage} />
             </div>
             <div className="min-w-0">
               <Timeline events={state.audit} artifacts={state.artifacts} />

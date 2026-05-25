@@ -17,6 +17,7 @@ export interface CoordinatorMessageRecord {
   created: string;
   attachments?: CoordinatorMessageAttachment[];
   result?: CoordinatorIntakeResult;
+  meta?: Record<string, unknown>;
 }
 
 export interface CoordinatorMessageInput {
@@ -25,6 +26,7 @@ export interface CoordinatorMessageInput {
   created?: string;
   attachments?: CoordinatorMessageAttachment[];
   result?: CoordinatorIntakeResult;
+  meta?: Record<string, unknown>;
 }
 
 function parseLine(line: string): CoordinatorMessageRecord | undefined {
@@ -53,6 +55,7 @@ export class CoordinatorMessageStore {
       created: input.created ?? new Date().toISOString(),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
       ...(input.result ? { result: input.result } : {}),
+      ...(input.meta ? { meta: input.meta } : {}),
     };
     await mkdir(dirname(this.path()), { recursive: true });
     await appendFile(this.path(), `${JSON.stringify(record)}\n`, "utf8");
@@ -69,6 +72,7 @@ export class CoordinatorMessageStore {
       created: input.created ?? new Date().toISOString(),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
       ...(input.result ? { result: input.result } : {}),
+      ...(input.meta ? { meta: input.meta } : {}),
     }));
     await mkdir(dirname(this.path()), { recursive: true });
     await appendFile(

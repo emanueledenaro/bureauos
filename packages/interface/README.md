@@ -13,7 +13,7 @@ Layout matches [docs/ui-reference/operating-room.md](../../docs/ui-reference/ope
 - Pending Approvals panel with approve/reject
 - Revenue Pulse KPI strip
 - Settings mode with provider auth connect/disconnect, model picker, and OpenCode-style connector metadata
-- Supreme Coordinator chat history reloaded from workspace memory
+- Supreme Coordinator chat reloaded from workspace memory, with general questions answered through the provider router when configured
 - Agent Layer footer
 - Agents view with capability assignments, enabled actions, risk, and approval gates
 
@@ -46,4 +46,4 @@ pnpm --filter @bureauos/interface run dist
 
 ## Status
 
-The dashboard reads live kernel state and supports coordinator intake with durable chat history, project dispatch, approval resolution, report generation, provider auth settings with connector catalog/default model/model-list visibility, capability inspection, GitHub issue draft generation, and policy-gated GitHub issue creation when a repository and token are configured. Remaining work is tracked under Phase 4 in the [BACKLOG](../../BACKLOG.md).
+The dashboard reads live kernel state and supports provider-routed coordinator chat with durable history, opportunity intake, project dispatch, approval resolution, report generation, provider auth settings with connector catalog/default model/model-list visibility, capability inspection, GitHub issue draft generation, and policy-gated GitHub issue creation when a repository and token are configured. Remaining work is tracked under Phase 4 in the [BACKLOG](../../BACKLOG.md).

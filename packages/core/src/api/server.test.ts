@@ -133,6 +133,68 @@ describe("API server", () => {
     expect(rawHistory).toContain("pizzeria-aurora-booking-website");
   });
 
+  it("answers general coordinator chat messages from memory without creating an intake", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const response = await fetch(`${server.url}/coordinator/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: "Che clienti abbiamo attivi oggi?" }),
+    });
+
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as {
+      mode: string;
+      ownerMessage: { role: string; text: string };
+      coordinatorMessage: { role: string; text: string; meta?: Record<string, unknown> };
+      provider: { status: string };
+      memory: { hits: unknown[] };
+    };
+    expect(body.mode).toBe("answer");
+    expect(body.ownerMessage).toMatchObject({
+      role: "owner",
+      text: "Che clienti abbiamo attivi oggi?",
+    });
+    expect(body.coordinatorMessage.role).toBe("coordinator");
+    expect(body.coordinatorMessage.text).toContain("memoria locale");
+    expect(body.provider.status).toBe("unavailable");
+
+    const clients = await fetch(`${server.url}/clients`);
+    expect(await clients.json()).toEqual([]);
+
+    const messages = (await (await fetch(`${server.url}/coordinator/messages`)).json()) as Array<{
+      role: string;
+    }>;
+    expect(messages.map((message) => message.role)).toEqual(["owner", "coordinator"]);
+  });
+
+  it("routes opportunity-like coordinator chat messages into intake", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const response = await fetch(`${server.url}/coordinator/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        message: "Ho parlato con Pizzeria Aurora: vuole un sito con prenotazioni.",
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as {
+      mode: string;
+      result: { project: { slug: string } };
+      coordinatorMessage: { result?: { project: { slug: string } } };
+    };
+    expect(body.mode).toBe("intake");
+    expect(body.result.project.slug).toBe("pizzeria-aurora-booking-website");
+    expect(body.coordinatorMessage.result?.project.slug).toBe("pizzeria-aurora-booking-website");
+
+    const clients = (await (await fetch(`${server.url}/clients`)).json()) as Array<{
+      slug: string;
+    }>;
+    expect(clients.map((client) => client.slug)).toEqual(["pizzeria-aurora"]);
+  });
+
   it("persists coordinator chat attachments as project artifacts", async () => {
     server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
 
