@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import {
   ApprovalRegistry,
@@ -8,6 +9,7 @@ import {
   ClientRegistry,
   ConfigError,
   CoordinatorIntakeService,
+  DaemonStateStore,
   GitHubIssueDraftService,
   GitHubIssuePublishService,
   GitHubSignalTriggerService,
@@ -105,7 +107,10 @@ Capabilities:
 
 Server:
   serve [--port N]                          Start the local HTTP API server
-  daemon [--port N]                         Run scheduler + API server in foreground
+  daemon start [--port N]                   Start scheduler + API server in the background
+  daemon stop                               Stop the recorded daemon process
+  daemon status                             Show daemon PID, API URL, and scheduler state
+  daemon run [--port N]                     Run scheduler + API server in foreground
 
 GitHub:
   github draft-issues --project slug         Generate GitHub-ready issue drafts from project artifacts
@@ -899,6 +904,158 @@ const handleServe: Handler = async (args) => {
   return 0;
 };
 
+const runDaemonForeground: Handler = async (args) => {
+  const flags = parseFlags(args, { port: { type: "number", alias: "p" } });
+  if (typeof flags === "string") return err(`daemon run: ${flags}`);
+  const config = await loadWorkspaceConfig(process.cwd());
+  const approvals = new ApprovalRegistry(process.cwd());
+  const policy = new PolicyEngine(config, approvals);
+  const audit = new AuditLog(workspacePaths(process.cwd()).auditLog);
+  const artifacts = new ArtifactStore(process.cwd());
+  const runs = new RunEngine(process.cwd(), { audit, artifacts, policy });
+  const githubClient = githubClientFromEnv();
+  const state = new DaemonStateStore(process.cwd());
+  const scheduler = new Scheduler({
+    config,
+    runs,
+    workspaceRoot: process.cwd(),
+    coordinator: { audit, artifacts, policy },
+    ...(githubClient ? { githubClient } : {}),
+  });
+
+  try {
+    scheduler.start();
+    const server = await startApiServer({
+      workspaceRoot: process.cwd(),
+      config,
+      ...(typeof flags.port === "number" ? { port: flags.port } : {}),
+      ...(githubClient ? { githubClient } : {}),
+      ...(process.env["GITHUB_WEBHOOK_SECRET"]
+        ? { githubWebhookSecret: process.env["GITHUB_WEBHOOK_SECRET"] }
+        : {}),
+    });
+    await state.markRunning({
+      pid: process.pid,
+      apiUrl: server.url,
+      port: server.port,
+    });
+    process.stdout.write(`bureau: daemon running. API at ${server.url}\n`);
+    process.stdout.write(`bureau: scheduler active. Press Ctrl-C to stop\n`);
+
+    let stopping = false;
+    const shutdown = async (signal: string): Promise<void> => {
+      if (stopping) return;
+      stopping = true;
+      scheduler.stop();
+      await server.close();
+      await state.markStopped(`received ${signal}`);
+      process.exit(0);
+    };
+
+    process.once("SIGINT", () => void shutdown("SIGINT"));
+    process.once("SIGTERM", () => void shutdown("SIGTERM"));
+    await new Promise<void>(() => {});
+    return 0;
+  } catch (error) {
+    scheduler.stop();
+    await state.markError((error as Error).message);
+    throw error;
+  }
+};
+
+const handleDaemonStart: Handler = async (args) => {
+  const flags = parseFlags(args, { port: { type: "number", alias: "p" } });
+  if (typeof flags === "string") return err(`daemon start: ${flags}`);
+  await loadWorkspaceConfig(process.cwd());
+  const state = new DaemonStateStore(process.cwd());
+  const current = await state.status();
+  if (current.status === "running" && current.alive) {
+    return err(`daemon already running with pid ${current.state?.pid ?? "unknown"}`);
+  }
+
+  const script = process.argv[1];
+  if (!script) return err("daemon start: cannot locate bureau executable");
+  const childArgs = [script, "daemon", "run"];
+  if (typeof flags.port === "number") childArgs.push("--port", String(flags.port));
+  const child = spawn(process.execPath, childArgs, {
+    cwd: process.cwd(),
+    detached: true,
+    env: process.env,
+    stdio: "ignore",
+  });
+  child.unref();
+  if (!child.pid) return err("daemon start: failed to spawn background process");
+
+  const port = typeof flags.port === "number" ? flags.port : 0;
+  await state.markRunning({
+    pid: child.pid,
+    apiUrl: port > 0 ? `http://127.0.0.1:${port}` : "starting",
+    port,
+  });
+  process.stdout.write(`bureau: daemon started pid ${child.pid}\n`);
+  process.stdout.write(`bureau: run \`bureau daemon status\` to inspect it\n`);
+  return 0;
+};
+
+const handleDaemonStatus: Handler = async () => {
+  await loadWorkspaceConfig(process.cwd());
+  const snapshot = await new DaemonStateStore(process.cwd()).status();
+  if (!snapshot.state) {
+    process.stdout.write("bureau: daemon stopped\n");
+    return 0;
+  }
+  const state = snapshot.state;
+  process.stdout.write(
+    `bureau: daemon ${snapshot.status}${snapshot.alive ? " (alive)" : " (not alive)"}\n`,
+  );
+  if (state.pid) process.stdout.write(`pid: ${state.pid}\n`);
+  if (state.api_url) process.stdout.write(`api: ${state.api_url}\n`);
+  process.stdout.write(`scheduler: ${state.scheduler_active ? "active" : "inactive"}\n`);
+  if (state.started_at) process.stdout.write(`started: ${state.started_at}\n`);
+  if (state.updated_at) process.stdout.write(`updated: ${state.updated_at}\n`);
+  if (state.message) process.stdout.write(`message: ${state.message}\n`);
+  process.stdout.write(`state: ${snapshot.path}\n`);
+  return 0;
+};
+
+const handleDaemonStop: Handler = async () => {
+  await loadWorkspaceConfig(process.cwd());
+  const state = new DaemonStateStore(process.cwd());
+  const snapshot = await state.status();
+  if (!snapshot.state || snapshot.status !== "running" || !snapshot.alive || !snapshot.state.pid) {
+    await state.markStopped("not running");
+    process.stdout.write("bureau: daemon is not running\n");
+    return 0;
+  }
+
+  try {
+    process.kill(snapshot.state.pid, "SIGTERM");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+  }
+  await state.markStopped("owner requested stop");
+  process.stdout.write(`bureau: stop signal sent to pid ${snapshot.state.pid}\n`);
+  return 0;
+};
+
+const handleDaemon: Handler = async (args) => {
+  const sub = args[0];
+  if (!sub || sub.startsWith("--")) return runDaemonForeground(args);
+  switch (sub) {
+    case "run":
+    case "foreground":
+      return runDaemonForeground(args.slice(1));
+    case "start":
+      return handleDaemonStart(args.slice(1));
+    case "status":
+      return handleDaemonStatus(args.slice(1));
+    case "stop":
+      return handleDaemonStop(args.slice(1));
+    default:
+      return err("daemon: expected one of start, stop, status, run");
+  }
+};
+
 const handleAuthLogin: Handler = async (args) => {
   const flags = parseFlags(args, {
     provider: { type: "string", alias: "p" },
@@ -1251,43 +1408,7 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
     },
   },
   serve: handleServe,
-  daemon: async (args) => {
-    const flags = parseFlags(args, { port: { type: "number", alias: "p" } });
-    if (typeof flags === "string") return err(`daemon: ${flags}`);
-    const config = await loadWorkspaceConfig(process.cwd());
-    const approvals = new ApprovalRegistry(process.cwd());
-    const policy = new PolicyEngine(config, approvals);
-    const audit = new AuditLog(workspacePaths(process.cwd()).auditLog);
-    const artifacts = new ArtifactStore(process.cwd());
-    const runs = new RunEngine(process.cwd(), { audit, artifacts, policy });
-    const githubClient = githubClientFromEnv();
-    const scheduler = new Scheduler({
-      config,
-      runs,
-      workspaceRoot: process.cwd(),
-      coordinator: { audit, artifacts, policy },
-      ...(githubClient ? { githubClient } : {}),
-    });
-    scheduler.start();
-    const server = await startApiServer({
-      workspaceRoot: process.cwd(),
-      config,
-      ...(typeof flags.port === "number" ? { port: flags.port } : {}),
-      ...(githubClient ? { githubClient } : {}),
-      ...(process.env["GITHUB_WEBHOOK_SECRET"]
-        ? { githubWebhookSecret: process.env["GITHUB_WEBHOOK_SECRET"] }
-        : {}),
-    });
-    process.stdout.write(`bureau: daemon running. API at ${server.url}\n`);
-    process.stdout.write(`bureau: scheduler active. Press Ctrl-C to stop\n`);
-    process.on("SIGINT", () => {
-      scheduler.stop();
-      void server.close();
-      process.exit(0);
-    });
-    await new Promise<void>(() => {});
-    return 0;
-  },
+  daemon: handleDaemon,
 };
 
 export async function main(argv: readonly string[]): Promise<number> {

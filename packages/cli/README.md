@@ -25,8 +25,11 @@ See [BACKLOG.md](../../BACKLOG.md) Phase 1.
 - `bureau github create-issues --project <slug> --owner <o> --repo <r>` — create GitHub issues from approved drafts under policy
 - `bureau github ensure-labels --owner <o> --repo <r>` — apply the BureauOS label taxonomy
 - `bureau github sync` — reconcile GitHub issues, PRs, stale work, and check-run signals
-- `bureau daemon` — run scheduler and local API in the foreground
+- `bureau daemon start` — start scheduler and local API in the background
+- `bureau daemon status` — inspect PID, API URL, and scheduler state
+- `bureau daemon stop` — stop the recorded daemon process
+- `bureau daemon run` — run scheduler and local API in the foreground
 
 ## Status
 
-The CLI is an operational local surface for workspace setup, intake, memory, project dispatch, reports, approvals, provider auth and checks, OpenCode-style provider connector filtering/config overrides, capability boundaries, GitHub label setup, GitHub issue draft generation, policy-gated GitHub issue creation, GitHub issue/PR/check sync, GitHub webhook ingestion through `serve`/`daemon`, daemon polling for linked project repositories, threshold-triggered triage runs, and daemon mode.
+The CLI is an operational local surface for workspace setup, intake, memory, project dispatch, reports, approvals, provider auth and checks, OpenCode-style provider connector filtering/config overrides, capability boundaries, GitHub label setup, GitHub issue draft generation, policy-gated GitHub issue creation, GitHub issue/PR/check sync, GitHub webhook ingestion through `serve`/`daemon`, daemon polling for linked project repositories, threshold-triggered triage runs, and workspace-local daemon lifecycle state.

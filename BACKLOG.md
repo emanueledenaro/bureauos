@@ -313,7 +313,7 @@ Goal: brand, offers, content, leads, pricing, proposals, conversion, client succ
 
 Goal: scheduler and event watchers so BureauOS works while the owner is offline.
 
-- [ ] Implement a scheduler service that runs alongside the local API.
+- [x] Implement a scheduler service that runs alongside the local API.
 - [x] Implement scheduled triggers for project health, daily executive report, growth review, and client account review.
 - [x] Generate executive and business operating reports during the daily executive report job.
 - [ ] Implement threshold triggers (stale PR, blocked issue, unanswered client message, empty content pipeline).
@@ -326,7 +326,7 @@ Goal: scheduler and event watchers so BureauOS works while the owner is offline.
 - [x] Implement event ingestion from the GitHub adapter.
 - [x] Implement signal classification for GitHub issue, PR, and check-run events.
 - [ ] Implement bounded retries with policy escalation.
-- [ ] Add a `bureau daemon` CLI subcommand (start, stop, status).
+- [x] Add a `bureau daemon` CLI subcommand (start, stop, status).
 - [ ] Add tests for each trigger type.
 
 ## Phase 8 — PR Execution (v0.8)

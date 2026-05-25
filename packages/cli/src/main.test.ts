@@ -1,4 +1,4 @@
-import { mkdtemp, rm, access, readFile, readdir } from "node:fs/promises";
+import { mkdtemp, rm, access, readFile, readdir, writeFile } from "node:fs/promises";
 import { constants as FS } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -124,6 +124,51 @@ describe("bureau cli", () => {
       artifacts.map((artifact) => readFile(join(artifactsDir, artifact), "utf8")),
     );
     expect(bodies.some((body) => body.includes("Cross-Project Executive Report"))).toBe(true);
+  });
+
+  it("reports daemon status from workspace state", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+
+    const code = await main(["node", "bureau", "daemon", "status"]);
+
+    expect(code).toBe(0);
+  });
+
+  it("marks a stale daemon as stopped from CLI", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+    const statusPath = join(dir, ".bureauos", "daemon", "status.json");
+    await writeFile(
+      statusPath,
+      JSON.stringify(
+        {
+          status: "running",
+          workspace_root: dir,
+          pid: 999999,
+          api_url: "http://127.0.0.1:3737",
+          port: 3737,
+          scheduler_active: true,
+          started_at: "2026-05-25T10:00:00.000Z",
+          updated_at: "2026-05-25T10:00:00.000Z",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const code = await main(["node", "bureau", "daemon", "stop"]);
+
+    expect(code).toBe(0);
+    const state = JSON.parse(await readFile(statusPath, "utf8")) as {
+      status: string;
+      scheduler_active: boolean;
+      message: string;
+    };
+    expect(state).toMatchObject({
+      status: "stopped",
+      scheduler_active: false,
+      message: "not running",
+    });
   });
 
   it("prints client intelligence from real registries", async () => {

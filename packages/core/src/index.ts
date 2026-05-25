@@ -270,3 +270,10 @@ export type { ApiServerOptions, ApiServer } from "./api/server.js";
 // Daemon
 export { Scheduler } from "./daemon/scheduler.js";
 export type { SchedulerOptions } from "./daemon/scheduler.js";
+export { DaemonStateStore } from "./daemon/state.js";
+export type {
+  DaemonStateRecord,
+  DaemonStatus,
+  DaemonStatusSnapshot,
+  ProcessAliveCheck,
+} from "./daemon/state.js";

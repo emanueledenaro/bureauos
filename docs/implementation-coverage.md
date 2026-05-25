@@ -105,7 +105,7 @@ Every major capability described in the docs must become one of:
 
 | Documented capability | Runtime surface | Status |
 | --- | --- | --- |
-| Scheduler | `Scheduler` | partial |
+| Scheduler | `Scheduler`, `bureau daemon run`, `bureau daemon start`, `bureau daemon stop`, `bureau daemon status`, workspace-local daemon status JSON | partial |
 | Daily executive report | scheduler + `BusinessReportService` | partial |
 | Project health checks | scheduler/run stubs | partial |
 | Growth review | scheduler/run stubs | partial |

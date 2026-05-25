@@ -39,6 +39,9 @@ export interface WorkspacePaths {
   indexesDir: string;
   auditDir: string;
   auditLog: string;
+  daemonDir: string;
+  daemonStatus: string;
+  daemonLog: string;
   approvalsPendingDir: string;
   approvalsResolvedDir: string;
 }
@@ -82,6 +85,9 @@ export function workspacePaths(root: string): WorkspacePaths {
     indexesDir: join(mem, "indexes"),
     auditDir: join(ws, "audit"),
     auditLog: join(ws, "audit", "audit.log"),
+    daemonDir: join(ws, "daemon"),
+    daemonStatus: join(ws, "daemon", "status.json"),
+    daemonLog: join(ws, "daemon", "daemon.log"),
     approvalsPendingDir: join(ws, "approvals", "pending"),
     approvalsResolvedDir: join(ws, "approvals", "resolved"),
   };
