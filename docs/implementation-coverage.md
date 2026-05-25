@@ -59,7 +59,7 @@ Every major capability described in the docs must become one of:
 | Portfolio view | React renderer | partial |
 | Clients view | `ClientIntelligenceService` backed account cards with pipeline, won value, delivery risk, follow-ups, and memory paths | implemented |
 | Today view | React renderer action queue from approvals, blocked projects, problematic runs, client follow-ups, stalled opportunities, provider status, and growth memory readiness | implemented |
-| Goals view | React renderer | partial |
+| Goals view | React renderer OKR board derived from revenue, delivery, client success, growth, autonomy, and execution registries | implemented |
 | Revenue pulse | React renderer + `/company-pulse` | partial |
 | Live operations timeline | SSE `/events` + audit log | implemented |
 | Supreme Coordinator chat | React renderer + `/coordinator/messages`, workspace-backed chat history, memory packet assembly, provider-router-backed answer path with deterministic local fallback | partial |

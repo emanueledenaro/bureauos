@@ -329,6 +329,19 @@ interface TodayAction {
   created?: string;
 }
 
+interface GoalItem {
+  id: string;
+  title: string;
+  description: string;
+  progress: number;
+  tone: Tone;
+  current: string;
+  target: string;
+  nextAction: string;
+  route: AdaptiveMode;
+  signals: string[];
+}
+
 function projectTone(status: string): Tone {
   if (status === "blocked" || status === "cancelled") return "red";
   if (status === "proposal" || status === "approved" || status === "intake") return "amber";
@@ -385,6 +398,13 @@ function actionStateLabel(tone: Tone): string {
   if (tone === "amber") return "review";
   if (tone === "green") return "clear";
   return "watch";
+}
+
+function progressTone(progress: number): Tone {
+  if (progress >= 80) return "green";
+  if (progress >= 45) return "amber";
+  if (progress > 0) return "red";
+  return "muted";
 }
 
 function opportunityProgress(status: string): number {
@@ -552,14 +572,178 @@ function buildCapacitySegments(state: DashboardState): CapacitySegment[] {
   ];
 }
 
-function completedRunCoverage(runs: RunRecord[]): number {
-  if (!runs.length) return 0;
-  const completed = runs.filter((run) => run.status === "completed").length;
-  return Math.round((completed / runs.length) * 100);
-}
-
 function enabledCount(values: Record<string, boolean>): number {
   return Object.values(values).filter(Boolean).length;
+}
+
+function clampPercent(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function ratioPercent(current: number, target: number): number {
+  if (target <= 0) return current > 0 ? 100 : 0;
+  return clampPercent((current / target) * 100);
+}
+
+function buildGoalItems(state: DashboardState): GoalItem[] {
+  const activeClients = state.clients.filter((client) => client.status === "active").length;
+  const clientTarget = Math.max(activeClients, state.clients.length, 1);
+  const openOpportunities = state.opportunities.filter(
+    (opportunity) => opportunity.status !== "won" && opportunity.status !== "lost",
+  );
+  const clientsWithPipeline = new Set(openOpportunities.map((opportunity) => opportunity.client_id))
+    .size;
+  const pipelineValue = openOpportunities.reduce(
+    (sum, opportunity) => sum + (opportunity.expected_value || 0),
+    0,
+  );
+
+  const totalProjects = state.projects.length;
+  const blockedProjects = state.projects.filter((project) => project.status === "blocked").length;
+  const activeProjects = state.projects.filter((project) =>
+    ["approved", "in_progress", "proposal"].includes(project.status),
+  ).length;
+  const repositoryCoverage = totalProjects
+    ? state.projects.filter((project) => project.repository).length
+    : 0;
+
+  const followUpsDue =
+    state.clientIntelligence?.clients.filter((client) => client.relationship.follow_up_due)
+      .length ?? 0;
+  const clientsWithAnyMemory = state.clientIntelligence?.clients.length ?? state.clients.length;
+
+  const growthSections = state.growthMemory?.sections ?? [];
+  const configuredGrowthSections = growthSections.filter(
+    (section) => section.status === "configured",
+  ).length;
+  const growthArtifacts = state.artifacts.filter((artifact) =>
+    ["social-post-brief", "ad-campaign-brief", "creative-brief", "campaign-brief"].includes(
+      artifact.type,
+    ),
+  ).length;
+
+  const providerReady = state.providers.some((provider) => provider.status === "ok");
+  const autonomyChecks = [
+    !state.error,
+    state.agents.length > 0,
+    state.capabilities.length > 0,
+    providerReady,
+    state.growthMemory?.ready === true,
+  ];
+  const autonomyReady = autonomyChecks.filter(Boolean).length;
+
+  const completedRuns = state.runs.filter((run) => run.status === "completed").length;
+  const runIssues = state.runs.filter((run) =>
+    ["needs_human", "blocked", "failed"].includes(run.status),
+  ).length;
+  const healthyRuns = Math.max(0, completedRuns - runIssues);
+
+  const goals: GoalItem[] = [
+    {
+      id: "revenue-engine",
+      title: "Revenue Engine",
+      description: "Maintain active commercial pipeline across client accounts.",
+      progress: ratioPercent(clientsWithPipeline, clientTarget),
+      tone: progressTone(ratioPercent(clientsWithPipeline, clientTarget)),
+      current: `${clientsWithPipeline}/${clientTarget} accounts`,
+      target: "Every active client has an open opportunity",
+      nextAction:
+        pipelineValue > 0
+          ? "Prioritize the highest-value opportunity and move it to proposal."
+          : "Create or import the first qualified opportunity.",
+      route: "revenue",
+      signals: [
+        `${formatMoney(pipelineValue)} open pipeline`,
+        `${openOpportunities.length} open opportunities`,
+      ],
+    },
+    {
+      id: "delivery-health",
+      title: "Delivery Health",
+      description: "Keep client and internal projects unblocked and repository-backed.",
+      progress:
+        totalProjects === 0 ? 0 : ratioPercent(totalProjects - blockedProjects, totalProjects),
+      tone: blockedProjects > 0 ? "red" : progressTone(totalProjects === 0 ? 0 : 100),
+      current: `${blockedProjects} blocked`,
+      target: "0 blocked projects",
+      nextAction:
+        blockedProjects > 0
+          ? "Open the blocked project queue and assign a recovery action."
+          : "Dispatch the next project-manager run for active work.",
+      route: "delivery",
+      signals: [
+        `${activeProjects} active projects`,
+        `${repositoryCoverage}/${Math.max(totalProjects, 1)} repositories linked`,
+      ],
+    },
+    {
+      id: "client-success",
+      title: "Client Success",
+      description: "Protect relationships with follow-up discipline and account visibility.",
+      progress:
+        clientsWithAnyMemory === 0
+          ? 0
+          : ratioPercent(clientsWithAnyMemory - followUpsDue, clientsWithAnyMemory),
+      tone: followUpsDue > 0 ? "amber" : progressTone(clientsWithAnyMemory === 0 ? 0 : 100),
+      current: `${followUpsDue} due`,
+      target: "No overdue client follow-ups",
+      nextAction:
+        followUpsDue > 0
+          ? "Review clients due for follow-up and prepare safe response drafts."
+          : "Create the next account plan for the most valuable client.",
+      route: "clients",
+      signals: [`${state.clients.length} client profiles`, `${clientsWithAnyMemory} account views`],
+    },
+    {
+      id: "growth-foundation",
+      title: "Growth Foundation",
+      description: "Keep brand, offers, channels, and draft assets ready for visibility work.",
+      progress: ratioPercent(configuredGrowthSections + Math.min(growthArtifacts, 1), 4),
+      tone: progressTone(ratioPercent(configuredGrowthSections + Math.min(growthArtifacts, 1), 4)),
+      current: `${configuredGrowthSections}/3 memory sections`,
+      target: "Brand, offers, channels, and one draft asset ready",
+      nextAction:
+        state.growthMemory?.ready === true
+          ? "Generate the next draft-only growth asset from current positioning."
+          : "Complete missing growth memory before campaign work.",
+      route: "growth",
+      signals: [`${growthArtifacts} growth artifacts`, `${state.approvals.length} approval gates`],
+    },
+    {
+      id: "autonomy-readiness",
+      title: "Autonomy Readiness",
+      description: "Make the operating system capable of running without owner babysitting.",
+      progress: ratioPercent(autonomyReady, autonomyChecks.length),
+      tone: progressTone(ratioPercent(autonomyReady, autonomyChecks.length)),
+      current: `${autonomyReady}/${autonomyChecks.length} checks`,
+      target: "API, agents, capabilities, provider, and growth memory ready",
+      nextAction: providerReady
+        ? "Review remaining autonomy checks and keep policy gates tight."
+        : "Connect a provider or fix missing provider credentials.",
+      route: providerReady ? "agents" : "settings",
+      signals: [`${state.agents.length} agents`, `${state.capabilities.length} capabilities`],
+    },
+    {
+      id: "execution-cadence",
+      title: "Execution Cadence",
+      description: "Track whether autonomous runs are completing instead of piling up.",
+      progress: state.runs.length === 0 ? 0 : ratioPercent(healthyRuns, state.runs.length),
+      tone: runIssues > 0 ? "amber" : progressTone(state.runs.length === 0 ? 0 : 100),
+      current: `${completedRuns}/${state.runs.length} completed`,
+      target: "Runs complete without human-blocked drift",
+      nextAction:
+        runIssues > 0
+          ? "Resolve runs needing human input before starting more work."
+          : "Start the next useful run from Today or project dispatch.",
+      route: runIssues > 0 ? "risk" : "today",
+      signals: [`${runIssues} issue runs`, `${state.audit.length} recent audit events`],
+    },
+  ];
+
+  return goals.sort(
+    (left, right) => left.progress - right.progress || left.title.localeCompare(right.title),
+  );
 }
 
 function buildTodayActions(state: DashboardState): TodayAction[] {
@@ -1907,31 +2091,141 @@ function TodayView({
   );
 }
 
-function GoalsView({ state }: { state: DashboardState }) {
-  const total = state.opportunities.reduce((sum, item) => sum + (item.expected_value || 0), 0);
+function GoalsView({
+  state,
+  onModeChange,
+}: {
+  state: DashboardState;
+  onModeChange: (mode: AdaptiveMode) => void;
+}) {
+  const goals = buildGoalItems(state);
+  const averageProgress = goals.length
+    ? Math.round(goals.reduce((sum, goal) => sum + goal.progress, 0) / goals.length)
+    : 0;
+  const atRisk = goals.filter((goal) => goal.tone === "red" || goal.tone === "amber").length;
+  const nextGoal = goals[0];
+
   return (
     <SectionShell
       title="Goals"
-      description="Company goals derived from current portfolio, not static example numbers."
+      description="Company OKRs and operating milestones derived from current registries."
     >
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <MetricTile
-          label="Pipeline"
-          value={formatMoney(total)}
-          detail="Expected opportunity value"
+          label="Goal health"
+          value={`${averageProgress}%`}
+          detail="Average objective progress"
         />
         <MetricTile
-          label="Active clients"
-          value={String(state.clients.filter((client) => client.status === "active").length)}
-          detail={`${state.clients.length} clients tracked`}
+          label="At risk"
+          value={String(atRisk)}
+          detail="Needs owner or coordinator attention"
         />
         <MetricTile
-          label="Run completion"
-          value={`${completedRunCoverage(state.runs)}%`}
-          detail="Completed over total runs"
+          label="Next milestone"
+          value={nextGoal ? `${nextGoal.progress}%` : "0%"}
+          detail={nextGoal?.title ?? "No goals loaded"}
         />
       </div>
+
+      <div className="mt-5 grid grid-cols-1 gap-3 xl:grid-cols-2">
+        {goals.map((goal) => (
+          <GoalCard key={goal.id} goal={goal} onOpen={() => onModeChange(goal.route)} />
+        ))}
+      </div>
+
+      <div className="mt-5 overflow-hidden rounded-md border border-neutral-800">
+        <div className="grid grid-cols-[1fr_120px_120px] bg-neutral-900 px-4 py-2 text-[10px] font-semibold uppercase text-neutral-500">
+          <span>Milestone</span>
+          <span>Progress</span>
+          <span />
+        </div>
+        {goals.slice(0, 6).map((goal) => (
+          <div
+            key={`milestone:${goal.id}`}
+            className="grid grid-cols-[1fr_120px_120px] items-center gap-3 border-t border-neutral-800 px-4 py-3 text-[11px]"
+          >
+            <div className="min-w-0">
+              <div className="truncate font-medium text-neutral-50">{goal.nextAction}</div>
+              <div className="mt-1 truncate text-[10px] text-neutral-500">{goal.target}</div>
+            </div>
+            <StatusPill value={`${goal.progress}%`} tone={goal.tone} />
+            <button
+              onClick={() => onModeChange(goal.route)}
+              className="h-8 rounded-md border border-neutral-800 px-3 text-[10px] font-medium text-neutral-300"
+            >
+              Open
+            </button>
+          </div>
+        ))}
+      </div>
     </SectionShell>
+  );
+}
+
+function GoalCard({ goal, onOpen }: { goal: GoalItem; onOpen: () => void }) {
+  return (
+    <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="truncate text-[13px] font-semibold text-neutral-50">{goal.title}</div>
+          <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-neutral-500">
+            {goal.description}
+          </p>
+        </div>
+        <StatusPill value={`${goal.progress}%`} tone={goal.tone} />
+      </div>
+
+      <div className="mt-4">
+        <div className="h-1.5 rounded-full bg-neutral-800">
+          <div
+            className={classes(
+              "h-1.5 rounded-full",
+              goal.tone === "red"
+                ? "bg-rose-600"
+                : goal.tone === "amber"
+                  ? "bg-amber-500"
+                  : goal.tone === "green"
+                    ? "bg-emerald-600"
+                    : "bg-neutral-700",
+            )}
+            style={{ width: `${goal.progress}%` }}
+          />
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-4 border-t border-neutral-800 pt-3 text-[10px]">
+          <div>
+            <div className="text-neutral-600">Current</div>
+            <div className="mt-1 truncate text-neutral-300">{goal.current}</div>
+          </div>
+          <div>
+            <div className="text-neutral-600">Target</div>
+            <div className="mt-1 truncate text-neutral-300">{goal.target}</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 border-t border-neutral-800 pt-3">
+        <div className="text-[10px] text-neutral-600">Next action</div>
+        <div className="mt-1 text-[11px] leading-relaxed text-neutral-300">{goal.nextAction}</div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {goal.signals.map((signal) => (
+          <span
+            key={signal}
+            className="max-w-full truncate rounded border border-neutral-800 px-2 py-1 text-[10px] text-neutral-500"
+          >
+            {signal}
+          </span>
+        ))}
+        <button
+          onClick={onOpen}
+          className="ml-auto h-7 rounded-md border border-neutral-800 px-3 text-[10px] font-medium text-neutral-300"
+        >
+          Open
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -3346,7 +3640,7 @@ export function App() {
             <div className="min-w-0">
               {mode === "portfolio" ? <PortfolioOperatingRoom state={state} /> : null}
               {mode === "today" ? <TodayView state={state} onModeChange={onModeChange} /> : null}
-              {mode === "goals" ? <GoalsView state={state} /> : null}
+              {mode === "goals" ? <GoalsView state={state} onModeChange={onModeChange} /> : null}
               {mode === "revenue" ? <RevenueWorkspace state={state} /> : null}
               {mode === "delivery" ? <DeliveryWorkspace state={state} /> : null}
               {mode === "growth" ? <GrowthWorkspace state={state} /> : null}
