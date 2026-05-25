@@ -86,6 +86,53 @@ describe("API server", () => {
     expect(audit).toContain("coordinator.intake.completed");
   });
 
+  it("moves resolved approvals into history for the ElectronJS approvals page", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const intake = await fetch(`${server.url}/coordinator/intake`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        clientName: "Pizzeria Aurora",
+        message: "Ho parlato con una pizzeria: vuole sito con prenotazioni.",
+      }),
+    });
+    const created = (await intake.json()) as { approvals: Array<{ id: string }> };
+    const first = created.approvals[0];
+    expect(first?.id).toBeTruthy();
+
+    const resolved = await fetch(`${server.url}/approvals/resolve`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: first?.id, status: "approved", reason: "Scope approved" }),
+    });
+    expect(resolved.status).toBe(200);
+
+    const history = await fetch(`${server.url}/approvals/resolved`);
+    expect(history.status).toBe(200);
+    const body = (await history.json()) as Array<{
+      id: string;
+      status: string;
+      reason: string;
+      resolved_by: string;
+    }>;
+    expect(body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: first?.id,
+          status: "approved",
+          reason: "Scope approved",
+          resolved_by: "owner",
+        }),
+      ]),
+    );
+
+    const pending = (await (await fetch(`${server.url}/approvals`)).json()) as Array<{
+      id: string;
+    }>;
+    expect(pending.map((approval) => approval.id)).not.toContain(first?.id);
+  });
+
   it("exposes safe workspace settings for the ElectronJS settings page", async () => {
     const config = defaultConfig("agency");
     config.organization.name = "Settings Agency";

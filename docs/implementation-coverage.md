@@ -61,7 +61,7 @@ Every major capability described in the docs must become one of:
 | Revenue pulse | React renderer + `/company-pulse` | partial |
 | Live operations timeline | SSE `/events` + audit log | implemented |
 | Supreme Coordinator chat | React renderer + `/coordinator/messages`, workspace-backed chat history, memory packet assembly, provider-router-backed answer path with deterministic local fallback | partial |
-| Approvals panel | React renderer + `/approvals/resolve` | partial |
+| Approvals panel and page | React renderer + `/approvals`, `/approvals/resolved`, `/approvals/resolve`, pending rail, filtered history page | implemented |
 | Reports generation | `BusinessReportService`, `bureau report generate`, `/reports/generate` | implemented |
 | Reports view | report action in Revenue Pulse, `/reports` endpoint | partial |
 | Settings view | provider settings panel plus safe `/settings` workspace configuration summary | partial |

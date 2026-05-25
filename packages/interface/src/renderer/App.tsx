@@ -76,6 +76,7 @@ interface DashboardState {
   projects: ProjectRecord[];
   opportunities: OpportunityRecord[];
   approvals: ApprovalRecord[];
+  resolvedApprovals: ApprovalRecord[];
   runs: RunRecord[];
   agents: AgentDefinition[];
   capabilities: CapabilityDefinition[];
@@ -149,6 +150,7 @@ const emptyState: DashboardState = {
   projects: [],
   opportunities: [],
   approvals: [],
+  resolvedApprovals: [],
   runs: [],
   agents: [],
   capabilities: [],
@@ -170,6 +172,7 @@ function useDashboard(): { state: DashboardState; refresh: () => Promise<void> }
         projects,
         opportunities,
         approvals,
+        resolvedApprovals,
         runs,
         agents,
         capabilities,
@@ -184,6 +187,7 @@ function useDashboard(): { state: DashboardState; refresh: () => Promise<void> }
         Api.projects(),
         Api.opportunities(),
         Api.approvals(),
+        Api.approvalsResolved(),
         Api.runs(),
         Api.agents(),
         Api.capabilities(),
@@ -199,6 +203,7 @@ function useDashboard(): { state: DashboardState; refresh: () => Promise<void> }
         projects,
         opportunities,
         approvals,
+        resolvedApprovals,
         runs,
         agents,
         capabilities,
@@ -262,6 +267,7 @@ type AdaptiveMode =
   | "growth"
   | "clients"
   | "risk"
+  | "approvals"
   | "memory"
   | "agents"
   | "reports"
@@ -740,9 +746,9 @@ function Sidebar({
         <SidebarItem
           icon="V"
           label="Approvals"
-          active={mode === "risk"}
+          active={mode === "approvals"}
           badge={state.approvals.length}
-          onClick={() => onModeChange("risk")}
+          onClick={() => onModeChange("approvals")}
         />
         <SidebarItem
           icon="P"
@@ -1267,9 +1273,11 @@ function CoordinatorPanel({
 function PendingApprovals({
   approvals,
   onResolve,
+  onOpen,
 }: {
   approvals: ApprovalRecord[];
   onResolve: (id: string, status: "approved" | "rejected") => Promise<void>;
+  onOpen: () => void;
 }) {
   const visible = approvals.slice(0, 3);
   return (
@@ -1281,7 +1289,9 @@ function PendingApprovals({
             {visible.length}
           </span>
         </div>
-        <button className="text-[10px] text-neutral-500">View all</button>
+        <button onClick={onOpen} className="text-[10px] text-neutral-500">
+          View all
+        </button>
       </div>
       <div className="divide-y divide-neutral-800 px-5">
         {visible.length > 0 ? (
@@ -1896,6 +1906,128 @@ function RiskWorkspace({ state }: { state: DashboardState }) {
             title="No active risk"
             description="Policy gates and blocked project signals will appear here."
           />
+        ) : null}
+      </div>
+    </SectionShell>
+  );
+}
+
+function approvalTone(status: string): Tone {
+  if (status === "approved") return "green";
+  if (status === "rejected" || status === "expired") return "red";
+  if (status === "pending") return "amber";
+  return "muted";
+}
+
+function ApprovalsWorkspace({
+  state,
+  onResolve,
+}: {
+  state: DashboardState;
+  onResolve: (id: string, status: "approved" | "rejected") => Promise<void>;
+}) {
+  const [filter, setFilter] = useState<"pending" | "approved" | "rejected" | "all">("pending");
+  const allApprovals = [...state.approvals, ...state.resolvedApprovals];
+  const visible = allApprovals
+    .filter((approval) => filter === "all" || approval.status === filter)
+    .sort((a, b) => (b.updated ?? b.created ?? "").localeCompare(a.updated ?? a.created ?? ""));
+  const approved = state.resolvedApprovals.filter((approval) => approval.status === "approved");
+  const rejected = state.resolvedApprovals.filter((approval) => approval.status === "rejected");
+
+  return (
+    <SectionShell
+      title="Approvals"
+      description="Owner decisions, external action gates, and resolved approval history."
+    >
+      <div className="grid grid-cols-4 gap-4">
+        <MetricTile
+          label="Pending"
+          value={String(state.approvals.length)}
+          detail="Waiting for owner"
+        />
+        <MetricTile label="Approved" value={String(approved.length)} detail="Resolved allowed" />
+        <MetricTile label="Rejected" value={String(rejected.length)} detail="Resolved blocked" />
+        <MetricTile
+          label="Total"
+          value={String(allApprovals.length)}
+          detail="Pending and history"
+        />
+      </div>
+      <div className="mt-5 flex gap-2">
+        {(["pending", "approved", "rejected", "all"] as const).map((item) => (
+          <button
+            key={item}
+            onClick={() => setFilter(item)}
+            className={classes(
+              "h-8 rounded-md border px-3 text-[11px]",
+              filter === item
+                ? "border-neutral-700 bg-neutral-900 text-neutral-100"
+                : "border-neutral-800 text-neutral-500",
+            )}
+          >
+            {formatLabel(item)}
+          </button>
+        ))}
+      </div>
+      <div className="mt-4 overflow-hidden rounded-md border border-neutral-800">
+        <div className="grid grid-cols-[160px_100px_1fr_110px_150px_170px] bg-neutral-900 px-4 py-2 text-[10px] font-semibold uppercase text-neutral-500">
+          <span>Action</span>
+          <span>Status</span>
+          <span>Scope</span>
+          <span>Actor</span>
+          <span>Updated</span>
+          <span />
+        </div>
+        {visible.map((approval) => (
+          <div
+            key={approval.id}
+            className="grid grid-cols-[160px_100px_1fr_110px_150px_170px] items-center gap-3 border-t border-neutral-800 px-4 py-3 text-[11px]"
+          >
+            <div className="min-w-0">
+              <div className="truncate font-medium text-neutral-50">{approval.action}</div>
+              <div className="mt-1 truncate text-[10px] text-neutral-600">{approval.id}</div>
+            </div>
+            <StatusPill value={formatLabel(approval.status)} tone={approvalTone(approval.status)} />
+            <div className="min-w-0">
+              <div className="truncate text-neutral-400">{approval.scope}</div>
+              <div className="mt-1 truncate text-[10px] text-neutral-600">{approval.target}</div>
+            </div>
+            <span className="truncate text-neutral-500">{approval.actor}</span>
+            <div className="text-neutral-500">
+              {approval.updated ? timeAgo(approval.updated) : "unknown"}
+              {approval.resolved_by ? (
+                <div className="mt-1 text-[10px] text-neutral-600">{approval.resolved_by}</div>
+              ) : null}
+            </div>
+            {approval.status === "pending" ? (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => void onResolve(approval.id, "approved")}
+                  className="h-8 rounded-md bg-emerald-600 px-3 text-[10px] font-medium text-white"
+                >
+                  Approve
+                </button>
+                <button
+                  onClick={() => void onResolve(approval.id, "rejected")}
+                  className="h-8 rounded-md border border-neutral-800 px-3 text-[10px] text-neutral-500"
+                >
+                  Reject
+                </button>
+              </div>
+            ) : (
+              <span className="truncate text-[10px] text-neutral-600">
+                {approval.reason || approval.resolved_at || "Resolved"}
+              </span>
+            )}
+          </div>
+        ))}
+        {visible.length === 0 ? (
+          <div className="border-t border-neutral-800 p-5">
+            <EmptyState
+              title="No approvals in this view"
+              description="Policy gates appear here before BureauOS performs sensitive actions."
+            />
+          </div>
         ) : null}
       </div>
     </SectionShell>
@@ -2606,6 +2738,9 @@ export function App() {
               {mode === "growth" ? <GrowthWorkspace state={state} /> : null}
               {mode === "clients" ? <ClientsWorkspace state={state} /> : null}
               {mode === "risk" ? <RiskWorkspace state={state} /> : null}
+              {mode === "approvals" ? (
+                <ApprovalsWorkspace state={state} onResolve={onResolve} />
+              ) : null}
               {mode === "memory" ? <MemoryWorkspace state={state} /> : null}
               {mode === "agents" ? <AgentsWorkspace state={state} /> : null}
               {mode === "reports" ? <ReportsWorkspace state={state} /> : null}
@@ -2627,7 +2762,11 @@ export function App() {
               <Timeline events={state.audit} artifacts={state.artifacts} />
             </div>
             <div className="min-w-0">
-              <PendingApprovals approvals={state.approvals} onResolve={onResolve} />
+              <PendingApprovals
+                approvals={state.approvals}
+                onResolve={onResolve}
+                onOpen={() => setMode("approvals")}
+              />
             </div>
             <div className="dashboard-revenue">
               <RevenuePulse

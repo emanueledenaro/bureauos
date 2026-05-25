@@ -135,8 +135,14 @@ export interface ApprovalRecord {
   target: string;
   scope: string;
   status: string;
+  expires_at?: string;
+  one_off?: boolean;
+  recurring?: boolean;
   created?: string;
   updated?: string;
+  resolved_at?: string;
+  resolved_by?: string;
+  reason?: string;
 }
 export interface RunRecord {
   id: string;
@@ -376,6 +382,7 @@ export const Api = {
   projects: () => api<ProjectRecord[]>("/projects"),
   opportunities: () => api<OpportunityRecord[]>("/opportunities"),
   approvals: () => api<ApprovalRecord[]>("/approvals"),
+  approvalsResolved: () => api<ApprovalRecord[]>("/approvals/resolved"),
   runs: () => api<RunRecord[]>("/runs"),
   agents: () => api<AgentDefinition[]>("/agents"),
   capabilities: () => api<CapabilityDefinition[]>("/capabilities"),
