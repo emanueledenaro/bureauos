@@ -119,11 +119,11 @@ Every major capability described in the docs must become one of:
 | GitHub issue creation from drafts | `github create-issues`, `/github/create-issues`, Electron project cards | implemented |
 | GitHub PR creation | not implemented | designed |
 | OpenAI Codex OAuth provider | separate `openai-codex` provider, browser PKCE OAuth, ChatGPT Codex backend `generateText`/SSE `stream`, persisted token refresh, no API fallback | partial |
-| OpenAI API provider | separate `openai` provider, SDK-backed API-key adapter | partial |
-| Anthropic provider | provider adapter | partial |
-| Google provider | provider adapter | partial |
-| OpenRouter provider | provider adapter | partial |
-| Local provider | provider adapter | partial |
+| OpenAI API provider | separate `openai` provider, SDK-backed API-key adapter with `generateText`/`stream` | implemented |
+| Anthropic provider | SDK-backed API-key adapter with `generateText`/`stream` | implemented |
+| Google provider | Gemini REST adapter with `generateText`/SSE `stream` | implemented |
+| OpenRouter provider | OpenAI-compatible adapter with model listing, `generateText`, and SSE `stream` | implemented |
+| Local provider | OpenAI-compatible local/Ollama adapter with model listing, `generateText`, and SSE `stream` | implemented |
 | Provider connector catalog | `listProviderConnectors`, OpenCode-style `provider` config overrides, `enabled_providers`/`disabled_providers`, `/provider/connectors`, catalog-backed auth methods, model defaults, and env mappings | implemented |
 | Provider auth/connect | `ProviderAuthStore`, auth modes, OpenCode-style `/provider/auth` and OAuth authorize/callback endpoints, `.bureauos/auth/providers.json` | implemented |
 | Electron provider settings | Settings mode, connector catalog selector, browser OAuth for `openai-codex`, explicit API-key/local endpoint connect for API providers | implemented |

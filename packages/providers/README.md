@@ -18,4 +18,4 @@ The connector catalog follows the OpenCode pattern: built-in provider metadata c
 
 ## Status
 
-Provider auth, browser PKCE login for OpenAI Codex OAuth, ChatGPT Codex backend generation/streaming, refresh-token persistence, auth-mode validation, OpenCode-style connector config, role routing, and model-backed artifact drafting are implemented. Device/headless OAuth login, budget-aware routing, structured generation, and full capability-aware routing remain future work.
+Provider auth, browser PKCE login for OpenAI Codex OAuth, ChatGPT Codex backend generation/streaming, refresh-token persistence, auth-mode validation, OpenCode-style connector config, role routing, OpenAI/Anthropic/Google/OpenRouter/Local model calls, and model-backed artifact drafting are implemented. Device/headless OAuth login, budget-aware routing, structured generation, and full capability-aware routing remain future work.

@@ -86,13 +86,13 @@ function registerCredential(
       router.register(new AnthropicAdapter(credential.id, { apiKey, defaultModel }));
       return;
     case "google":
-      router.register(new GoogleAdapter(credential.id, { apiKey, defaultModel }));
+      router.register(new GoogleAdapter(credential.id, { apiKey, baseUrl, defaultModel }));
       return;
     case "openrouter":
-      router.register(new OpenRouterAdapter(credential.id, { apiKey, defaultModel }));
+      router.register(new OpenRouterAdapter(credential.id, { apiKey, baseUrl, defaultModel }));
       return;
     case "local":
-      router.register(new LocalAdapter(credential.id, { baseUrl, defaultModel }));
+      router.register(new LocalAdapter(credential.id, { apiKey, baseUrl, defaultModel }));
       return;
     case "custom":
       router.register(new OpenAIAdapter(credential.id, { apiKey, baseUrl, defaultModel }));

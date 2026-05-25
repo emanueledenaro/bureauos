@@ -98,7 +98,9 @@ The singular `/provider/...` endpoints follow OpenCode's provider auth pattern: 
 - OpenAI Codex OAuth: separate provider profile, browser PKCE login, token validation, token refresh persistence, live ChatGPT Codex backend requests, SSE streaming, no API-key fallback.
 - OpenAI API: SDK-backed `generateText` and `stream`.
 - Anthropic: SDK-backed `generateText` and `stream`.
-- Google, OpenRouter, Local: registered adapters with credential validation, model calls still stubbed.
+- Google: REST-backed Gemini `generateText` and SSE `stream`.
+- OpenRouter: OpenAI-compatible `generateText`, model listing, and SSE `stream`.
+- Local: OpenAI-compatible local/Ollama `generateText`, model listing, and SSE `stream`.
 - Provider connectors: catalog-backed metadata, config overrides, enabled/disabled provider filtering, auth methods, default models, and env mappings for OpenAI Codex, OpenAI API, Anthropic, Google, OpenRouter, Local, and Custom API.
 - Codex runtime: adapter contract exists, execution still stubbed.
 

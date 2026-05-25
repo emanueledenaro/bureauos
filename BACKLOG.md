@@ -155,14 +155,14 @@ Goal: a local-first kernel that can initialize a workspace, hold company state, 
 Goal: real model calls behind a provider-agnostic interface. The router selects providers per agent role, with fallbacks and budget awareness.
 
 - [x] Define `ProviderAdapter` and `RuntimeAdapter` contracts in `packages/providers`.
-- [x] Implement OpenAI/Anthropic/Google/Local/OpenRouter adapter stubs with `validateCredentials()` and `NotConfiguredError`.
+- [x] Implement OpenAI/Anthropic/Google/Local/OpenRouter adapters with credential validation.
 - [x] Implement Codex runtime adapter stub.
 - [x] Implement env-based credential loading.
 - [x] Implement the router with default + fallback chains.
 - [x] Add a `bureau providers list` CLI command.
 - [x] Add an OpenCode-style auth store and commands (`bureau auth login/list/logout`) for provider credentials.
 - [x] Add provider connection management in ElectronJS Settings.
-- [ ] Wire real SDK calls (`generateText`, `stream`) for each adapter.
+- [x] Wire real model calls (`generateText`, `stream`) for OpenAI, Anthropic, Google, OpenRouter, Local, and OpenAI Codex OAuth.
 - [ ] Add budget-aware and capability-aware routing.
 - [ ] Add OS keychain integration as an alternative credential source.
 - [ ] Add tests with recorded HTTP fixtures for each adapter.
