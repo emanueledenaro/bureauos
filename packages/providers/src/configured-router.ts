@@ -10,6 +10,11 @@ import {
   type ProviderAuthMode,
   type ProviderCredentialRecord,
 } from "./auth-store.js";
+import {
+  defaultProviderCredentialId,
+  getProviderConnector,
+  listProviderConnectors,
+} from "./catalog.js";
 import { ProviderRouter } from "./router.js";
 import type { ProviderType } from "./types.js";
 
@@ -17,6 +22,7 @@ export type ProviderConnectionSource = "auth" | "env";
 
 export interface ProviderConnection {
   provider: ProviderType;
+  provider_name: string;
   id: string;
   source: ProviderConnectionSource;
   auth_mode: ProviderAuthMode;
@@ -92,8 +98,10 @@ function registerCredential(
 }
 
 function connectionFromCredential(credential: ProviderCredentialRecord): ProviderConnection {
+  const connector = getProviderConnector(credential.provider);
   return {
     provider: credential.provider,
+    provider_name: connector.name,
     id: credential.id,
     source: "auth",
     auth_mode: credential.mode,
@@ -106,102 +114,45 @@ function connectionFromCredential(credential: ProviderCredentialRecord): Provide
         : "",
     base_url: credential.baseUrl,
     default_model: credential.defaultModel,
-    no_api_fallback: credential.provider === "openai-codex",
+    no_api_fallback: connector.noApiFallback,
   };
 }
 
+function firstEnv(env: ProviderEnv, names?: readonly string[]): string {
+  return (
+    names?.map((name) => env[name]?.trim()).find((value): value is string => Boolean(value)) ?? ""
+  );
+}
+
 function envCredential(
-  provider: Exclude<ProviderType, "custom">,
+  provider: ProviderType,
   env: ProviderEnv,
-): ProviderCredentialRecord {
+): ProviderCredentialRecord | undefined {
+  const connector = getProviderConnector(provider);
   const now = new Date().toISOString();
-  const id = `${provider}-default`;
-  switch (provider) {
-    case "openai-codex":
-      return {
-        provider,
-        id,
-        mode: "oauth",
-        apiKey: "",
-        accessToken: env["OPENAI_CODEX_ACCESS_TOKEN"] ?? "",
-        refreshToken: env["OPENAI_CODEX_REFRESH_TOKEN"] ?? "",
-        expiresAt: env["OPENAI_CODEX_EXPIRES_AT"] ?? "",
-        baseUrl: "",
-        defaultModel: "",
-        created: now,
-        updated: now,
-      };
-    case "openai":
-      return {
-        provider,
-        id,
-        mode: "api-key",
-        apiKey: env["OPENAI_API_KEY"] ?? "",
-        accessToken: "",
-        refreshToken: "",
-        expiresAt: "",
-        baseUrl: "",
-        defaultModel: "",
-        created: now,
-        updated: now,
-      };
-    case "anthropic":
-      return {
-        provider,
-        id,
-        mode: "api-key",
-        apiKey: env["ANTHROPIC_API_KEY"] ?? "",
-        accessToken: "",
-        refreshToken: "",
-        expiresAt: "",
-        baseUrl: "",
-        defaultModel: "",
-        created: now,
-        updated: now,
-      };
-    case "google":
-      return {
-        provider,
-        id,
-        mode: "api-key",
-        apiKey: env["GOOGLE_API_KEY"] ?? "",
-        accessToken: "",
-        refreshToken: "",
-        expiresAt: "",
-        baseUrl: "",
-        defaultModel: "",
-        created: now,
-        updated: now,
-      };
-    case "openrouter":
-      return {
-        provider,
-        id,
-        mode: "api-key",
-        apiKey: env["OPENROUTER_API_KEY"] ?? "",
-        accessToken: "",
-        refreshToken: "",
-        expiresAt: "",
-        baseUrl: "",
-        defaultModel: "",
-        created: now,
-        updated: now,
-      };
-    case "local":
-      return {
-        provider,
-        id,
-        mode: "local",
-        apiKey: "",
-        accessToken: "",
-        refreshToken: "",
-        expiresAt: "",
-        baseUrl: env["LOCAL_MODEL_URL"] ?? "",
-        defaultModel: "",
-        created: now,
-        updated: now,
-      };
-  }
+  const apiKey = firstEnv(env, connector.env.apiKey);
+  const accessToken = firstEnv(env, connector.env.accessToken);
+  const refreshToken = firstEnv(env, connector.env.refreshToken);
+  const expiresAt = firstEnv(env, connector.env.expiresAt);
+  const baseUrl = firstEnv(env, connector.env.baseUrl);
+
+  if (connector.defaultAuthMode === "oauth" && !accessToken && !refreshToken) return undefined;
+  if (connector.defaultAuthMode === "local" && !baseUrl) return undefined;
+  if (connector.defaultAuthMode === "api-key" && !apiKey && !baseUrl) return undefined;
+
+  return {
+    provider,
+    id: defaultProviderCredentialId(provider),
+    mode: connector.defaultAuthMode,
+    apiKey,
+    accessToken,
+    refreshToken,
+    expiresAt,
+    baseUrl,
+    defaultModel: "",
+    created: now,
+    updated: now,
+  };
 }
 
 export async function buildConfiguredProviderRouter(
@@ -217,18 +168,14 @@ export async function buildConfiguredProviderRouter(
 
   const hasStored = (provider: ProviderType) =>
     credentials.some((credential) => credential.provider === provider);
-  const envProviders: Array<Exclude<ProviderType, "custom">> = [
-    "openai-codex",
-    "openai",
-    "anthropic",
-    "google",
-    "openrouter",
-    "local",
-  ];
+  const envProviders = listProviderConnectors()
+    .filter((connector) => connector.id !== "custom")
+    .map((connector) => connector.id);
 
   for (const provider of envProviders) {
     if (hasStored(provider)) continue;
     const credential = envCredential(provider, env);
+    if (!credential) continue;
     registerCredential(router, credential);
     connections.push({
       ...connectionFromCredential(credential),

@@ -15,6 +15,21 @@ export type {
 
 export { ProviderRouter } from "./router.js";
 export type { ProviderSelection } from "./router.js";
+export {
+  defaultProviderAuthMode,
+  defaultProviderCredentialId,
+  getProviderConnector,
+  listProviderConnectors,
+  providerAuthMethods,
+} from "./catalog.js";
+export type {
+  ProviderAuthMethod,
+  ProviderAuthMethodType,
+  ProviderAuthPrompt,
+  ProviderConnector,
+  ProviderConnectorAuthMode,
+  ProviderEnvironmentMapping,
+} from "./catalog.js";
 export { buildConfiguredProviderRouter } from "./configured-router.js";
 export type {
   ConfiguredProviderRouter,

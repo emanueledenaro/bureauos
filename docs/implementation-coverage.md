@@ -105,7 +105,7 @@ Every major capability described in the docs must become one of:
 | Project health checks | scheduler/run stubs | partial |
 | Growth review | scheduler/run stubs | partial |
 | Client account review | scheduler/run stubs | partial |
-| Threshold triggers | `GitHubSignalTriggerService` starts idempotent bug/health-check runs from failing checks and stale GitHub work | partial |
+| Threshold triggers | `GitHubSignalTriggerService` and `OperationalSignalTriggerService` start idempotent runs from failing/stale GitHub work, blocked internal work, unanswered client messages, and empty content pipeline signals | partial |
 | Failing check detection | `GitHubSignalSyncService`, `GitHubWebhookIngestionService`, `github sync`, `/github/webhook`, `github-signal-report` | partial |
 | Stale PR/issue detection | `GitHubSignalSyncService`, `github sync --stale-days` | partial |
 
@@ -124,8 +124,9 @@ Every major capability described in the docs must become one of:
 | Google provider | provider adapter | partial |
 | OpenRouter provider | provider adapter | partial |
 | Local provider | provider adapter | partial |
+| Provider connector catalog | `listProviderConnectors`, `/provider/connectors`, catalog-backed auth methods and env mappings | implemented |
 | Provider auth/connect | `ProviderAuthStore`, auth modes, OpenCode-style `/provider/auth` and OAuth authorize/callback endpoints, `.bureauos/auth/providers.json` | implemented |
-| Electron provider settings | Settings mode, browser OAuth for `openai-codex`, explicit API-key connect for API providers | implemented |
+| Electron provider settings | Settings mode, connector catalog selector, browser OAuth for `openai-codex`, explicit API-key/local endpoint connect for API providers | implemented |
 | Gmail/Slack/Drive/Calendar | not implemented | designed |
 | Supabase/Stripe/Vercel | not implemented | designed |
 | Ads platforms | draft-only policy, no adapter | designed |
@@ -142,9 +143,9 @@ Every major capability described in the docs must become one of:
 
 ## Current Priority Order
 
-1. Add remaining non-GitHub threshold triggers: blocked issue age, unanswered client message age, empty content pipeline.
-2. Add ElectronJS pages for clients, projects, approvals, reports, memory, settings.
-3. Add always-on scheduler tasks for daily report, project health, growth review, and client review.
-4. Add budget-aware and capability-aware routing.
-5. Add connector adapters behind draft-first policy gates.
-6. Wire Codex runtime execution for development/reviewer/QA under policy.
+1. Add ElectronJS pages for clients, projects, approvals, reports, memory, settings.
+2. Expand always-on scheduler execution beyond run stubs into deeper verification/retry loops.
+3. Add budget-aware and capability-aware routing.
+4. Add connector adapters behind draft-first policy gates.
+5. Wire Codex runtime execution for development/reviewer/QA under policy.
+6. Add OS notifications/tray/autostart for long-running daemon mode.

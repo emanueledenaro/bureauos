@@ -13,6 +13,7 @@ import {
   type OpportunityRecord,
   type ProviderAuthAuthorization,
   type ProviderConnection,
+  type ProviderConnector,
   type ProjectRecord,
   type RunRecord,
 } from "./lib/api";
@@ -74,6 +75,7 @@ interface DashboardState {
   runs: RunRecord[];
   agents: AgentDefinition[];
   providers: ProviderConnection[];
+  providerConnectors: ProviderConnector[];
   artifacts: ArtifactRecord[];
   audit: AuditEvent[];
   error?: string;
@@ -151,6 +153,7 @@ const emptyState: DashboardState = {
   runs: [],
   agents: [],
   providers: [],
+  providerConnectors: [],
   artifacts: [],
   audit: [],
   loading: true,
@@ -171,6 +174,7 @@ function useDashboard(): { state: DashboardState; refresh: () => Promise<void> }
         agents,
         artifacts,
         providers,
+        providerConnectors,
         audit,
       ] = await Promise.all([
         Api.pulse(),
@@ -182,6 +186,7 @@ function useDashboard(): { state: DashboardState; refresh: () => Promise<void> }
         Api.agents(),
         Api.artifacts(),
         Api.providers(),
+        Api.providerConnectors(),
         Api.audit(30),
       ]);
       setState({
@@ -194,6 +199,7 @@ function useDashboard(): { state: DashboardState; refresh: () => Promise<void> }
         agents,
         artifacts,
         providers,
+        providerConnectors,
         audit,
         loading: false,
       });
@@ -1990,11 +1996,13 @@ function ReportsWorkspace({ state }: { state: DashboardState }) {
 
 function SettingsView({
   providers,
+  providerConnectors,
   onProviderLogin,
   onProviderLogout,
   onRefresh,
 }: {
   providers: ProviderConnection[];
+  providerConnectors: ProviderConnector[];
   onProviderLogin: (input: {
     provider: string;
     mode?: "oauth" | "api-key" | "local";
@@ -2017,7 +2025,13 @@ function SettingsView({
   >();
   const [oauthStatus, setOauthStatus] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
-  const mode = provider === "openai-codex" ? "oauth" : provider === "local" ? "local" : "api-key";
+  const connector = providerConnectors.find((item) => item.id === provider);
+  const mode =
+    connector?.defaultAuthMode ??
+    (provider === "openai-codex" ? "oauth" : provider === "local" ? "local" : "api-key");
+  const authMethod = connector?.authMethods[0];
+  const requiresApiKey = authMethod?.type === "api";
+  const requiresBaseUrl = connector?.requiresBaseUrl || provider === "custom";
 
   const openAuthorizationUrl = async (url: string): Promise<void> => {
     if (window.bureau) {
@@ -2112,15 +2126,13 @@ function SettingsView({
             onChange={(event) => setProvider(event.target.value)}
             className="h-9 rounded-md border border-neutral-800 bg-neutral-950 px-3 text-[11px] text-neutral-100 outline-none focus:border-neutral-700"
           >
-            <option value="openai-codex">OpenAI Codex OAuth</option>
-            <option value="openai">OpenAI API</option>
-            <option value="anthropic">Anthropic API</option>
-            <option value="google">Google API</option>
-            <option value="openrouter">OpenRouter API</option>
-            <option value="local">Local</option>
-            <option value="custom">Custom API</option>
+            {providerConnectors.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
           </select>
-          {mode === "api-key" ? (
+          {requiresApiKey ? (
             <input
               value={apiKey}
               onChange={(event) => setApiKey(event.target.value)}
@@ -2129,7 +2141,7 @@ function SettingsView({
               type="password"
             />
           ) : null}
-          {mode === "local" || provider === "custom" ? (
+          {requiresBaseUrl ? (
             <input
               value={baseUrl}
               onChange={(event) => setBaseUrl(event.target.value)}
@@ -2148,10 +2160,28 @@ function SettingsView({
             disabled={busy}
             className="h-9 rounded-md bg-neutral-950 px-4 text-[11px] font-medium text-white"
           >
-            {provider === "openai-codex" ? "Connect OAuth" : "Connect"}
+            {mode === "oauth" ? "Connect OAuth" : "Connect"}
           </button>
         </div>
       </div>
+      {connector ? (
+        <div className="mt-4 rounded-md border border-neutral-800 bg-neutral-950 p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-[11px] font-semibold text-neutral-50">{connector.name}</div>
+              <div className="mt-1 text-[11px] text-neutral-500">{connector.description}</div>
+            </div>
+            <div className="text-right text-[10px] uppercase tracking-[0.08em] text-neutral-600">
+              {connector.authMethods.map((method) => method.label).join(" / ")}
+            </div>
+          </div>
+          {connector.noApiFallback ? (
+            <div className="mt-3 text-[11px] text-neutral-500">
+              This connector is isolated from API-key providers and never falls back to API auth.
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       {provider === "openai-codex" ? (
         <div className="mt-4 rounded-md border border-neutral-800 bg-neutral-950 p-4">
           <div className="text-[11px] font-semibold text-neutral-50">
@@ -2191,12 +2221,19 @@ function SettingsView({
           <span>Status</span>
           <span />
         </div>
+        {providers.length === 0 ? (
+          <div className="border-t border-neutral-800 px-4 py-6 text-[11px] text-neutral-500">
+            No provider connected yet.
+          </div>
+        ) : null}
         {providers.map((item) => (
           <div
             key={`${item.provider}:${item.id}`}
             className="grid grid-cols-[120px_90px_1fr_80px_90px_100px] items-center border-t border-neutral-800 px-4 py-3 text-[11px]"
           >
-            <span className="font-medium text-neutral-50">{item.provider}</span>
+            <span className="truncate font-medium text-neutral-50">
+              {item.provider_name || item.provider}
+            </span>
             <span className="text-neutral-500">{item.auth_mode}</span>
             <span className="truncate text-neutral-500">
               {item.id}{" "}
@@ -2294,6 +2331,7 @@ export function App() {
               {mode === "settings" ? (
                 <SettingsView
                   providers={state.providers}
+                  providerConnectors={state.providerConnectors}
                   onProviderLogin={onProviderLogin}
                   onProviderLogout={onProviderLogout}
                   onRefresh={refresh}

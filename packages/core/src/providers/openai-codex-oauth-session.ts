@@ -4,13 +4,10 @@ import {
   createOpenAICodexAuthorization,
   exchangeOpenAICodexCode,
   parseOpenAICodexAuthorizationInput,
+  providerAuthMethods as listProviderAuthMethods,
+  type ProviderAuthMethod,
   type OpenAICodexOAuthFetch,
 } from "@bureauos/providers";
-
-export interface ProviderAuthMethod {
-  type: "oauth" | "api";
-  label: string;
-}
 
 export interface ProviderAuthAuthorization {
   url: string;
@@ -44,14 +41,7 @@ const DEFAULT_CALLBACK_PORT = 1455;
 let pendingCodexOAuth: PendingCodexOAuth | undefined;
 
 export function providerAuthMethods(): Record<string, ProviderAuthMethod[]> {
-  return {
-    "openai-codex": [{ type: "oauth", label: "ChatGPT Plus/Pro (browser)" }],
-    openai: [{ type: "api", label: "API key" }],
-    anthropic: [{ type: "api", label: "API key" }],
-    google: [{ type: "api", label: "API key" }],
-    openrouter: [{ type: "api", label: "API key" }],
-    custom: [{ type: "api", label: "API key" }],
-  };
+  return listProviderAuthMethods();
 }
 
 function closePendingServer(): void {

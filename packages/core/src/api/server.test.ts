@@ -439,6 +439,27 @@ describe("API server", () => {
     const body = (await response.json()) as Record<string, Array<{ type: string; label: string }>>;
     expect(body["openai-codex"]).toEqual([{ type: "oauth", label: "ChatGPT Plus/Pro (browser)" }]);
     expect(body["openai"]).toEqual([{ type: "api", label: "API key" }]);
+    expect(body["local"]).toEqual([{ type: "local", label: "Local endpoint" }]);
+  });
+
+  it("exposes provider connector metadata for the desktop settings view", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const response = await fetch(`${server.url}/provider/connectors`);
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as Array<{
+      id: string;
+      name: string;
+      noApiFallback: boolean;
+      authMethods: Array<{ type: string; label: string }>;
+    }>;
+    const codex = body.find((item) => item.id === "openai-codex");
+    expect(codex).toMatchObject({
+      name: "OpenAI Codex",
+      noApiFallback: true,
+      authMethods: [{ type: "oauth", label: "ChatGPT Plus/Pro (browser)" }],
+    });
   });
 
   it("connects OpenAI Codex with the browser OAuth callback flow", async () => {

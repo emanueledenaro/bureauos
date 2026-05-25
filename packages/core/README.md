@@ -11,10 +11,11 @@ Responsibilities (see [docs/bos-kernel-infrastructure.md](../../docs/bos-kernel-
 - Run engine
 - Artifact store
 - Audit log
-- Local API server (Phase 4)
+- Always-on scheduler and signal triggers
+- Local API server
 
 This package runs on Node 20 LTS, local-first. It does not perform external actions; the provider router and capabilities handle that under policy.
 
 ## Status
 
-Scaffold only. See [BACKLOG.md](../../BACKLOG.md) Phase 1.
+Local-first kernel primitives, registries, policy gates, run lifecycle, reports, GitHub signal ingestion, provider-aware agent drafting, and internal operational signal triggers are implemented. Runtime execution adapters and deeper external connectors are still being wired behind policy.

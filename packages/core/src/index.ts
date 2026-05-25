@@ -141,6 +141,18 @@ export type {
   BusinessReportResult,
 } from "./reports/business.js";
 
+// Always-on operational signals
+export { OperationalSignalTriggerService } from "./autonomy/operational-triggers.js";
+export type {
+  OperationalSignalThresholds,
+  OperationalSignalTriggerDeps,
+  OperationalSignalTriggerInput,
+  OperationalSignalTriggerKind,
+  OperationalSignalTriggerResult,
+  SkippedOperationalSignal,
+  TriggeredOperationalRun,
+} from "./autonomy/operational-triggers.js";
+
 // Provider auth
 export {
   authorizeOpenAICodexOAuth,
@@ -149,10 +161,10 @@ export {
 } from "./providers/openai-codex-oauth-session.js";
 export type {
   ProviderAuthAuthorization,
-  ProviderAuthMethod,
   ProviderOAuthCallbackInput,
   ProviderOAuthCallbackResult,
 } from "./providers/openai-codex-oauth-session.js";
+export type { ProviderAuthMethod } from "@bureauos/providers";
 
 // GitHub planning
 export { GitHubIssueDraftService } from "./github/issue-drafts.js";

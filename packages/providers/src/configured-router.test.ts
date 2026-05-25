@@ -37,6 +37,28 @@ describe("buildConfiguredProviderRouter", () => {
     globalThis.fetch = originalFetch;
   });
 
+  it("only exposes real stored or environment-backed provider connections", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "bureauos-provider-router-"));
+
+    const empty = await buildConfiguredProviderRouter(workspaceRoot, {});
+    expect(empty.connections).toEqual([]);
+    expect(empty.router.list()).toEqual([]);
+
+    const configured = await buildConfiguredProviderRouter(workspaceRoot, {
+      ANTHROPIC_API_KEY: "sk-ant-env",
+    });
+
+    expect(configured.connections).toMatchObject([
+      {
+        provider: "anthropic",
+        provider_name: "Anthropic API",
+        source: "env",
+        auth_mode: "api-key",
+      },
+    ]);
+    expect(configured.router.get("anthropic-default")).toBeDefined();
+  });
+
   it("persists refreshed OpenAI Codex OAuth tokens for stored credentials", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "bureauos-provider-router-"));
     const store = ProviderAuthStore.forWorkspace(workspaceRoot);

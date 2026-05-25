@@ -5,6 +5,7 @@ import { BusinessReportService } from "../reports/business.js";
 import { ProjectRegistry } from "../registries/project.js";
 import { GitHubSignalSyncService, type GitHubSignalClient } from "../github/signal-sync.js";
 import { GitHubSignalTriggerService } from "../github/signal-triggers.js";
+import { OperationalSignalTriggerService } from "../autonomy/operational-triggers.js";
 
 /**
  * Always-on scheduler.
@@ -56,6 +57,12 @@ const TICKS: Array<Omit<TickJob, "last">> = [
     type: "client_success",
     scope: "weekly client account review",
     everyMs: 7 * 24 * 60 * 60 * 1000,
+  },
+  {
+    name: "operational_signal_scan",
+    type: "health_check",
+    scope: "scan internal operating signals",
+    everyMs: 30 * 60 * 1000,
   },
   {
     name: "github_project_signal_sync",
@@ -116,6 +123,10 @@ export class Scheduler {
       try {
         if (job.name === "github_project_signal_sync") {
           await this.syncGitHubProjectSignals();
+          continue;
+        }
+        if (job.name === "operational_signal_scan") {
+          await this.scanOperationalSignals();
           continue;
         }
         const run = await this.options.runs.start({
@@ -206,6 +217,33 @@ export class Scheduler {
     }
     this.log(
       `scheduler: github_project_signal_sync synced ${repositories.size} repositories, triggered ${triggered} runs`,
+    );
+  }
+
+  private async scanOperationalSignals(): Promise<void> {
+    if (!this.options.workspaceRoot || !this.options.coordinator) {
+      this.log("scheduler: operational_signal_scan skipped (coordinator not configured)");
+      return;
+    }
+
+    const result = await new OperationalSignalTriggerService(this.options.workspaceRoot, {
+      runs: this.options.runs,
+      audit: this.options.coordinator.audit,
+      artifacts: this.options.coordinator.artifacts,
+      policy: this.options.coordinator.policy,
+      coordinator: this.options.coordinator,
+    }).scan({
+      thresholds: {
+        blockedProjectDays: this.options.config.triggers.thresholds.blocked_issue_hours / 24,
+        blockedRunDays: this.options.config.triggers.thresholds.blocked_issue_hours / 24,
+        unansweredClientMessageDays:
+          this.options.config.triggers.thresholds.unanswered_client_message_hours / 24,
+        emptyContentPipelineDays:
+          this.options.config.triggers.thresholds.empty_content_pipeline_days,
+      },
+    });
+    this.log(
+      `scheduler: operational_signal_scan triggered ${result.triggered.length} runs, skipped ${result.skipped.length}`,
     );
   }
 

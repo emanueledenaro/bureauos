@@ -140,6 +140,36 @@ const GitHubConfig = z
   })
   .default({});
 
+const TriggerConfig = z
+  .object({
+    github: z
+      .object({
+        enabled: z.boolean().default(true),
+        watch_issues: z.boolean().default(true),
+        watch_pull_requests: z.boolean().default(true),
+        watch_checks: z.boolean().default(true),
+        watch_security_alerts: z.boolean().default(true),
+      })
+      .default({}),
+    schedules: z
+      .object({
+        project_health_check: z.string().default("hourly"),
+        daily_executive_report: z.string().default("daily"),
+        growth_review: z.string().default("weekly"),
+        client_account_review: z.string().default("weekly"),
+      })
+      .default({}),
+    thresholds: z
+      .object({
+        stale_pr_hours: z.number().positive().default(48),
+        blocked_issue_hours: z.number().positive().default(48),
+        unanswered_client_message_hours: z.number().positive().default(48),
+        empty_content_pipeline_days: z.number().positive().default(7),
+      })
+      .default({}),
+  })
+  .default({});
+
 export const BureauConfigSchema = z.object({
   organization: OrganizationConfig.default({ name: "Untitled BureauOS Workspace" }),
   setup: SetupConfig,
@@ -151,6 +181,7 @@ export const BureauConfigSchema = z.object({
   limits: LimitsConfig,
   memory: MemoryConfig,
   github: GitHubConfig,
+  triggers: TriggerConfig,
 });
 
 export type BureauConfig = z.infer<typeof BureauConfigSchema>;

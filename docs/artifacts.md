@@ -79,6 +79,20 @@ Contains:
 - stale issues and pull requests
 - new internal opportunities
 
+### Operational Signal Report
+
+Observed internal company signal.
+
+Contains:
+
+- blocked projects
+- blocked runs
+- unanswered client messages
+- empty content pipeline signal
+- trigger source
+- capability/action that the coordinator used
+- generated threshold runs
+
 ### Technical Plan
 
 Implementation plan.

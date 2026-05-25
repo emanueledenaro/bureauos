@@ -1,5 +1,10 @@
 import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import {
+  defaultProviderAuthMode,
+  defaultProviderCredentialId,
+  getProviderConnector,
+} from "./catalog.js";
 import type { ProviderType } from "./types.js";
 
 export type ProviderAuthMode = "oauth" | "api-key" | "local";
@@ -36,13 +41,11 @@ interface ProviderAuthFile {
 }
 
 function defaultProviderId(provider: ProviderType): string {
-  return `${provider}-default`;
+  return defaultProviderCredentialId(provider);
 }
 
 function defaultAuthMode(provider: ProviderType): ProviderAuthMode {
-  if (provider === "openai-codex") return "oauth";
-  if (provider === "local") return "local";
-  return "api-key";
+  return defaultProviderAuthMode(provider);
 }
 
 function isAuthMode(value: unknown): value is ProviderAuthMode {
@@ -184,6 +187,12 @@ export class ProviderAuthStore {
     }
     if (provider === "openai" && mode === "oauth") {
       throw new Error("OpenAI OAuth must use --provider openai-codex");
+    }
+    const connector = getProviderConnector(provider);
+    const methodTypes = new Set(connector.authMethods.map((method) => method.type));
+    const requestedMethod = mode === "api-key" ? "api" : mode;
+    if (!methodTypes.has(requestedMethod)) {
+      throw new Error(`${provider} does not support ${mode} auth`);
     }
     if (mode === "oauth") {
       const hasToken =

@@ -215,6 +215,7 @@ export interface ProjectDispatchResult {
 }
 export interface ProviderConnection {
   provider: string;
+  provider_name: string;
   id: string;
   source: "auth" | "env";
   auth_mode: "oauth" | "api-key" | "local";
@@ -227,9 +228,45 @@ export interface ProviderConnection {
   status: "ok" | "missing";
   reason?: string;
 }
-export interface ProviderAuthMethod {
-  type: "oauth" | "api";
+export interface ProviderAuthPromptCondition {
+  key: string;
+  op: "eq" | "neq";
+  value: string;
+}
+export interface ProviderAuthTextPrompt {
+  type: "text";
+  key: string;
+  message: string;
+  placeholder?: string;
+  when?: ProviderAuthPromptCondition;
+}
+export interface ProviderAuthSelectPromptOption {
   label: string;
+  value: string;
+  hint?: string;
+}
+export interface ProviderAuthSelectPrompt {
+  type: "select";
+  key: string;
+  message: string;
+  options: ProviderAuthSelectPromptOption[];
+  when?: ProviderAuthPromptCondition;
+}
+export type ProviderAuthPrompt = ProviderAuthTextPrompt | ProviderAuthSelectPrompt;
+export interface ProviderAuthMethod {
+  type: "oauth" | "api" | "local";
+  label: string;
+  prompts?: ProviderAuthPrompt[];
+}
+export interface ProviderConnector {
+  id: string;
+  name: string;
+  description: string;
+  defaultAuthMode: "oauth" | "api-key" | "local";
+  authMethods: ProviderAuthMethod[];
+  popular: boolean;
+  requiresBaseUrl: boolean;
+  noApiFallback: boolean;
 }
 export interface ProviderAuthAuthorization {
   url: string;
@@ -251,6 +288,7 @@ export const Api = {
   agents: () => api<AgentDefinition[]>("/agents"),
   artifacts: () => api<ArtifactRecord[]>("/artifacts"),
   providers: () => api<ProviderConnection[]>("/providers"),
+  providerConnectors: () => api<ProviderConnector[]>("/provider/connectors"),
   audit: (n = 50) => api<AuditEvent[]>(`/audit?n=${n}`),
   coordinatorIntake: (input: {
     message: string;

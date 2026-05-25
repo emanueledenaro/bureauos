@@ -241,9 +241,20 @@ Examples:
 
 - PR stale for more than 48 hours
 - issue blocked for more than 24 hours
+- project or run blocked past the configured threshold
+- client message unanswered past the configured threshold
 - conversion rate down 20 percent
 - no content drafted for 7 days
 - release milestone less than 3 days away
+
+Implemented internal threshold scans:
+
+- `blocked_project_age`
+- `blocked_run_age`
+- `unanswered_client_message_age`
+- `empty_content_pipeline`
+
+These produce an `operational-signal-report`, then start policy-gated threshold runs through the Supreme Coordinator. Client messages and public growth actions remain draft-only unless policy explicitly allows sending/publishing.
 
 ### Memory Triggers
 

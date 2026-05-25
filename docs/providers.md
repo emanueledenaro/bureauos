@@ -2,6 +2,14 @@
 
 BureauOS is provider-agnostic. Models and runtimes plug into the provider layer through `ProviderAdapter` and `RuntimeAdapter`.
 
+The provider layer follows the OpenCode-style connector pattern:
+
+- provider metadata lives in one connector catalog
+- each connector declares its auth methods
+- the desktop UI asks the API which methods are supported
+- credentials are saved by provider id
+- runtime routing only uses explicitly connected or environment-backed providers
+
 ## Auth Model
 
 Provider credentials are not stored in `bureauos.yaml`.
@@ -46,20 +54,21 @@ bureau auth logout --provider openai
 bureau providers list
 ```
 
-The command loads stored credentials first, then reads matching environment variables. It reports provider, auth mode, source, and whether each adapter has enough credentials to run. `openai-codex` and `openai` remain independent routes.
+The command loads stored credentials first, then reads matching environment variables. It reports only real stored or environment-backed connections, plus whether each adapter has enough credentials to run. `openai-codex` and `openai` remain independent routes.
 
 ## API and Electron
 
 The local API exposes provider auth for the desktop interface:
 
 - `GET /providers`
+- `GET /provider/connectors`
 - `GET /provider/auth`
 - `POST /provider/openai-codex/oauth/authorize`
 - `POST /provider/openai-codex/oauth/callback`
 - `POST /providers/auth/login`
 - `POST /providers/auth/logout`
 
-The singular `/provider/...` endpoints follow OpenCode's provider auth pattern: the UI asks which auth methods a provider supports, starts OAuth authorization, then completes the callback. ElectronJS Settings uses browser OAuth for `openai-codex`; API-key providers still use explicit API-key login. Raw secrets are never returned in renderer responses.
+The singular `/provider/...` endpoints follow OpenCode's provider auth pattern: the UI asks which connectors exist, which auth methods each provider supports, starts OAuth authorization when needed, then completes the callback. ElectronJS Settings uses browser OAuth for `openai-codex`; API-key providers still use explicit API-key login. Raw secrets are never returned in renderer responses.
 
 ## Current Runtime State
 
@@ -67,6 +76,7 @@ The singular `/provider/...` endpoints follow OpenCode's provider auth pattern: 
 - OpenAI API: SDK-backed `generateText` and `stream`.
 - Anthropic: SDK-backed `generateText` and `stream`.
 - Google, OpenRouter, Local: registered adapters with credential validation, model calls still stubbed.
+- Provider connectors: catalog-backed metadata and auth methods for OpenAI Codex, OpenAI API, Anthropic, Google, OpenRouter, Local, and Custom API.
 - Codex runtime: adapter contract exists, execution still stubbed.
 
 ## Next Steps

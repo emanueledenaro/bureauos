@@ -11,6 +11,9 @@ export interface ClientRecord extends FrontMatter {
   name: string;
   status: ClientStatus;
   industry: string;
+  last_client_message_at: string;
+  last_owner_response_at: string;
+  next_follow_up_at: string;
   created: string;
   updated: string;
 }
@@ -61,6 +64,9 @@ export class ClientRegistry {
       name: input.name,
       status: input.status ?? "lead",
       industry: input.industry ?? "unspecified",
+      last_client_message_at: "",
+      last_owner_response_at: "",
+      next_follow_up_at: "",
       created: now,
       updated: now,
     };

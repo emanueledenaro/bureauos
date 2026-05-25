@@ -43,6 +43,7 @@ export type ArtifactType =
   | "github-issue-draft"
   | "github-issue-publish-report"
   | "github-signal-report"
+  | "operational-signal-report"
   | "client-profile"
   | "owner-attachment";
 

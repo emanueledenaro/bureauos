@@ -11,6 +11,9 @@ import { initWorkspace } from "../init/initializer.js";
 import { workspacePaths } from "../paths.js";
 import { RunEngine } from "../runs/engine.js";
 import { ProjectRegistry } from "../registries/project.js";
+import { ClientRegistry, type ClientRecord } from "../registries/client.js";
+import { readDoc, writeDoc } from "../registries/base.js";
+import type { ProjectRecord } from "../registries/project.js";
 import type {
   GitHubSignalCheckRun,
   GitHubSignalClient,
@@ -170,5 +173,67 @@ describe("Scheduler", () => {
     const log = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(log).toContain("github.signals.synced");
     expect(log).toContain("github.check_failed.detected");
+  });
+
+  it("scans internal operating signals during daemon ticks", async () => {
+    const config = defaultConfig("freelancer");
+    const approvals = new ApprovalRegistry(dir);
+    const policy = new PolicyEngine(config, approvals);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const runs = new RunEngine(dir, { audit, artifacts, policy });
+    const client = await new ClientRegistry(dir).create({
+      name: "Pizzeria Aurora",
+      status: "active",
+      industry: "food_and_beverage",
+    });
+    const clientPath = join(workspacePaths(dir).clientsDir, client.slug, "CLIENT.md");
+    const clientDoc = await readDoc<ClientRecord>(clientPath);
+    await writeDoc(
+      clientPath,
+      {
+        ...clientDoc.front,
+        last_client_message_at: "2026-05-20T09:00:00.000Z",
+        last_owner_response_at: "2026-05-19T09:00:00.000Z",
+      },
+      clientDoc.body,
+    );
+    const project = await new ProjectRegistry(dir).create({
+      name: "Pizzeria Aurora Booking Website",
+      clientId: client.id,
+      status: "blocked",
+    });
+    const projectPath = join(workspacePaths(dir).projectsDir, project.slug, "PROJECT.md");
+    const projectDoc = await readDoc<ProjectRecord>(projectPath);
+    await writeDoc(
+      projectPath,
+      { ...projectDoc.front, updated: "2026-05-20T09:00:00.000Z" },
+      projectDoc.body,
+    );
+    const lines: string[] = [];
+    const scheduler = new Scheduler({
+      config,
+      runs,
+      workspaceRoot: dir,
+      coordinator: { audit, artifacts, policy },
+      logger: (message) => lines.push(message),
+    });
+
+    await scheduler.tick(new Date("2026-05-24T12:00:00.000Z").getTime());
+
+    const signalReports = await artifacts.list({ type: "operational-signal-report" });
+    expect(signalReports).toHaveLength(1);
+    expect(lines.some((line) => line.includes("operational_signal_scan triggered 3"))).toBe(true);
+    const thresholdRuns = (await runs.list()).filter((run) =>
+      run.trigger_source.startsWith("bureauos."),
+    );
+    expect(thresholdRuns.map((run) => run.type).sort()).toEqual([
+      "client_success",
+      "content",
+      "health_check",
+    ]);
+
+    const log = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(log).toContain("operational.signal_trigger.run_started");
   });
 });

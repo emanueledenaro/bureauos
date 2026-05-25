@@ -29,6 +29,7 @@ import { GitHubSignalTriggerService } from "../github/signal-triggers.js";
 import {
   ProviderAuthStore,
   buildConfiguredProviderRouter,
+  listProviderConnectors,
   type OpenAICodexOAuthFetch,
   type ProviderConnection,
   type ProviderType,
@@ -247,6 +248,10 @@ const ROUTES: Record<string, RouteHandler> = {
 
   "GET /providers": async ({ res, options }) => {
     ok(res, await providerStatuses(options.workspaceRoot));
+  },
+
+  "GET /provider/connectors": ({ res }) => {
+    ok(res, listProviderConnectors());
   },
 
   "GET /provider/auth": ({ res }) => {
