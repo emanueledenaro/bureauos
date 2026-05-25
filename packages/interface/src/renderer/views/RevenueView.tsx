@@ -1,15 +1,27 @@
-import { Activity, DollarSign, Percent } from "lucide-react";
+import { useState } from "react";
+import { Activity, DollarSign, Loader2, Percent, Route } from "lucide-react";
 import { SectionShell } from "../components/dashboard/SectionShell";
 import { MetricTile } from "../components/dashboard/MetricTile";
 import { StatusPill } from "../components/dashboard/StatusPill";
 import { EmptyState } from "../components/dashboard/EmptyState";
 import { ResponsiveTable } from "../components/dashboard/ResponsiveTable";
+import { Button } from "../components/ui/button";
 import { clientName, sortNewest } from "../lib/builders";
 import { opportunityTone } from "../lib/tone";
 import { formatLabel, formatMoney } from "../lib/format";
+import type { RevenuePipelineResult } from "../lib/api";
 import type { DashboardState } from "../lib/types";
 
-export function RevenueView({ state }: { state: DashboardState }) {
+export function RevenueView({
+  state,
+  onGeneratePipeline,
+}: {
+  state: DashboardState;
+  onGeneratePipeline: () => Promise<RevenuePipelineResult>;
+}) {
+  const [generating, setGenerating] = useState(false);
+  const [lastResult, setLastResult] = useState<RevenuePipelineResult | undefined>();
+  const [error, setError] = useState<string | undefined>();
   const pipeline = state.opportunities.reduce((sum, item) => sum + (item.expected_value || 0), 0);
   const margin = state.opportunities.length
     ? state.opportunities.reduce((sum, item) => sum + (item.expected_margin || 0), 0) /
@@ -17,6 +29,37 @@ export function RevenueView({ state }: { state: DashboardState }) {
     : 0;
   return (
     <SectionShell title="Revenue" description="Pipeline, opportunity quality, and proposal state.">
+      <div className="mb-4 flex flex-col gap-3 rounded-lg border border-border/70 bg-surface-subtle/50 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="text-[12px] font-semibold text-foreground">Lead Pipeline</div>
+          <div className="mt-1 text-[10px] text-muted-foreground">
+            {lastResult
+              ? `${lastResult.items.length} opportunities reviewed · ${lastResult.proposal_ready_count} proposal-ready`
+              : "Qualifies opportunities and drafts pricing/proposal work without contacting clients."}
+          </div>
+          {error ? <div className="mt-1 text-[10px] text-danger">{error}</div> : null}
+        </div>
+        <Button
+          size="sm"
+          onClick={() => {
+            setGenerating(true);
+            setError(undefined);
+            onGeneratePipeline()
+              .then(setLastResult)
+              .catch((e) => setError((e as Error).message))
+              .finally(() => setGenerating(false));
+          }}
+          disabled={generating}
+        >
+          {generating ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Route className="h-3.5 w-3.5" />
+          )}
+          {generating ? "Running" : "Run Pipeline"}
+        </Button>
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-3">
         <MetricTile
           label="Pipeline"

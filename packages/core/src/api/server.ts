@@ -42,6 +42,7 @@ import { ClientAccountPlanService } from "../clients/account-plans.js";
 import { GrowthMemoryService } from "../growth/memory.js";
 import { GrowthReviewService } from "../growth/review.js";
 import { GrowthContentPipelineService } from "../growth/content-pipeline.js";
+import { RevenuePipelineService } from "../revenue/pipeline.js";
 import { ProjectHealthReviewService } from "../autonomy/project-health.js";
 import { ProjectRepositoryVerificationService } from "../autonomy/repository-verification.js";
 import { AutonomousRetryService } from "../autonomy/retry.js";
@@ -521,6 +522,23 @@ const ROUTES: Record<string, RouteHandler> = {
   },
   "GET /opportunities": async ({ res, options }) =>
     ok(res, await deps(options).opportunities.list()),
+  "GET /revenue/pipeline": async ({ res, options }) =>
+    ok(res, await deps(options).artifacts.list({ type: "revenue-pipeline-report" })),
+  "POST /revenue/pipeline/generate": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as {
+      opportunityId?: string;
+      maxOpportunities?: number;
+      runId?: string;
+    };
+    const result = await new RevenuePipelineService(options.workspaceRoot).generate({
+      ...(typeof body.opportunityId === "string" ? { opportunityId: body.opportunityId } : {}),
+      ...(typeof body.maxOpportunities === "number"
+        ? { maxOpportunities: body.maxOpportunities }
+        : {}),
+      ...(typeof body.runId === "string" ? { runId: body.runId } : {}),
+    });
+    ok(res, result, 201);
+  },
   "GET /approvals": async ({ res, options }) =>
     ok(res, await deps(options).approvals.listPending()),
   "GET /approvals/resolved": async ({ res, options }) =>
@@ -804,7 +822,8 @@ const ROUTES: Record<string, RouteHandler> = {
           artifact.type === "executive-report" ||
           artifact.type === "cross-project-executive-report" ||
           artifact.type === "business-operating-report" ||
-          artifact.type === "client-account-plan"
+          artifact.type === "client-account-plan" ||
+          artifact.type === "revenue-pipeline-report"
         );
       }),
     );

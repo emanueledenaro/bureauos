@@ -11,6 +11,7 @@ const REPORT_TYPES = new Set([
   "cross-project-executive-report",
   "business-operating-report",
   "client-account-plan",
+  "revenue-pipeline-report",
 ]);
 
 export function ReportsView({ state }: { state: DashboardState }) {

@@ -216,6 +216,15 @@ export type {
   GrowthContentPipelineInput,
   GrowthContentPipelineResult,
 } from "./growth/content-pipeline.js";
+export { RevenuePipelineService } from "./revenue/pipeline.js";
+export type {
+  RevenuePipelineDeps,
+  RevenuePipelineFit,
+  RevenuePipelineInput,
+  RevenuePipelineItem,
+  RevenuePipelineResult,
+  RevenuePipelineStage,
+} from "./revenue/pipeline.js";
 
 // Always-on operational signals
 export { OperationalSignalTriggerService } from "./autonomy/operational-triggers.js";

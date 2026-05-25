@@ -29,6 +29,7 @@ import {
   ProjectHealthReviewService,
   ProjectRepositoryVerificationService,
   ProjectRegistry,
+  RevenuePipelineService,
   RunEngine,
   Scheduler,
   VERSION,
@@ -84,6 +85,8 @@ Registries:
   project list
   opportunity create --title <t> --source <s> --client <slug> [--value v] [--margin m]
   opportunity list
+  revenue pipeline [--opportunity id] [--max-opportunities n]
+                                            Qualify opportunities and draft pricing/proposal work
   growth memory                            Show brand, offer, and channel memory
   growth memory set [--brand t] [--offers t] [--channels t]
   growth content [--max-drafts n] [--focus t]
@@ -731,6 +734,47 @@ const handleOpportunityList: Handler = async () => {
   }
   for (const o of all) {
     process.stdout.write(`${o.id}  ${o.status.padEnd(14)}  ${o.title}\n`);
+  }
+  return 0;
+};
+
+const handleRevenuePipeline: Handler = async (args) => {
+  const flags = parseFlags(args, {
+    opportunity: { type: "string", alias: "o" },
+    "max-opportunities": { type: "number" },
+    run: { type: "string" },
+  });
+  if (typeof flags === "string") return err(`revenue pipeline: ${flags}`);
+  if (
+    typeof flags["max-opportunities"] === "number" &&
+    !Number.isFinite(flags["max-opportunities"])
+  ) {
+    return err("revenue pipeline: --max-opportunities must be a number");
+  }
+  await loadWorkspaceConfig(process.cwd());
+  const result = await new RevenuePipelineService(process.cwd()).generate({
+    ...(typeof flags.opportunity === "string" ? { opportunityId: flags.opportunity } : {}),
+    ...(typeof flags["max-opportunities"] === "number"
+      ? { maxOpportunities: flags["max-opportunities"] }
+      : {}),
+    ...(typeof flags.run === "string" ? { runId: flags.run } : {}),
+  });
+  process.stdout.write(`bureau: generated revenue pipeline report ${result.report.id}\n`);
+  process.stdout.write(
+    `pipeline: ${result.pipeline_value} | open: ${result.open_opportunities} | qualified: ${result.qualified_count} | proposal-ready: ${result.proposal_ready_count}\n`,
+  );
+  for (const item of result.items) {
+    process.stdout.write(
+      `${item.opportunity.id}  ${item.fit.padEnd(6)}  score=${String(item.score).padEnd(
+        3,
+      )}  stage=${item.stage.padEnd(20)}  artifacts=${item.artifacts
+        .map((artifact) => artifact.id)
+        .join(",")}\n`,
+    );
+    process.stdout.write(`  next: ${item.next_action}\n`);
+  }
+  for (const action of result.next_actions) {
+    process.stdout.write(`next: ${action}\n`);
   }
   return 0;
 };
@@ -1592,6 +1636,7 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
     list: handleProjectList,
   },
   opportunity: { create: handleOpportunityCreate, list: handleOpportunityList },
+  revenue: { pipeline: handleRevenuePipeline },
   growth: { memory: handleGrowthMemory, content: handleGrowthContent, review: handleGrowthReview },
   run: { new: handleRunNew, list: handleRunList },
   autonomy: { "retry-scan": handleAutonomyRetryScan },

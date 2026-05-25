@@ -352,6 +352,43 @@ describe("bureau cli", () => {
     expect(audit).toContain("growth.content_pipeline.generated");
   });
 
+  it("runs the revenue pipeline from CLI", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+    await main(["node", "bureau", "client", "create", "--name", "Nebula Studios", "--status", "active"]);
+    await main([
+      "node",
+      "bureau",
+      "opportunity",
+      "create",
+      "--title",
+      "AAAS Launch Package",
+      "--source",
+      "owner_pipeline",
+      "--client",
+      "nebula-studios",
+      "--value",
+      "12000",
+      "--margin",
+      "55",
+    ]);
+
+    const code = await main(["node", "bureau", "revenue", "pipeline"]);
+
+    expect(code).toBe(0);
+    const artifactsDir = join(dir, ".bureauos", "memory", "artifacts");
+    const artifacts = await readdir(artifactsDir);
+    const bodies = await Promise.all(
+      artifacts.map((artifact) => readFile(join(artifactsDir, artifact), "utf8")),
+    );
+    expect(bodies.some((body) => body.includes("# Revenue Pipeline Report"))).toBe(true);
+    expect(bodies.some((body) => body.includes("# Lead Qualification Report"))).toBe(true);
+    expect(bodies.some((body) => body.includes("# Pricing Brief"))).toBe(true);
+    expect(bodies.some((body) => body.includes("# Proposal Brief"))).toBe(true);
+
+    const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
+    expect(audit).toContain("revenue.pipeline.generated");
+  });
+
   it("generates GitHub issue drafts from CLI", async () => {
     await main(["node", "bureau", "init", "--name", "BOS"]);
     await main([

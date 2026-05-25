@@ -30,7 +30,7 @@ Every major capability described in the docs must become one of:
 | Client memory | `ClientRegistry`, per-client memory files | implemented |
 | Client account intelligence | `ClientIntelligenceService`, value score/classification, `/clients/intelligence`, `bureau client intelligence`, ElectronJS Clients page | implemented |
 | Project memory | `ProjectRegistry`, per-project memory files | implemented |
-| Opportunity pipeline | `OpportunityRegistry`, revenue pulse | partial |
+| Opportunity pipeline | `OpportunityRegistry`, `RevenuePipelineService`, revenue pulse, `revenue-pipeline-report` | partial |
 | Run lifecycle | `RunEngine` | partial |
 | Artifact store | `ArtifactStore` | partial |
 | Audit log | `AuditLog`, `/audit`, SSE events | implemented |
@@ -67,7 +67,7 @@ Every major capability described in the docs must become one of:
 | Approvals panel and page | React renderer + `/approvals`, `/approvals/resolved`, `/approvals/resolve`, pending rail, filtered history page | implemented |
 | Reports generation | `BusinessReportService`, `bureau report generate`, `/reports/generate` | implemented |
 | Cross-project executive reports | `cross-project-executive-report` artifact from project, ownership, approval, run, and pipeline registries | implemented |
-| Reports view | report action in Revenue Pulse, `/reports` endpoint including executive, cross-project, operating, and client reports | partial |
+| Reports view | report action in Revenue Pulse, `/reports` endpoint including executive, cross-project, operating, revenue pipeline, and client reports | partial |
 | Settings view | provider settings panel plus safe `/settings` workspace configuration summary | partial |
 | Native tray, notifications, auto-start | not implemented | designed |
 
@@ -94,9 +94,10 @@ Every major capability described in the docs must become one of:
 | Content drafts | `GrowthContentPipelineService`, `content-pipeline-report`, `bureau growth content`, `/growth/content-pipeline/generate`, Electron Growth action | partial |
 | Social drafts | `social-post-brief` artifact from intake and content pipeline | implemented |
 | Ad campaign drafts | `ad-campaign-brief` artifact from intake and content pipeline | partial |
-| Proposal drafts | `proposal-brief` artifact | partial |
-| Pricing drafts | `pricing-brief` artifact | partial |
-| Conversion audits | artifact type exists | designed |
+| Lead and opportunity pipeline | `RevenuePipelineService`, `revenue-pipeline-report`, `lead-qualification-report`, `bureau revenue pipeline`, `/revenue/pipeline/generate`, Electron Revenue action | partial |
+| Proposal drafts | `proposal-brief` artifact from intake and revenue pipeline | partial |
+| Pricing drafts | `pricing-brief` artifact from intake and revenue pipeline | partial |
+| Conversion audits | `conversion-audit` artifact from revenue pipeline when qualification is missing or pipeline is empty | partial |
 | Client account plans | `ClientAccountPlanService`, `client-account-plan` artifact from real client intelligence, `bureau client account-plan`, `/client-account-plans/generate` | implemented |
 | Paid ads launch | policy-gated, not automated | blocked |
 | Public posting | policy-gated, not automated | blocked |

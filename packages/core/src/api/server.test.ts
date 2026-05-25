@@ -441,6 +441,56 @@ describe("API server", () => {
     expect(audit).toContain("growth.content_pipeline.generated");
   });
 
+  it("generates revenue pipeline artifacts through the local API", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    await fetch(`${server.url}/coordinator/intake`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        clientName: "Nebula Studios",
+        expectedValue: 12000,
+        expectedMargin: 55,
+        message: "Nebula Studios wants a BureauOS AAAS launch package.",
+      }),
+    });
+
+    const response = await fetch(`${server.url}/revenue/pipeline/generate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ maxOpportunities: 3 }),
+    });
+
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as {
+      report: { type: string; proposal_ready_count: number };
+      items: Array<{ stage: string; artifacts: Array<{ type: string }> }>;
+    };
+    expect(body.report).toMatchObject({
+      type: "revenue-pipeline-report",
+      proposal_ready_count: 1,
+    });
+    expect(body.items[0]?.stage).toBe("proposal_ready");
+    expect(body.items[0]?.artifacts.map((artifact) => artifact.type)).toEqual([
+      "lead-qualification-report",
+      "pricing-brief",
+      "proposal-brief",
+    ]);
+
+    const reports = (await (await fetch(`${server.url}/revenue/pipeline`)).json()) as Array<{
+      type: string;
+      proposal_ready_count: number;
+    }>;
+    expect(reports).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "revenue-pipeline-report", proposal_ready_count: 1 }),
+      ]),
+    );
+
+    const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(audit).toContain("revenue.pipeline.generated");
+  });
+
   it("persists coordinator message history for the ElectronJS chat", async () => {
     server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
 

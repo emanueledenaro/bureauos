@@ -416,6 +416,27 @@ export interface GrowthContentPipelineResult {
   report: ArtifactRecord;
   next_actions: string[];
 }
+export interface RevenuePipelineItem {
+  opportunity: OpportunityRecord;
+  client?: ClientRecord;
+  score: number;
+  fit: "high" | "medium" | "low";
+  stage: "needs_qualification" | "qualified" | "proposal_ready";
+  reasons: string[];
+  risks: string[];
+  next_action: string;
+  artifacts: ArtifactRecord[];
+}
+export interface RevenuePipelineResult {
+  generated_at: string;
+  report: ArtifactRecord;
+  pipeline_value: number;
+  open_opportunities: number;
+  qualified_count: number;
+  proposal_ready_count: number;
+  items: RevenuePipelineItem[];
+  next_actions: string[];
+}
 export interface GitHubIssueDraft {
   title: string;
   body: string;
@@ -602,6 +623,11 @@ export const Api = {
   projects: () => api<ProjectRecord[]>("/projects"),
   projectOwnership: () => api<ProjectOwnershipRecord[]>("/project-ownership"),
   opportunities: () => api<OpportunityRecord[]>("/opportunities"),
+  generateRevenuePipeline: (input: { maxOpportunities?: number; opportunityId?: string } = {}) =>
+    api<RevenuePipelineResult>("/revenue/pipeline/generate", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   growthMemory: () => api<GrowthMemorySummary>("/growth/memory"),
   updateGrowthMemory: (input: { brand?: string; offers?: string; channels?: string }) =>
     api<GrowthMemorySummary>("/growth/memory", {

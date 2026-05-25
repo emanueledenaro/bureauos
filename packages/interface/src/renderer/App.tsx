@@ -31,6 +31,7 @@ import {
   type CoordinatorChatResult,
   type GrowthContentPipelineResult,
   type ProjectRepositoryVerificationResult,
+  type RevenuePipelineResult,
 } from "./lib/api";
 import type { AdaptiveMode, DashboardState } from "./lib/types";
 
@@ -77,6 +78,12 @@ export function App() {
 
   const onGenerateGrowthContent = async (): Promise<GrowthContentPipelineResult> => {
     const result = await Api.generateGrowthContent({ maxDrafts: 4 });
+    await refresh();
+    return result;
+  };
+
+  const onGenerateRevenuePipeline = async (): Promise<RevenuePipelineResult> => {
+    const result = await Api.generateRevenuePipeline({ maxOpportunities: 5 });
     await refresh();
     return result;
   };
@@ -147,6 +154,7 @@ export function App() {
                 onVerifyRepositories={onVerifyRepositories}
                 onRetryScan={onRetryScan}
                 onGenerateGrowthContent={onGenerateGrowthContent}
+                onGenerateRevenuePipeline={onGenerateRevenuePipeline}
                 onRefresh={refresh}
               />
             </main>
@@ -202,6 +210,7 @@ function DashboardLayout({
   onVerifyRepositories,
   onRetryScan,
   onGenerateGrowthContent,
+  onGenerateRevenuePipeline,
   onRefresh,
 }: {
   mode: AdaptiveMode;
@@ -222,6 +231,7 @@ function DashboardLayout({
   onVerifyRepositories: (projectSlug?: string) => Promise<ProjectRepositoryVerificationResult>;
   onRetryScan: () => Promise<AutonomousRetryResult>;
   onGenerateGrowthContent: () => Promise<GrowthContentPipelineResult>;
+  onGenerateRevenuePipeline: () => Promise<RevenuePipelineResult>;
   onRefresh: () => Promise<void>;
 }) {
   const mainView = renderMainView({
@@ -234,6 +244,7 @@ function DashboardLayout({
     onVerifyRepositories,
     onRetryScan,
     onGenerateGrowthContent,
+    onGenerateRevenuePipeline,
     onRefresh,
   });
 
@@ -261,6 +272,7 @@ function renderMainView({
   onVerifyRepositories,
   onRetryScan,
   onGenerateGrowthContent,
+  onGenerateRevenuePipeline,
   onRefresh,
 }: {
   mode: AdaptiveMode;
@@ -280,6 +292,7 @@ function renderMainView({
   onVerifyRepositories: (projectSlug?: string) => Promise<ProjectRepositoryVerificationResult>;
   onRetryScan: () => Promise<AutonomousRetryResult>;
   onGenerateGrowthContent: () => Promise<GrowthContentPipelineResult>;
+  onGenerateRevenuePipeline: () => Promise<RevenuePipelineResult>;
   onRefresh: () => Promise<void>;
 }) {
   switch (mode) {
@@ -290,7 +303,7 @@ function renderMainView({
     case "goals":
       return <GoalsView state={state} onModeChange={onModeChange} />;
     case "revenue":
-      return <RevenueView state={state} />;
+      return <RevenueView state={state} onGeneratePipeline={onGenerateRevenuePipeline} />;
     case "delivery":
       return <DeliveryView state={state} onVerifyRepositories={onVerifyRepositories} />;
     case "growth":

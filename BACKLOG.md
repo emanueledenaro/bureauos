@@ -301,13 +301,13 @@ Goal: brand, offers, content, leads, pricing, proposals, conversion, client succ
 
 - [x] Wire brand memory, offer memory, channels memory.
 - [x] Implement the content pipeline (draft only).
-- [ ] Implement the lead and opportunity pipeline.
+- [x] Implement the lead and opportunity pipeline.
 - [ ] Implement campaign briefs and conversion audits as artifacts.
 - [ ] Implement the pricing brief and proposal brief flows.
 - [ ] Implement compliance reviews and approval records for any external commitment.
 - [ ] Implement client account plans and client success status reports.
 - [x] Generate executive and business operating reports from real registries.
-- [ ] Wire all of this into the Growth and Revenue tab of the interface. (brand/offers/channels memory and content pipeline action are wired)
+- [ ] Wire all of this into the Growth and Revenue tab of the interface. (brand/offers/channels memory, content pipeline action, and revenue pipeline action are wired)
 
 ## Phase 7 — Always-On Daemon (v0.7)
 
