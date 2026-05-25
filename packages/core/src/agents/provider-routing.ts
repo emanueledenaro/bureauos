@@ -27,6 +27,7 @@ const PROVIDER_DEFAULT_MODELS: Record<ProviderType, string> = {
   local: "llama3.1",
   custom: "gpt-5.5",
 };
+const CODEX_OAUTH_DEFAULT_MODEL = PROVIDER_DEFAULT_MODELS["openai-codex"];
 
 function toProviderType(provider: ProviderName): ProviderType {
   if (provider === "codex") return "openai-codex";
@@ -35,6 +36,14 @@ function toProviderType(provider: ProviderName): ProviderType {
 
 function providerId(provider: ProviderType): string {
   return `${provider}-default`;
+}
+
+function normalizedModelForProvider(provider: ProviderName, model: string): string {
+  const providerType = toProviderType(provider);
+  if (providerType !== "openai-codex" && model === CODEX_OAUTH_DEFAULT_MODEL) {
+    return PROVIDER_DEFAULT_MODELS[providerType];
+  }
+  return model;
 }
 
 function defaultRequiredModelCapabilities(role: AgentDefinition): string[] {
@@ -59,13 +68,18 @@ function roleModelPreference(
   if (roleId === "supreme_coordinator") {
     return {
       provider: config.supreme_coordinator.provider,
-      model: config.supreme_coordinator.model,
+      model: normalizedModelForProvider(
+        config.supreme_coordinator.provider,
+        config.supreme_coordinator.model,
+      ),
     };
   }
   const roleConfig = config.agents[roleId];
+  const provider = roleConfig?.provider ?? config.supreme_coordinator.provider;
+  const model = roleConfig?.model ?? config.supreme_coordinator.model;
   return {
-    provider: roleConfig?.provider ?? config.supreme_coordinator.provider,
-    model: roleConfig?.model ?? config.supreme_coordinator.model,
+    provider,
+    model: normalizedModelForProvider(provider, model),
   };
 }
 

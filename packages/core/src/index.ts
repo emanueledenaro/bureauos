@@ -61,12 +61,25 @@ export type { CompanyRecord } from "./registries/company.js";
 export { ClientIntelligenceService } from "./clients/intelligence.js";
 export type {
   ClientAccountRisk,
+  ClientClassification,
+  ClientPaymentReliability,
+  ClientProofPermission,
   ClientIntelligenceDeps,
   ClientIntelligenceItem,
   ClientIntelligenceSummary,
   ClientOpportunitySnapshot,
   ClientProjectSnapshot,
+  ClientRevenueTier,
+  ClientStrategicValue,
+  ClientRelationshipHealth,
+  ClientValueScore,
 } from "./clients/intelligence.js";
+export { ClientAccountPlanService } from "./clients/account-plans.js";
+export type {
+  ClientAccountPlanDeps,
+  ClientAccountPlanInput,
+  ClientAccountPlanResult,
+} from "./clients/account-plans.js";
 
 // Memory helpers
 export { appendDailyNote } from "./memory/daily.js";

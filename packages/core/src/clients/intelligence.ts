@@ -5,6 +5,26 @@ import { OpportunityRegistry } from "../registries/opportunity.js";
 import { ProjectRegistry } from "../registries/project.js";
 
 export type ClientAccountRisk = "blocked" | "follow_up_due" | "proposal" | "active" | "cold";
+export type ClientRevenueTier = "high" | "medium" | "low" | "unknown";
+export type ClientStrategicValue = "high" | "medium" | "low";
+export type ClientRelationshipHealth = "strong" | "neutral" | "at_risk";
+export type ClientPaymentReliability = "good" | "unknown" | "risky";
+export type ClientProofPermission = "yes" | "no" | "partial" | "unknown";
+
+export interface ClientValueScore {
+  score: number;
+  factors: string[];
+}
+
+export interface ClientClassification {
+  revenue_tier: ClientRevenueTier;
+  strategic_value: ClientStrategicValue;
+  relationship_health: ClientRelationshipHealth;
+  payment_reliability: ClientPaymentReliability;
+  upsell_potential: ClientStrategicValue;
+  referral_potential: ClientStrategicValue;
+  public_proof_allowed: ClientProofPermission;
+}
 
 export interface ClientProjectSnapshot {
   id: string;
@@ -51,6 +71,8 @@ export interface ClientIntelligenceItem {
     next_follow_up_at: string;
     follow_up_due: boolean;
   };
+  value_score: ClientValueScore;
+  classification: ClientClassification;
   risk: ClientAccountRisk;
   next_action: string;
   latest_activity_at: string;
@@ -162,6 +184,151 @@ function nextActionForClient(args: {
   }
 }
 
+function classifyRevenue(wonValue: number, pipelineValue: number): ClientRevenueTier {
+  const commercialValue = Math.max(wonValue, pipelineValue);
+  if (commercialValue <= 0) return "unknown";
+  if (commercialValue >= 10_000) return "high";
+  if (commercialValue >= 3_000) return "medium";
+  return "low";
+}
+
+function valueScore(args: {
+  pipelineValue: number;
+  wonValue: number;
+  averageMargin: number;
+  activeProjects: number;
+  deliveredProjects: number;
+  blockedProjects: number;
+  stalledOpportunities: number;
+  followUpDue: boolean;
+  repositoriesLinked: number;
+}): ClientValueScore {
+  const factors: string[] = [];
+  let score = 0;
+
+  if (args.wonValue > 0) {
+    const points = Math.min(30, args.wonValue / 300);
+    score += points;
+    factors.push(`won revenue ${Math.round(points)}/30`);
+  }
+  if (args.pipelineValue > 0) {
+    const points = Math.min(25, args.pipelineValue / 400);
+    score += points;
+    factors.push(`open pipeline ${Math.round(points)}/25`);
+  }
+  if (args.averageMargin > 0) {
+    const points = Math.min(15, args.averageMargin * 0.15);
+    score += points;
+    factors.push(`expected margin ${Math.round(points)}/15`);
+  }
+  if (args.activeProjects > 0) {
+    const points = Math.min(10, args.activeProjects * 5);
+    score += points;
+    factors.push(`active delivery ${Math.round(points)}/10`);
+  }
+  if (args.deliveredProjects > 0) {
+    const points = Math.min(10, args.deliveredProjects * 5);
+    score += points;
+    factors.push(`delivered proof ${Math.round(points)}/10`);
+  }
+  if (args.repositoriesLinked > 0) {
+    score += 5;
+    factors.push("repository linked 5/5");
+  }
+  if (args.blockedProjects > 0) {
+    const penalty = Math.min(20, args.blockedProjects * 10);
+    score -= penalty;
+    factors.push(`blocked delivery -${penalty}`);
+  }
+  if (args.stalledOpportunities > 0) {
+    const penalty = Math.min(10, args.stalledOpportunities * 5);
+    score -= penalty;
+    factors.push(`stalled opportunity -${penalty}`);
+  }
+  if (args.followUpDue) {
+    score -= 8;
+    factors.push("follow-up overdue -8");
+  }
+
+  return {
+    score: Math.max(0, Math.min(100, Math.round(score))),
+    factors,
+  };
+}
+
+function relationshipHealth(args: {
+  blockedProjects: number;
+  followUpDue: boolean;
+  stalledOpportunities: number;
+  deliveredProjects: number;
+}): ClientRelationshipHealth {
+  if (args.blockedProjects > 0 || args.followUpDue || args.stalledOpportunities > 0) {
+    return "at_risk";
+  }
+  if (args.deliveredProjects > 0) return "strong";
+  return "neutral";
+}
+
+function levelFromScore(score: number): ClientStrategicValue {
+  if (score >= 70) return "high";
+  if (score >= 35) return "medium";
+  return "low";
+}
+
+function classifyClient(args: {
+  pipelineValue: number;
+  wonValue: number;
+  lostValue: number;
+  score: number;
+  activeProjects: number;
+  deliveredProjects: number;
+  blockedProjects: number;
+  openOpportunities: number;
+  stalledOpportunities: number;
+  followUpDue: boolean;
+}): ClientClassification {
+  const relationship = relationshipHealth({
+    blockedProjects: args.blockedProjects,
+    followUpDue: args.followUpDue,
+    stalledOpportunities: args.stalledOpportunities,
+    deliveredProjects: args.deliveredProjects,
+  });
+  const revenueTier = classifyRevenue(args.wonValue, args.pipelineValue);
+  const commercialValue = args.wonValue + args.pipelineValue;
+  const strategicValue =
+    commercialValue >= 10_000 || args.score >= 70
+      ? "high"
+      : commercialValue >= 3_000 || args.activeProjects > 0 || args.openOpportunities > 0
+        ? "medium"
+        : "low";
+  const paymentReliability =
+    args.wonValue > 0 && args.lostValue === 0
+      ? "good"
+      : args.stalledOpportunities > 0 && args.wonValue === 0
+        ? "risky"
+        : "unknown";
+
+  return {
+    revenue_tier: revenueTier,
+    strategic_value: strategicValue,
+    relationship_health: relationship,
+    payment_reliability: paymentReliability,
+    upsell_potential:
+      args.openOpportunities > 0 && args.deliveredProjects > 0
+        ? "high"
+        : args.openOpportunities > 0 || args.activeProjects > 0
+          ? "medium"
+          : levelFromScore(args.score),
+    referral_potential:
+      args.deliveredProjects > 0 && relationship !== "at_risk"
+        ? "high"
+        : args.wonValue > 0
+          ? "medium"
+          : "low",
+    public_proof_allowed: "unknown",
+  };
+}
+
 export class ClientIntelligenceService {
   private readonly clients: ClientRegistry;
   private readonly projects: ProjectRegistry;
@@ -207,6 +374,7 @@ export class ClientIntelligenceService {
         ACTIVE_PROJECT_STATUSES.has(project.status),
       );
       const blockedProjects = clientProjects.filter((project) => project.status === "blocked");
+      const deliveredProjects = clientProjects.filter((project) => project.status === "delivered");
       const pendingClientApprovals = pendingApprovals.filter((approval) =>
         approvalMatchesClient(approval, client),
       );
@@ -218,6 +386,23 @@ export class ClientIntelligenceService {
               0,
             ) / clientOpportunities.length;
       const followUpDue = isDue(client.next_follow_up_at, now);
+      const pipelineValue = openOpportunities.reduce(
+        (sum, opportunity) => sum + (opportunity.expected_value || 0),
+        0,
+      );
+      const wonValue = wonOpportunities.reduce(
+        (sum, opportunity) => sum + (opportunity.expected_value || 0),
+        0,
+      );
+      const lostValue = lostOpportunities.reduce(
+        (sum, opportunity) => sum + (opportunity.expected_value || 0),
+        0,
+      );
+      const stalledOpportunities = clientOpportunities.filter(
+        (opportunity) => opportunity.status === "stalled",
+      ).length;
+      const repositoriesLinked = clientProjects.filter((project) => Boolean(project.repository))
+        .length;
       const risk = riskForClient({
         blockedProjects: blockedProjects.length,
         followUpDue,
@@ -225,37 +410,47 @@ export class ClientIntelligenceService {
         activeProjects: activeProjects.length,
         openOpportunities: openOpportunities.length,
       });
+      const score = valueScore({
+        pipelineValue,
+        wonValue,
+        averageMargin,
+        activeProjects: activeProjects.length,
+        deliveredProjects: deliveredProjects.length,
+        blockedProjects: blockedProjects.length,
+        stalledOpportunities,
+        followUpDue,
+        repositoriesLinked,
+      });
+      const classification = classifyClient({
+        pipelineValue,
+        wonValue,
+        lostValue,
+        score: score.score,
+        activeProjects: activeProjects.length,
+        deliveredProjects: deliveredProjects.length,
+        blockedProjects: blockedProjects.length,
+        openOpportunities: openOpportunities.length,
+        stalledOpportunities,
+        followUpDue,
+      });
 
       return {
         client,
         revenue: {
-          pipeline_value: openOpportunities.reduce(
-            (sum, opportunity) => sum + (opportunity.expected_value || 0),
-            0,
-          ),
-          won_value: wonOpportunities.reduce(
-            (sum, opportunity) => sum + (opportunity.expected_value || 0),
-            0,
-          ),
-          lost_value: lostOpportunities.reduce(
-            (sum, opportunity) => sum + (opportunity.expected_value || 0),
-            0,
-          ),
+          pipeline_value: pipelineValue,
+          won_value: wonValue,
+          lost_value: lostValue,
           average_expected_margin: averageMargin,
           open_opportunities: openOpportunities.length,
           won_opportunities: wonOpportunities.length,
-          stalled_opportunities: clientOpportunities.filter(
-            (opportunity) => opportunity.status === "stalled",
-          ).length,
+          stalled_opportunities: stalledOpportunities,
         },
         delivery: {
           projects_total: clientProjects.length,
           active_projects: activeProjects.length,
           blocked_projects: blockedProjects.length,
-          delivered_projects: clientProjects.filter((project) => project.status === "delivered")
-            .length,
-          repositories_linked: clientProjects.filter((project) => Boolean(project.repository))
-            .length,
+          delivered_projects: deliveredProjects.length,
+          repositories_linked: repositoriesLinked,
           pending_approvals: pendingClientApprovals.length,
         },
         relationship: {
@@ -264,6 +459,8 @@ export class ClientIntelligenceService {
           next_follow_up_at: client.next_follow_up_at,
           follow_up_due: followUpDue,
         },
+        value_score: score,
+        classification,
         risk,
         next_action: nextActionForClient({
           risk,

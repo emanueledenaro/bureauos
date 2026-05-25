@@ -106,6 +106,18 @@ describe("ClientIntelligenceService", () => {
         follow_up_due: true,
         next_follow_up_at: followUpDate,
       },
+      value_score: {
+        score: 16,
+      },
+      classification: {
+        revenue_tier: "medium",
+        strategic_value: "medium",
+        relationship_health: "at_risk",
+        payment_reliability: "good",
+        upsell_potential: "medium",
+        referral_potential: "medium",
+        public_proof_allowed: "unknown",
+      },
       memory_paths: {
         profile: "clients/miraglia-pizza/CLIENT.md",
         revenue: "clients/miraglia-pizza/REVENUE.md",

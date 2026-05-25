@@ -56,6 +56,24 @@ describe("agent provider routing", () => {
     expect(providerChainForRole(config, product!)).toEqual(["openai-default"]);
   });
 
+  it("uses the selected provider default when only the provider changes", async () => {
+    const config = defaultConfig("freelancer");
+    config.supreme_coordinator.provider = "openai";
+    const router = new ProviderRouter();
+    router.register(new FakeProvider("openai-default", "openai", { ok: true }), {
+      model: "gpt-5.5",
+      capabilities: ["chat", "reasoning", "coding"],
+      budgetTier: "premium",
+    });
+
+    configureAgentProviderRouting(router, config, ["product"]);
+
+    const selected = await selectAgentModel(router, config, "product");
+
+    expect(selected?.provider.id).toBe("openai-default");
+    expect(selected?.model).toBe("gpt-5.5");
+  });
+
   it("maps the Codex runtime preference to the Codex OAuth route without API fallback", () => {
     const config = defaultConfig("freelancer");
     config.supreme_coordinator.provider = "codex";

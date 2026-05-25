@@ -28,7 +28,7 @@ Every major capability described in the docs must become one of:
 | Supreme Coordinator as only owner-facing agent | `CoordinatorIntakeService`, `CoordinatorChatService`, `CoordinatorGlobalMemoryService`, ElectronJS Coordinator panel, `bureau intake`, `POST /coordinator/intake`, `GET/POST /coordinator/messages`, `GET /coordinator/memory` | partial |
 | Company memory | `.bureauos/memory/COMPANY.md`, `ROOT.md`, daily notes, decisions | partial |
 | Client memory | `ClientRegistry`, per-client memory files | implemented |
-| Client account intelligence | `ClientIntelligenceService`, `/clients/intelligence`, `bureau client intelligence`, ElectronJS Clients page | implemented |
+| Client account intelligence | `ClientIntelligenceService`, value score/classification, `/clients/intelligence`, `bureau client intelligence`, ElectronJS Clients page | implemented |
 | Project memory | `ProjectRegistry`, per-project memory files | implemented |
 | Opportunity pipeline | `OpportunityRegistry`, revenue pulse | partial |
 | Run lifecycle | `RunEngine` | partial |
@@ -97,7 +97,7 @@ Every major capability described in the docs must become one of:
 | Proposal drafts | `proposal-brief` artifact | partial |
 | Pricing drafts | `pricing-brief` artifact | partial |
 | Conversion audits | artifact type exists | designed |
-| Client account plans | `client-account-plan` artifact | partial |
+| Client account plans | `ClientAccountPlanService`, `client-account-plan` artifact from real client intelligence | implemented |
 | Paid ads launch | policy-gated, not automated | blocked |
 | Public posting | policy-gated, not automated | blocked |
 
@@ -109,7 +109,7 @@ Every major capability described in the docs must become one of:
 | Daily executive report | scheduler + `BusinessReportService` | partial |
 | Project health checks | scheduler/run stubs | partial |
 | Growth review | scheduler/run stubs | partial |
-| Client account review | scheduler/run stubs | partial |
+| Client account review | scheduler creates account review runs and real client-account-plan artifacts from client intelligence | partial |
 | Threshold triggers | `GitHubSignalTriggerService` and `OperationalSignalTriggerService` start idempotent runs from failing/stale GitHub work, blocked internal work, unanswered client messages, and empty content pipeline signals | partial |
 | Failing check detection | `GitHubSignalSyncService`, `GitHubWebhookIngestionService`, `github sync`, `/github/webhook`, `github-signal-report` | partial |
 | Stale PR/issue detection | `GitHubSignalSyncService`, `github sync --stale-days` | partial |

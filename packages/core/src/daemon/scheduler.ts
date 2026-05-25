@@ -3,6 +3,7 @@ import type { RunEngine, RunType } from "../runs/engine.js";
 import { dispatchRun, type CoordinatorDeps } from "../runs/coordinator.js";
 import { BusinessReportService } from "../reports/business.js";
 import { ProjectRegistry } from "../registries/project.js";
+import { ClientAccountPlanService } from "../clients/account-plans.js";
 import { GitHubSignalSyncService, type GitHubSignalClient } from "../github/signal-sync.js";
 import { GitHubSignalTriggerService } from "../github/signal-triggers.js";
 import { OperationalSignalTriggerService } from "../autonomy/operational-triggers.js";
@@ -150,6 +151,21 @@ export class Scheduler {
             }).generate();
             this.log(
               `scheduler: generated reports ${report.executive_report.id}, ${report.business_operating_report.id}`,
+            );
+          }
+          if (job.name === "client_account_review") {
+            const accountPlans = await new ClientAccountPlanService(this.options.workspaceRoot, {
+              artifacts: this.options.coordinator.artifacts,
+              audit: this.options.coordinator.audit,
+            }).generate({ runId: run.id, now: new Date(now) });
+            if (accountPlans.plans.length > 0) {
+              await this.options.runs.attachArtifacts(
+                run.id,
+                accountPlans.plans.map((plan) => plan.id),
+              );
+            }
+            this.log(
+              `scheduler: generated ${accountPlans.plans.length} client account plan(s)`,
             );
           }
           this.log(

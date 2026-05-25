@@ -142,6 +142,45 @@ describe("Scheduler", () => {
     );
   });
 
+  it("generates real client account plans during the client account review job", async () => {
+    const config = defaultConfig("freelancer");
+    const approvals = new ApprovalRegistry(dir);
+    const policy = new PolicyEngine(config, approvals);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const runs = new RunEngine(dir, { audit, artifacts, policy });
+    const client = await new ClientRegistry(dir).create({
+      name: "Miraglia Pizza",
+      status: "active",
+      industry: "food_and_beverage",
+    });
+    await new ProjectRegistry(dir).create({
+      name: "Miraglia Booking Website",
+      clientId: client.id,
+      status: "in_progress",
+      repository: "https://github.com/example/miraglia",
+    });
+    const scheduler = new Scheduler({
+      config,
+      runs,
+      workspaceRoot: dir,
+      coordinator: { audit, artifacts, policy },
+      logger: () => {},
+    });
+
+    await scheduler.tick(new Date("2026-05-25T10:00:00.000Z").getTime());
+
+    const plans = await artifacts.list({ type: "client-account-plan" });
+    const realPlans = plans.filter((plan) => plan.client_id === client.id);
+    expect(realPlans).toHaveLength(1);
+    const accountReviewRun = (await runs.list()).find(
+      (run) =>
+        run.trigger_source === "client_account_review" &&
+        run.artifacts.includes(realPlans[0]!.id),
+    );
+    expect(accountReviewRun).toBeDefined();
+  });
+
   it("syncs GitHub signals for linked project repositories during daemon ticks", async () => {
     const config = defaultConfig("freelancer");
     const approvals = new ApprovalRegistry(dir);

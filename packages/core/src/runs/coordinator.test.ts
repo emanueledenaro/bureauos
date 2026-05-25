@@ -153,11 +153,49 @@ describe("Supreme Coordinator dispatch", () => {
     );
     expect(featureSpec).toBeDefined();
     const written = await artifacts.read(featureSpec!.id);
-    expect(written?.body).toContain("# Generated fake-model");
+    expect(written?.body).toContain("# Generated gpt-5.5");
     expect(written?.body).toContain("## Generation Metadata");
 
     const log = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(log).toContain("model.provider.selected");
     expect(log).toContain("model:openai-default");
+  });
+
+  it("passes an explicit owner-selected model to provider-backed agents", async () => {
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const artifacts = new ArtifactStore(dir);
+    const config = defaultConfig("freelancer");
+    config.supreme_coordinator.provider = "openai";
+    config.supreme_coordinator.model = "fake-model";
+    const policy = new PolicyEngine(config, new ApprovalRegistry(dir));
+    const runs = new RunEngine(dir, { audit, artifacts, policy });
+    const providerRouter = new ProviderRouter();
+    providerRouter.register(new FakeProvider());
+    configureAgentProviderRouting(providerRouter, config, ["product"]);
+
+    const run = await runs.start({
+      type: "planning",
+      triggerType: "owner_request",
+      triggerSource: "test",
+      scope: "Prepare explicit model routing",
+    });
+
+    await dispatchRun(
+      { audit, artifacts, policy, config, providerRouter },
+      {
+        workspaceRoot: dir,
+        run,
+        scope: "Prepare explicit model routing",
+        briefing: "The product agent should use the owner-selected model.",
+      },
+    );
+
+    const featureSpec = (await artifacts.list({ run_id: run.id })).find(
+      (artifact) => artifact.type === "feature-spec",
+    );
+    expect(featureSpec).toBeDefined();
+    const written = await artifacts.read(featureSpec!.id);
+    expect(written?.body).toContain("# Generated fake-model");
+    expect(written?.body).toContain("- Model: fake-model");
   });
 });
