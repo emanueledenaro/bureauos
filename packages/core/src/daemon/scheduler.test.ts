@@ -245,11 +245,18 @@ describe("Scheduler", () => {
 
     const signalReports = await artifacts.list({ type: "github-signal-report" });
     expect(signalReports).toHaveLength(1);
-    expect(lines.some((line) => line.includes("github_project_signal_sync synced 1"))).toBe(true);
+    const verificationReports = await artifacts.list({ type: "repository-verification-report" });
+    expect(verificationReports).toHaveLength(1);
+    expect(
+      lines.some(
+        (line) => line.includes("repository verification") && line.includes("checked 1 repositories"),
+      ),
+    ).toBe(true);
 
     const log = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(log).toContain("github.signals.synced");
     expect(log).toContain("github.check_failed.detected");
+    expect(log).toContain("project.repositories.verified");
   });
 
   it("scans internal operating signals during daemon ticks", async () => {

@@ -228,6 +228,14 @@ export type {
   ProjectHealthReviewResult,
   ProjectHealthRisk,
 } from "./autonomy/project-health.js";
+export { ProjectRepositoryVerificationService } from "./autonomy/repository-verification.js";
+export type {
+  ProjectRepositoryVerificationDeps,
+  ProjectRepositoryVerificationInput,
+  ProjectRepositoryVerificationResult,
+  RepositoryVerificationItem,
+  RepositoryVerificationStatus,
+} from "./autonomy/repository-verification.js";
 
 // Growth reviews
 export { GrowthReviewService } from "./growth/review.js";
@@ -289,6 +297,8 @@ export type {
   GitHubRepositoryProvisionInput,
   GitHubRepositoryProvisionResult,
 } from "./github/repository-provisioner.js";
+export { parseGitHubRepository } from "./github/repository-utils.js";
+export type { ParsedGitHubRepository } from "./github/repository-utils.js";
 export { GitHubSignalSyncService } from "./github/signal-sync.js";
 export type {
   GitHubSignalCheckConclusion,

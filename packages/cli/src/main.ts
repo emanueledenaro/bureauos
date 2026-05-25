@@ -25,6 +25,7 @@ import {
   PolicyEngine,
   ProjectDispatchService,
   ProjectHealthReviewService,
+  ProjectRepositoryVerificationService,
   ProjectRegistry,
   RunEngine,
   Scheduler,
@@ -76,6 +77,8 @@ Registries:
   project create --name <n> --client <slug> [--status s] [--repo url] [--stack s] [--manager-agent id]
   project dispatch --project <slug> [--type feature] [--scope s]
   project health [--project slug]           Generate project health review artifacts
+  project verify-repositories [--project slug]
+                                            Verify linked repositories without mutating code
   project list
   opportunity create --title <t> --source <s> --client <slug> [--value v] [--margin m]
   opportunity list
@@ -620,6 +623,61 @@ const handleProjectHealth: Handler = async (args) => {
       `${item.project.slug.padEnd(28)}  ${item.risk.padEnd(12)}  score=${String(
         item.score,
       ).padEnd(4)}  next=${item.next_action}\n`,
+    );
+  }
+  return 0;
+};
+
+const handleProjectVerifyRepositories: Handler = async (args) => {
+  const flags = parseFlags(args, {
+    project: { type: "string", alias: "p" },
+    token: { type: "string" },
+    run: { type: "string" },
+    "stale-days": { type: "number" },
+  });
+  if (typeof flags === "string") return err(`project verify-repositories: ${flags}`);
+  if (typeof flags["stale-days"] === "number" && !Number.isFinite(flags["stale-days"])) {
+    return err("project verify-repositories: --stale-days must be a number");
+  }
+
+  await loadWorkspaceConfig(process.cwd());
+  let projectId: string | undefined;
+  if (typeof flags.project === "string") {
+    const project = await new ProjectRegistry(process.cwd()).get(flags.project);
+    if (!project) return err(`project verify-repositories: project "${flags.project}" not found`);
+    projectId = project.id;
+  }
+
+  const token = typeof flags.token === "string" ? flags.token : process.env["GITHUB_TOKEN"];
+  const audit = new AuditLog(workspacePaths(process.cwd()).auditLog);
+  const artifacts = new ArtifactStore(process.cwd());
+  const result = await new ProjectRepositoryVerificationService(process.cwd(), {
+    audit,
+    artifacts,
+    ...(token ? { githubClient: new OctokitGitHubClient({ token }) } : {}),
+  }).verify({
+    ...(projectId ? { projectId } : {}),
+    ...(typeof flags.run === "string" ? { runId: flags.run } : {}),
+    ...(typeof flags["stale-days"] === "number" ? { staleDays: flags["stale-days"] } : {}),
+  });
+
+  process.stdout.write(
+    `bureau: generated repository verification ${result.report.id} for ${result.projects.length} project(s)\n`,
+  );
+  if (!token) {
+    process.stdout.write(
+      "github: no token configured; live GitHub state was not checked for linked repositories\n",
+    );
+  }
+  for (const item of result.projects) {
+    process.stdout.write(
+      `${item.project.slug.padEnd(28)}  ${item.status.padEnd(11)}  repo=${(
+        item.parsed_repository ||
+        item.repository ||
+        "(none)"
+      ).padEnd(26)}  failing=${item.failing_checks_count}  stale=${
+        item.stale_issues_count + item.stale_pull_requests_count
+      }\n`,
     );
   }
   return 0;
@@ -1448,6 +1506,7 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
     create: handleProjectCreate,
     dispatch: handleProjectDispatch,
     health: handleProjectHealth,
+    "verify-repositories": handleProjectVerifyRepositories,
     list: handleProjectList,
   },
   opportunity: { create: handleOpportunityCreate, list: handleOpportunityList },

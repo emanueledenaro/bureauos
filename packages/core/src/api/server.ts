@@ -42,8 +42,10 @@ import { ClientAccountPlanService } from "../clients/account-plans.js";
 import { GrowthMemoryService } from "../growth/memory.js";
 import { GrowthReviewService } from "../growth/review.js";
 import { ProjectHealthReviewService } from "../autonomy/project-health.js";
+import { ProjectRepositoryVerificationService } from "../autonomy/repository-verification.js";
 import { GitHubWebhookIngestionService } from "../github/webhook-ingestion.js";
 import { GitHubSignalTriggerService } from "../github/signal-triggers.js";
+import type { GitHubSignalClient } from "../github/signal-sync.js";
 import {
   ProviderAuthStore,
   buildConfiguredProviderRouter,
@@ -75,7 +77,8 @@ export interface ApiServerOptions {
   token?: string;
   githubClient?: GitHubIssuePublishClient &
     Partial<GitHubPullRequestPublishClient> &
-    Partial<GitHubRepositoryProvisionClient>;
+    Partial<GitHubRepositoryProvisionClient> &
+    Partial<GitHubSignalClient>;
   githubWebhookSecret?: string;
   openaiCodexOAuthFetch?: OpenAICodexOAuthFetch;
   openaiCodexOAuthCallbackPort?: number;
@@ -254,6 +257,18 @@ function attachmentMetadata(
     type: attachment.type ?? "application/octet-stream",
     size: attachment.size ?? 0,
   }));
+}
+
+function githubSignalClient(client: ApiServerOptions["githubClient"]): GitHubSignalClient | undefined {
+  if (
+    client &&
+    typeof client.listIssues === "function" &&
+    typeof client.listPullRequests === "function" &&
+    typeof client.listCheckRunsForRef === "function"
+  ) {
+    return client as GitHubSignalClient;
+  }
+  return undefined;
 }
 
 async function providerStatuses(
@@ -443,6 +458,37 @@ const ROUTES: Record<string, RouteHandler> = {
     }).generate({
       ...(projectId ? { projectId } : {}),
       ...(typeof body.runId === "string" ? { runId: body.runId } : {}),
+    });
+    ok(res, result, 201);
+  },
+  "GET /project-repository-verifications": async ({ res, options }) =>
+    ok(res, await deps(options).artifacts.list({ type: "repository-verification-report" })),
+  "POST /project-repositories/verify": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as {
+      projectId?: string;
+      projectSlug?: string;
+      runId?: string;
+      staleDays?: number;
+    };
+    let projectId = typeof body.projectId === "string" ? body.projectId : undefined;
+    if (!projectId && typeof body.projectSlug === "string") {
+      const project = await deps(options).projects.get(body.projectSlug);
+      if (!project) {
+        ok(res, { error: "project not found" }, 404);
+        return;
+      }
+      projectId = project.id;
+    }
+    const d = deps(options);
+    const githubClient = githubSignalClient(options.githubClient);
+    const result = await new ProjectRepositoryVerificationService(options.workspaceRoot, {
+      artifacts: d.artifacts,
+      audit: d.audit,
+      ...(githubClient ? { githubClient } : {}),
+    }).verify({
+      ...(projectId ? { projectId } : {}),
+      ...(typeof body.runId === "string" ? { runId: body.runId } : {}),
+      ...(typeof body.staleDays === "number" ? { staleDays: body.staleDays } : {}),
     });
     ok(res, result, 201);
   },

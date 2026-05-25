@@ -144,7 +144,9 @@ The Supreme Coordinator can observe GitHub as a delivery signal source.
 Runtime surface:
 
 - CLI: `bureau github sync --owner <owner> --repo <repo>`
+- CLI: `bureau project verify-repositories [--project <project-slug>]`
 - API/webhook: `POST /github/webhook` with GitHub `issues`, `pull_request`, or `check_run` events
+- API/manual verification: `POST /project-repositories/verify`
 - Daemon: linked GitHub repositories in project memory are polled every 15 minutes when `GITHUB_TOKEN` is configured
 - ElectronJS: latest `github-signal-report` artifacts are visible in the Live Operations Timeline
 
@@ -163,6 +165,8 @@ The webhook path writes the same `github-signal-report` artifact type from pushe
 - `github.webhook.ingested`
 
 This ingestion is read-only against GitHub. It does not push commits, comment on issues, or open PRs.
+
+Repository verification wraps this signal sync at the project level. It writes a `repository-verification-report` showing each project as `missing`, `unsupported`, `unverified`, `verified`, or `attention`. Without a GitHub client/token, it only parses linked repositories and marks them `unverified`; it does not invent delivery state.
 
 When `autonomy.start_triage_runs` allows it, BureauOS converts high-signal GitHub observations into internal threshold runs:
 

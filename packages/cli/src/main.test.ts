@@ -364,6 +364,50 @@ describe("bureau cli", () => {
     expect(audit).toContain("project.health_review.generated");
   });
 
+  it("verifies project repositories from CLI without requiring fake data or a token", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+    await main(["node", "bureau", "client", "create", "--name", "Miraglia Pizza"]);
+    await main([
+      "node",
+      "bureau",
+      "project",
+      "create",
+      "--name",
+      "Miraglia Booking Website",
+      "--client",
+      "miraglia-pizza",
+      "--repo",
+      "https://github.com/example/miraglia",
+    ]);
+    const previousToken = process.env["GITHUB_TOKEN"];
+    delete process.env["GITHUB_TOKEN"];
+
+    try {
+      const code = await main([
+        "node",
+        "bureau",
+        "project",
+        "verify-repositories",
+        "--project",
+        "miraglia-booking-website",
+      ]);
+
+      expect(code).toBe(0);
+    } finally {
+      if (previousToken) process.env["GITHUB_TOKEN"] = previousToken;
+    }
+
+    const artifactsDir = join(dir, ".bureauos", "memory", "artifacts");
+    const artifacts = await readdir(artifactsDir);
+    const bodies = await Promise.all(
+      artifacts.map((artifact) => readFile(join(artifactsDir, artifact), "utf8")),
+    );
+    expect(bodies.some((body) => body.includes("# Project Repository Verification"))).toBe(true);
+    expect(bodies.some((body) => body.includes("unverified"))).toBe(true);
+    const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
+    expect(audit).toContain("project.repositories.verified");
+  });
+
   it("generates growth reviews from CLI", async () => {
     await main(["node", "bureau", "init", "--name", "BOS"]);
     const code = await main(["node", "bureau", "growth", "review", "--recent-days", "14"]);

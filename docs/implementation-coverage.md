@@ -108,6 +108,7 @@ Every major capability described in the docs must become one of:
 | Scheduler | `Scheduler`, `bureau daemon run`, `bureau daemon start`, `bureau daemon stop`, `bureau daemon status`, workspace-local daemon status JSON | partial |
 | Daily executive report | scheduler + `BusinessReportService` | partial |
 | Project health checks | `ProjectHealthReviewService`, `project-health-report` artifact, scheduler attachment, `bureau project health`, `/project-health/generate` | partial |
+| Project repository verification | `ProjectRepositoryVerificationService`, `repository-verification-report`, `bureau project verify-repositories`, `/project-repositories/verify`, scheduler linked-repository verification | partial |
 | Growth review | `GrowthReviewService`, `growth-review` artifact, scheduler attachment, `bureau growth review`, `/growth/review/generate` | partial |
 | Client account review | scheduler creates account review runs and real client-account-plan artifacts from client intelligence | partial |
 | Threshold triggers | `GitHubSignalTriggerService` and `OperationalSignalTriggerService` start idempotent runs from failing/stale GitHub work, blocked internal work, unanswered client messages, and empty content pipeline signals | partial |
@@ -119,7 +120,7 @@ Every major capability described in the docs must become one of:
 | Documented capability | Runtime surface | Status |
 | --- | --- | --- |
 | GitHub labels | `github ensure-labels` | implemented |
-| GitHub issue/PR/check sync | `github sync`, `/github/webhook`, daemon project-repo polling, `github-signal-report` artifacts, audit signals, threshold-triggered runs, Electron timeline signal cards | partial |
+| GitHub issue/PR/check sync | `github sync`, `/github/webhook`, daemon project-repo polling through repository verification, `github-signal-report` artifacts, audit signals, threshold-triggered runs, Electron timeline signal cards | partial |
 | GitHub repository provisioning | `GitHubRepositoryProvisionService`, `github provision-repo`, `/github/provision-repository`, `repository-provisioning-report`, private-by-default visibility gate | partial |
 | GitHub issue draft generation | `github draft-issues`, `/github/issue-drafts`, Electron project cards | implemented |
 | GitHub issue creation from drafts | `github create-issues`, `/github/create-issues`, Electron project cards | implemented |

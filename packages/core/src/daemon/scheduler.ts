@@ -5,10 +5,12 @@ import { BusinessReportService } from "../reports/business.js";
 import { ProjectRegistry } from "../registries/project.js";
 import { ClientAccountPlanService } from "../clients/account-plans.js";
 import { ProjectHealthReviewService } from "../autonomy/project-health.js";
+import { ProjectRepositoryVerificationService } from "../autonomy/repository-verification.js";
 import { GrowthReviewService } from "../growth/review.js";
-import { GitHubSignalSyncService, type GitHubSignalClient } from "../github/signal-sync.js";
+import type { GitHubSignalClient } from "../github/signal-sync.js";
 import { GitHubSignalTriggerService } from "../github/signal-triggers.js";
 import { OperationalSignalTriggerService } from "../autonomy/operational-triggers.js";
+import { parseGitHubRepository } from "../github/repository-utils.js";
 
 /**
  * Always-on scheduler.
@@ -74,27 +76,6 @@ const TICKS: Array<Omit<TickJob, "last">> = [
     everyMs: 15 * 60 * 1000,
   },
 ];
-
-function parseGitHubRepository(value: string): { owner: string; repo: string } | undefined {
-  const clean = value.trim().replace(/\.git$/, "");
-  if (!clean) return undefined;
-
-  const ssh = clean.match(/github\.com[:/]([^/\s]+)\/([^/\s]+)$/);
-  if (ssh) return { owner: ssh[1]!, repo: ssh[2]! };
-
-  try {
-    const url = new URL(clean);
-    if (!url.hostname.endsWith("github.com")) return undefined;
-    const [owner, repo] = url.pathname.split("/").filter(Boolean);
-    if (!owner || !repo) return undefined;
-    return { owner, repo: repo.replace(/\.git$/, "") };
-  } catch {
-    const shorthand = clean.match(/^([^/\s]+)\/([^/\s]+)$/);
-    if (shorthand) return { owner: shorthand[1]!, repo: shorthand[2]! };
-  }
-
-  return undefined;
-}
 
 export class Scheduler {
   private interval: NodeJS.Timeout | undefined;
@@ -202,8 +183,8 @@ export class Scheduler {
   }
 
   private async syncGitHubProjectSignals(): Promise<void> {
-    if (!this.options.workspaceRoot || !this.options.githubClient) {
-      this.log("scheduler: github_project_signal_sync skipped (GitHub client not configured)");
+    if (!this.options.workspaceRoot) {
+      this.log("scheduler: github_project_signal_sync skipped (workspace not configured)");
       return;
     }
 
@@ -216,19 +197,39 @@ export class Scheduler {
     }
 
     if (repositories.size === 0) {
-      this.log("scheduler: github_project_signal_sync skipped (no linked GitHub repositories)");
+      const verification = await new ProjectRepositoryVerificationService(this.options.workspaceRoot, {
+        ...(this.options.coordinator
+          ? {
+              audit: this.options.coordinator.audit,
+              artifacts: this.options.coordinator.artifacts,
+            }
+          : {}),
+      }).verify();
+      this.log(
+        `scheduler: repository verification ${verification.report.id} found no linked GitHub repositories`,
+      );
       return;
     }
 
-    const sync = new GitHubSignalSyncService(this.options.workspaceRoot, {
-      githubClient: this.options.githubClient,
+    const verification = await new ProjectRepositoryVerificationService(this.options.workspaceRoot, {
+      ...(this.options.githubClient ? { githubClient: this.options.githubClient } : {}),
       ...(this.options.coordinator
         ? {
             audit: this.options.coordinator.audit,
             artifacts: this.options.coordinator.artifacts,
           }
         : {}),
+    }).verify({
+      staleDays: this.options.config.triggers.thresholds.stale_pr_hours / 24,
     });
+
+    if (!this.options.githubClient) {
+      this.log(
+        `scheduler: repository verification ${verification.report.id} completed without GitHub client (${verification.projects.length} project(s) unverified)`,
+      );
+      return;
+    }
+
     const trigger = this.options.coordinator
       ? new GitHubSignalTriggerService({
           runs: this.options.runs,
@@ -239,21 +240,20 @@ export class Scheduler {
         })
       : undefined;
     let triggered = 0;
-    for (const repo of repositories.values()) {
-      const result = await sync.sync({ owner: repo.owner, repo: repo.repo });
-      if (trigger) {
+    for (const item of verification.projects) {
+      if (trigger && item.signal) {
         const runs = await trigger.trigger({
-          repository: result.repository,
-          report: result.report,
-          failingChecks: result.failingChecks,
-          staleIssues: result.staleIssues,
-          stalePullRequests: result.stalePullRequests,
+          repository: item.signal.repository,
+          report: item.signal.report,
+          failingChecks: item.signal.failingChecks,
+          staleIssues: item.signal.staleIssues,
+          stalePullRequests: item.signal.stalePullRequests,
         });
         triggered += runs.triggered.length;
       }
     }
     this.log(
-      `scheduler: github_project_signal_sync synced ${repositories.size} repositories, triggered ${triggered} runs`,
+      `scheduler: repository verification ${verification.report.id} checked ${repositories.size} repositories, triggered ${triggered} runs`,
     );
   }
 
