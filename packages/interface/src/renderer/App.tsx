@@ -11,6 +11,7 @@ import {
   type ClientRecord,
   type CompanyPulse,
   type CoordinatorIntakeResult,
+  type CoordinatorMessageRecord,
   type OpportunityRecord,
   type ProviderAuthAuthorization,
   type ProviderConnection,
@@ -94,14 +95,7 @@ interface ChatAttachment {
   previewUrl?: string;
 }
 
-interface ChatMessage {
-  id: string;
-  role: "owner" | "coordinator";
-  text: string;
-  created: string;
-  attachments?: { name: string; size: number; type: string }[];
-  result?: CoordinatorIntakeResult;
-}
+type ChatMessage = CoordinatorMessageRecord;
 
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
@@ -1022,6 +1016,21 @@ function CoordinatorPanel({
     attachmentsRef.current = attachments;
   }, [attachments]);
 
+  useEffect(() => {
+    let cancelled = false;
+    Api.coordinatorMessages(50)
+      .then((history) => {
+        if (cancelled) return;
+        setMessages((current) => (current.length > 0 ? current : history));
+      })
+      .catch(() => {
+        // The dashboard-level API error banner covers unavailable servers.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(
     () => () => {
       attachmentsRef.current.forEach((item) => {
@@ -1078,12 +1087,7 @@ function CoordinatorPanel({
       const payload = await Promise.all(
         attachments.map((attachment) => toCoordinatorAttachment(attachment.file)),
       );
-      const attachmentSummary = attachments.length
-        ? `\n\nAttached files:\n${attachments
-            .map((item) => `- ${item.name} (${item.type}, ${formatBytes(item.size)})`)
-            .join("\n")}`
-        : "";
-      const result = await onIntake(`${messageText}${attachmentSummary}`, undefined, payload);
+      const result = await onIntake(messageText || "Attached files", undefined, payload);
       setMessages((current) => [
         ...current,
         {

@@ -86,6 +86,53 @@ describe("API server", () => {
     expect(audit).toContain("coordinator.intake.completed");
   });
 
+  it("persists coordinator message history for the ElectronJS chat", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const empty = await fetch(`${server.url}/coordinator/messages`);
+    expect(empty.status).toBe(200);
+    expect(await empty.json()).toEqual([]);
+
+    await fetch(`${server.url}/coordinator/intake`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        clientName: "Pizzeria Aurora",
+        message: "Ho parlato con Pizzeria Aurora: vuole un sito con prenotazioni.",
+        attachments: [
+          {
+            name: "logo.png",
+            type: "image/png",
+            size: 5,
+            dataUrl: "data:image/png;base64,aGVsbG8=",
+          },
+        ],
+      }),
+    });
+
+    const response = await fetch(`${server.url}/coordinator/messages`);
+    expect(response.status).toBe(200);
+    const messages = (await response.json()) as Array<{
+      role: string;
+      text: string;
+      attachments?: Array<{ name: string; type: string; size: number }>;
+      result?: { project: { slug: string } };
+    }>;
+    expect(messages).toHaveLength(2);
+    expect(messages[0]).toMatchObject({
+      role: "owner",
+      text: "Ho parlato con Pizzeria Aurora: vuole un sito con prenotazioni.",
+      attachments: [{ name: "logo.png", type: "image/png", size: 5 }],
+    });
+    expect(messages[1]).toMatchObject({
+      role: "coordinator",
+      result: { project: { slug: "pizzeria-aurora-booking-website" } },
+    });
+
+    const rawHistory = await readFile(workspacePaths(dir).coordinatorMessages, "utf8");
+    expect(rawHistory).toContain("pizzeria-aurora-booking-website");
+  });
+
   it("persists coordinator chat attachments as project artifacts", async () => {
     server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
 

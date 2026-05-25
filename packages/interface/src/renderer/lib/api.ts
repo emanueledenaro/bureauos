@@ -163,6 +163,14 @@ export interface CoordinatorIntakeResult {
   artifacts: ArtifactRecord[];
   approvals: ApprovalRecord[];
 }
+export interface CoordinatorMessageRecord {
+  id: string;
+  role: "owner" | "coordinator";
+  text: string;
+  created: string;
+  attachments?: Array<{ name: string; size: number; type: string }>;
+  result?: CoordinatorIntakeResult;
+}
 export interface BusinessReportResult {
   generated_at: string;
   executive_report: ArtifactRecord;
@@ -314,6 +322,8 @@ export const Api = {
   providerConnectors: () => api<ProviderConnector[]>("/provider/connectors"),
   providerModels: (provider: string) =>
     api<ProviderModelList>(`/provider/models?provider=${encodeURIComponent(provider)}`),
+  coordinatorMessages: (limit = 50) =>
+    api<CoordinatorMessageRecord[]>(`/coordinator/messages?limit=${limit}`),
   audit: (n = 50) => api<AuditEvent[]>(`/audit?n=${n}`),
   coordinatorIntake: (input: {
     message: string;

@@ -154,6 +154,7 @@ async function ensureScaffold(paths: WorkspacePaths): Promise<void> {
     paths.workspaceDir,
     paths.memoryDir,
     paths.dailyDir,
+    paths.coordinatorDir,
     paths.clientsDir,
     paths.projectsDir,
     paths.opportunitiesDir,

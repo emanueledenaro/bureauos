@@ -18,6 +18,7 @@ import {
   CoordinatorIntakeService,
   type CoordinatorAttachmentInput,
 } from "../coordinator/intake.js";
+import { CoordinatorMessageStore } from "../coordinator/messages.js";
 import { ProjectDispatchService } from "../dispatch/project-dispatch.js";
 import { GitHubIssueDraftService } from "../github/issue-drafts.js";
 import {
@@ -198,6 +199,16 @@ function parseAttachments(value: unknown): CoordinatorAttachmentInput[] {
   });
 }
 
+function attachmentMetadata(
+  attachments: readonly CoordinatorAttachmentInput[],
+): Array<{ name: string; type: string; size: number }> {
+  return attachments.map((attachment) => ({
+    name: attachment.name,
+    type: attachment.type ?? "application/octet-stream",
+    size: attachment.size ?? 0,
+  }));
+}
+
 async function providerStatuses(
   workspaceRoot: string,
   config: ProviderCatalogConfig,
@@ -304,6 +315,14 @@ const ROUTES: Record<string, RouteHandler> = {
 
   "GET /capabilities": ({ res, options }) => {
     ok(res, CapabilityRegistry.fromConfig(options.config.capabilities).list());
+  },
+
+  "GET /coordinator/messages": async ({ res, options, url }) => {
+    const requestedLimit = Number(url.searchParams.get("limit") ?? "50");
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 200)
+      : 50;
+    ok(res, await new CoordinatorMessageStore(options.workspaceRoot).list(limit));
   },
 
   "GET /providers": async ({ res, options }) => {
@@ -554,6 +573,7 @@ const ROUTES: Record<string, RouteHandler> = {
       ok(res, { error: "message required" }, 400);
       return;
     }
+    const attachments = parseAttachments(body.attachments);
     const service = new CoordinatorIntakeService(options.workspaceRoot, {
       config: options.config,
     });
@@ -565,8 +585,20 @@ const ROUTES: Record<string, RouteHandler> = {
       ...(body.industry ? { industry: body.industry } : {}),
       ...(typeof body.expectedValue === "number" ? { expectedValue: body.expectedValue } : {}),
       ...(typeof body.expectedMargin === "number" ? { expectedMargin: body.expectedMargin } : {}),
-      attachments: parseAttachments(body.attachments),
+      attachments,
     });
+    await new CoordinatorMessageStore(options.workspaceRoot).appendMany([
+      {
+        role: "owner",
+        text: body.message,
+        attachments: attachmentMetadata(attachments),
+      },
+      {
+        role: "coordinator",
+        text: result.summary,
+        result,
+      },
+    ]);
     ok(res, result, 201);
   },
 

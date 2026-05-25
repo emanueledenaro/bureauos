@@ -25,7 +25,7 @@ Every major capability described in the docs must become one of:
 
 | Documented capability | Runtime surface | Status |
 | --- | --- | --- |
-| Supreme Coordinator as only owner-facing agent | `CoordinatorIntakeService`, ElectronJS Coordinator panel, `bureau intake`, `POST /coordinator/intake` | partial |
+| Supreme Coordinator as only owner-facing agent | `CoordinatorIntakeService`, ElectronJS Coordinator panel, `bureau intake`, `POST /coordinator/intake`, `GET /coordinator/messages` | partial |
 | Company memory | `.bureauos/memory/COMPANY.md`, `ROOT.md`, daily notes, decisions | partial |
 | Client memory | `ClientRegistry`, per-client memory files | implemented |
 | Project memory | `ProjectRegistry`, per-project memory files | implemented |
@@ -60,7 +60,7 @@ Every major capability described in the docs must become one of:
 | Goals view | React renderer | partial |
 | Revenue pulse | React renderer + `/company-pulse` | partial |
 | Live operations timeline | SSE `/events` + audit log | implemented |
-| Supreme Coordinator chat | React renderer + `/coordinator/intake` | partial |
+| Supreme Coordinator chat | React renderer + `/coordinator/intake`, `/coordinator/messages`, workspace-backed chat history | partial |
 | Approvals panel | React renderer + `/approvals/resolve` | partial |
 | Reports generation | `BusinessReportService`, `bureau report generate`, `/reports/generate` | implemented |
 | Reports view | report action in Revenue Pulse, `/reports` endpoint | partial |

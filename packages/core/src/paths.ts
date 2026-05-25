@@ -29,6 +29,8 @@ export interface WorkspacePaths {
   publicClaimsMemory: string;
   policiesMemory: string;
   dailyDir: string;
+  coordinatorDir: string;
+  coordinatorMessages: string;
   clientsDir: string;
   projectsDir: string;
   opportunitiesDir: string;
@@ -70,6 +72,8 @@ export function workspacePaths(root: string): WorkspacePaths {
     publicClaimsMemory: join(mem, "PUBLIC_CLAIMS.md"),
     policiesMemory: join(mem, "POLICIES.md"),
     dailyDir: join(mem, "memory"),
+    coordinatorDir: join(mem, "coordinator"),
+    coordinatorMessages: join(mem, "coordinator", "messages.jsonl"),
     clientsDir: join(mem, "clients"),
     projectsDir: join(mem, "projects"),
     opportunitiesDir: join(mem, "opportunities"),
