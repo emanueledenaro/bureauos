@@ -2,6 +2,7 @@ import { Bot, ShieldCheck, Wrench } from "lucide-react";
 import { SectionShell } from "../components/dashboard/SectionShell";
 import { MetricTile } from "../components/dashboard/MetricTile";
 import { StatusPill } from "../components/dashboard/StatusPill";
+import { ResponsiveTable } from "../components/dashboard/ResponsiveTable";
 import { Badge } from "../components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../components/ui/tooltip";
 import { agentAbbr } from "../lib/tone";
@@ -100,7 +101,7 @@ export function AgentsView({ state }: { state: DashboardState }) {
         ))}
       </div>
 
-      <div className="mt-5 overflow-hidden rounded-lg border border-border/70">
+      <ResponsiveTable className="mt-5" minWidth={840}>
         <div className="grid grid-cols-[170px_90px_100px_minmax(0,1.5fr)_minmax(0,1fr)] bg-surface-subtle/60 px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
           <span>Capability</span>
           <span>Type</span>
@@ -140,7 +141,7 @@ export function AgentsView({ state }: { state: DashboardState }) {
             </span>
           </div>
         ))}
-      </div>
+      </ResponsiveTable>
     </SectionShell>
   );
 }

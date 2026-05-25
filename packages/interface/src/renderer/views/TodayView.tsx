@@ -51,33 +51,37 @@ export function TodayView({
       </div>
 
       <div className="mt-5 overflow-hidden rounded-lg border border-border/70">
-        <div className="grid grid-cols-[100px_90px_minmax(0,1fr)_140px_90px] bg-surface-subtle/60 px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          <span>Source</span>
-          <span>State</span>
-          <span>Work</span>
-          <span>Signal</span>
-          <span />
-        </div>
-        {actions.slice(0, 12).map((action) => (
-          <div
-            key={action.id}
-            className="grid grid-cols-[100px_90px_minmax(0,1fr)_140px_90px] items-center gap-3 border-t border-border/60 px-4 py-3 text-[11px] transition-colors hover:bg-surface-subtle/40"
-          >
-            <span className="truncate font-medium text-foreground">{action.source}</span>
-            <StatusPill value={formatLabel(actionStateLabel(action.tone))} tone={action.tone} />
-            <div className="min-w-0">
-              <div className="truncate font-medium text-foreground">{action.title}</div>
-              <div className="mt-0.5 truncate text-[10px] text-muted-foreground">
-                {action.detail}
-              </div>
+        <div className="overflow-x-auto">
+          <div className="min-w-[640px]">
+            <div className="grid grid-cols-[100px_90px_minmax(0,1fr)_140px_90px] bg-surface-subtle/60 px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <span>Source</span>
+              <span>State</span>
+              <span>Work</span>
+              <span>Signal</span>
+              <span />
             </div>
-            <span className="truncate text-muted-foreground">{action.meta}</span>
-            <Button variant="outline" size="sm" onClick={() => onModeChange(action.route)}>
-              Open
-              <ArrowRight className="h-3 w-3" />
-            </Button>
+            {actions.slice(0, 12).map((action) => (
+              <div
+                key={action.id}
+                className="grid grid-cols-[100px_90px_minmax(0,1fr)_140px_90px] items-center gap-3 border-t border-border/60 px-4 py-3 text-[11px] transition-colors hover:bg-surface-subtle/40"
+              >
+                <span className="truncate font-medium text-foreground">{action.source}</span>
+                <StatusPill value={formatLabel(actionStateLabel(action.tone))} tone={action.tone} />
+                <div className="min-w-0">
+                  <div className="truncate font-medium text-foreground">{action.title}</div>
+                  <div className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                    {action.detail}
+                  </div>
+                </div>
+                <span className="truncate text-muted-foreground">{action.meta}</span>
+                <Button variant="outline" size="sm" onClick={() => onModeChange(action.route)}>
+                  Open
+                  <ArrowRight className="h-3 w-3" />
+                </Button>
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
         {actions.length === 0 ? (
           <div className="border-t border-border/60 p-5">
             <EmptyState

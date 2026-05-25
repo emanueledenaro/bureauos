@@ -3,6 +3,7 @@ import { SectionShell } from "../components/dashboard/SectionShell";
 import { MetricTile } from "../components/dashboard/MetricTile";
 import { StatusPill } from "../components/dashboard/StatusPill";
 import { EmptyState } from "../components/dashboard/EmptyState";
+import { ResponsiveTable } from "../components/dashboard/ResponsiveTable";
 import { clientName, sortNewest } from "../lib/builders";
 import { opportunityTone } from "../lib/tone";
 import { formatLabel, formatMoney } from "../lib/format";
@@ -40,7 +41,7 @@ export function RevenueView({ state }: { state: DashboardState }) {
         />
       </div>
 
-      <div className="mt-5 overflow-hidden rounded-lg border border-border/70">
+      <ResponsiveTable className="mt-5" minWidth={680}>
         <div className="grid grid-cols-[minmax(0,1fr)_120px_120px_140px] bg-surface-subtle/60 px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
           <span>Opportunity</span>
           <span>Value</span>
@@ -80,7 +81,7 @@ export function RevenueView({ state }: { state: DashboardState }) {
             />
           </div>
         ) : null}
-      </div>
+      </ResponsiveTable>
     </SectionShell>
   );
 }

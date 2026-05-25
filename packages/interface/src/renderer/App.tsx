@@ -127,21 +127,32 @@ export function App() {
             onOpenSidebar={() => setSidebarOpen(true)}
             onOpenCoordinator={() => setCoordinatorOpen(true)}
           />
-          <main className="flex-1 overflow-y-auto bg-background">
-            <DashboardLayout
-              mode={mode}
-              state={state}
-              onModeChange={onModeChange}
-              onResolve={onResolve}
-              onCoordinatorMessage={onCoordinatorMessage}
-              onGenerateReport={onGenerateReport}
-              onProviderLogin={onProviderLogin}
-              onProviderLogout={onProviderLogout}
-              onVerifyRepositories={onVerifyRepositories}
-              onRetryScan={onRetryScan}
-              onRefresh={refresh}
-            />
-          </main>
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            <main className="min-w-0 flex-1 overflow-y-auto bg-background">
+              <DashboardLayout
+                mode={mode}
+                state={state}
+                onModeChange={onModeChange}
+                onResolve={onResolve}
+                onGenerateReport={onGenerateReport}
+                onProviderLogin={onProviderLogin}
+                onProviderLogout={onProviderLogout}
+                onVerifyRepositories={onVerifyRepositories}
+                onRetryScan={onRetryScan}
+                onRefresh={refresh}
+              />
+            </main>
+            <aside className="hidden h-full w-[360px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-border/60 bg-surface/60 p-4 xl:flex 2xl:w-[400px]">
+              <div className="flex min-h-[420px] flex-1 flex-col">
+                <CoordinatorPanel onMessage={onCoordinatorMessage} />
+              </div>
+              <PendingApprovalsView
+                approvals={state.approvals}
+                onResolve={onResolve}
+                onOpen={() => onModeChange("approvals")}
+              />
+            </aside>
+          </div>
           <AgentLayer agents={state.agents} />
           {state.error ? (
             <div className="border-t border-danger/40 bg-danger-subtle/40 px-5 py-2 text-[11px] text-danger">
@@ -150,9 +161,21 @@ export function App() {
           ) : null}
         </div>
         <Sheet open={coordinatorOpen} onOpenChange={setCoordinatorOpen}>
-          <SheetContent side="right" className="w-[92vw] max-w-[420px] p-3">
+          <SheetContent side="right" className="w-full max-w-md p-0" hideClose>
             <SheetTitle className="sr-only">Supreme Coordinator</SheetTitle>
-            <CoordinatorPanel onMessage={onCoordinatorMessage} />
+            <div className="flex h-full flex-col gap-3 overflow-y-auto p-3">
+              <div className="flex min-h-[420px] flex-1 flex-col">
+                <CoordinatorPanel onMessage={onCoordinatorMessage} />
+              </div>
+              <PendingApprovalsView
+                approvals={state.approvals}
+                onResolve={onResolve}
+                onOpen={() => {
+                  setCoordinatorOpen(false);
+                  onModeChange("approvals");
+                }}
+              />
+            </div>
           </SheetContent>
         </Sheet>
       </div>
@@ -165,7 +188,6 @@ function DashboardLayout({
   state,
   onModeChange,
   onResolve,
-  onCoordinatorMessage,
   onGenerateReport,
   onProviderLogin,
   onProviderLogout,
@@ -177,10 +199,6 @@ function DashboardLayout({
   state: DashboardState;
   onModeChange: (mode: AdaptiveMode) => void;
   onResolve: (id: string, status: "approved" | "rejected") => Promise<void>;
-  onCoordinatorMessage: (
-    message: string,
-    attachments?: CoordinatorAttachmentInput[],
-  ) => Promise<CoordinatorChatResult>;
   onGenerateReport: () => Promise<BusinessReportResult>;
   onProviderLogin: (input: {
     provider: string;
@@ -209,21 +227,9 @@ function DashboardLayout({
   });
 
   return (
-    <div className="mx-auto flex max-w-[1640px] flex-col gap-4 p-4 lg:p-5">
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
-        <div className="flex min-w-0 flex-col gap-4">
-          {mainView}
-          <TimelineView events={state.audit} artifacts={state.artifacts} />
-        </div>
-        <div className="hidden min-w-0 flex-col gap-4 xl:flex">
-          <CoordinatorPanel onMessage={onCoordinatorMessage} />
-          <PendingApprovalsView
-            approvals={state.approvals}
-            onResolve={onResolve}
-            onOpen={() => onModeChange("approvals")}
-          />
-        </div>
-      </div>
+    <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-4 p-3 sm:p-4 lg:p-5">
+      {mainView}
+      <TimelineView events={state.audit} artifacts={state.artifacts} />
       <RevenuePulseView
         pulse={state.pulse}
         clients={state.clients}

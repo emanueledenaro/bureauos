@@ -14,8 +14,8 @@ export function WorkstreamCard({
     <div className="relative">
       {laneIndex > 0 ? (
         <>
-          <span className="portfolio-connector" aria-hidden="true" />
-          <span className="portfolio-node" aria-hidden="true" />
+          <span className="portfolio-connector hidden md:block" aria-hidden="true" />
+          <span className="portfolio-node hidden md:block" aria-hidden="true" />
         </>
       ) : null}
       <div className="group relative z-10 flex flex-col gap-3 rounded-lg border border-border/70 bg-surface-raised p-3 shadow-[0_8px_18px_-12px_hsl(0_0%_0%/0.6)] transition-colors hover:border-border">

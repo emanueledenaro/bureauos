@@ -4,6 +4,7 @@ import { SectionShell } from "../components/dashboard/SectionShell";
 import { MetricTile } from "../components/dashboard/MetricTile";
 import { StatusPill } from "../components/dashboard/StatusPill";
 import { EmptyState } from "../components/dashboard/EmptyState";
+import { ResponsiveTable } from "../components/dashboard/ResponsiveTable";
 import { Button } from "../components/ui/button";
 import { cn } from "../lib/utils";
 import { approvalTone } from "../lib/tone";
@@ -85,7 +86,7 @@ export function ApprovalsView({
         ))}
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-lg border border-border/70">
+      <ResponsiveTable className="mt-4" minWidth={920}>
         <div className="grid grid-cols-[minmax(0,1.4fr)_110px_minmax(0,1fr)_120px_140px_180px] bg-surface-subtle/60 px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
           <span>Action</span>
           <span>Status</span>
@@ -158,7 +159,7 @@ export function ApprovalsView({
             />
           </div>
         ) : null}
-      </div>
+      </ResponsiveTable>
     </SectionShell>
   );
 }

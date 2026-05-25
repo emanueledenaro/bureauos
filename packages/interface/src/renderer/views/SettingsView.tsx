@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Building2, KeyRound, Loader2, Plug, Shield } from "lucide-react";
 import { SectionShell } from "../components/dashboard/SectionShell";
+import { ResponsiveTable } from "../components/dashboard/ResponsiveTable";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
@@ -430,7 +431,7 @@ export function SettingsView({
         </div>
       ) : null}
 
-      <div className="mt-5 overflow-hidden rounded-lg border border-border/70">
+      <ResponsiveTable className="mt-5" minWidth={780}>
         <div className="grid grid-cols-[140px_100px_minmax(0,1fr)_80px_90px_100px] bg-surface-subtle/60 px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
           <span>Provider</span>
           <span>Mode</span>
@@ -476,7 +477,7 @@ export function SettingsView({
             )}
           </div>
         ))}
-      </div>
+      </ResponsiveTable>
     </SectionShell>
   );
 }

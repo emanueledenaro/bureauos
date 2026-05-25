@@ -3,6 +3,7 @@ import { SectionShell } from "../components/dashboard/SectionShell";
 import { MetricTile } from "../components/dashboard/MetricTile";
 import { GoalCard } from "../components/dashboard/GoalCard";
 import { StatusPill } from "../components/dashboard/StatusPill";
+import { ResponsiveTable } from "../components/dashboard/ResponsiveTable";
 import { Button } from "../components/ui/button";
 import { buildGoalItems } from "../lib/builders";
 import type { AdaptiveMode, DashboardState } from "../lib/types";
@@ -56,7 +57,7 @@ export function GoalsView({
         ))}
       </div>
 
-      <div className="mt-5 overflow-hidden rounded-lg border border-border/70">
+      <ResponsiveTable className="mt-5" minWidth={560}>
         <div className="grid grid-cols-[minmax(0,1fr)_120px_120px] bg-surface-subtle/60 px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
           <span>Milestone</span>
           <span>Progress</span>
@@ -78,7 +79,7 @@ export function GoalsView({
             </Button>
           </div>
         ))}
-      </div>
+      </ResponsiveTable>
     </SectionShell>
   );
 }
