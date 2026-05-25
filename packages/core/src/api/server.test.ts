@@ -22,6 +22,34 @@ class TestGitHubClient implements GitHubIssuePublishClient {
     head: string;
     base: string;
   }> = [];
+  createdRepositories: Array<{
+    owner: string;
+    repo: string;
+    fullName: string;
+    url: string;
+    private: boolean;
+  }> = [];
+
+  async createRepository(input: {
+    owner: string;
+    name: string;
+    ownerType: "user" | "org";
+    private: boolean;
+    description?: string;
+    autoInit?: boolean;
+  }) {
+    const repo = {
+      owner: input.owner,
+      repo: input.name,
+      fullName: `${input.owner}/${input.name}`,
+      url: `https://github.com/${input.owner}/${input.name}`,
+      private: input.private,
+      defaultBranch: input.autoInit === false ? "" : "main",
+      createdAt: "2026-05-25T10:00:00.000Z",
+    };
+    this.createdRepositories.push(repo);
+    return repo;
+  }
 
   async createIssue(
     owner: string,
@@ -706,6 +734,53 @@ describe("API server", () => {
 
     const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(audit).toContain("github.pr_publish.created");
+  });
+
+  it("provisions GitHub repositories through the configured API GitHub client", async () => {
+    const githubClient = new TestGitHubClient();
+    server = await startApiServer({
+      workspaceRoot: dir,
+      config: defaultConfig("agency"),
+      githubClient,
+    });
+
+    await fetch(`${server.url}/coordinator/intake`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        clientName: "Pizzeria Aurora",
+        message: "Ho parlato con una pizzeria: vuole sito con prenotazioni.",
+      }),
+    });
+
+    const response = await fetch(`${server.url}/github/provision-repository`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        projectSlug: "pizzeria-aurora-booking-website",
+        owner: "emanueledenaro",
+        repo: "pizzeria-aurora",
+        private: true,
+        autoInit: true,
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    const result = (await response.json()) as {
+      status: string;
+      repository: { url: string; private: boolean };
+      report: { type: string };
+    };
+    expect(result.status).toBe("created");
+    expect(result.repository).toMatchObject({
+      url: "https://github.com/emanueledenaro/pizzeria-aurora",
+      private: true,
+    });
+    expect(result.report.type).toBe("repository-provisioning-report");
+    expect(githubClient.createdRepositories).toHaveLength(1);
+
+    const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(audit).toContain("github.repository_provision.created");
   });
 
   it("ingests signed GitHub webhooks into signal memory", async () => {

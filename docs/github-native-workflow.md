@@ -108,6 +108,21 @@ The first generated package contains:
 - Compliance gate issue
 - Growth/content issue
 
+## Repository Provisioning
+
+BureauOS can create and link the GitHub repository for a project when the configured policy allows it.
+
+Runtime surfaces:
+
+- CLI: `bureau github provision-repo --project <project-slug> --owner <owner> [--repo <repo>]`
+- API: `POST /github/provision-repository` with `{ "projectSlug": "...", "owner": "...", "repo": "..." }`
+
+Repositories are private by default. Public repository creation requires explicit owner approval even when `autonomy.create_repositories` is enabled.
+
+When allowed by policy, BureauOS creates the repository, writes a `repository-provisioning-report`, links `project.repository`, and audits `github.repository_provision.created`.
+
+When blocked by policy, BureauOS does not call GitHub. It creates or reuses an approval request and audits `github.repository_provision.blocked`.
+
 Creating real GitHub issues from these drafts is implemented and policy-gated.
 
 Runtime surfaces:

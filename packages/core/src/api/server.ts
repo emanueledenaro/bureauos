@@ -31,6 +31,10 @@ import {
   GitHubPullRequestPublishService,
   type GitHubPullRequestPublishClient,
 } from "../github/pr-publisher.js";
+import {
+  GitHubRepositoryProvisionService,
+  type GitHubRepositoryProvisionClient,
+} from "../github/repository-provisioner.js";
 import { BusinessReportService } from "../reports/business.js";
 import { ClientIntelligenceService } from "../clients/intelligence.js";
 import { ClientAccountPlanService } from "../clients/account-plans.js";
@@ -68,7 +72,9 @@ export interface ApiServerOptions {
   config: BureauConfig;
   port?: number;
   token?: string;
-  githubClient?: GitHubIssuePublishClient & Partial<GitHubPullRequestPublishClient>;
+  githubClient?: GitHubIssuePublishClient &
+    Partial<GitHubPullRequestPublishClient> &
+    Partial<GitHubRepositoryProvisionClient>;
   githubWebhookSecret?: string;
   openaiCodexOAuthFetch?: OpenAICodexOAuthFetch;
   openaiCodexOAuthCallbackPort?: number;
@@ -768,6 +774,39 @@ const ROUTES: Record<string, RouteHandler> = {
         ? { linkedIssueNumbers: body.linkedIssueNumbers }
         : {}),
       ...(Array.isArray(body.testEvidence) ? { testEvidence: body.testEvidence } : {}),
+    });
+    ok(res, result, result.status === "created" ? 201 : 202);
+  },
+
+  "POST /github/provision-repository": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as {
+      projectSlug?: string;
+      owner?: string;
+      repo?: string;
+      ownerType?: "user" | "org";
+      private?: boolean;
+      description?: string;
+      autoInit?: boolean;
+    };
+    if (!body.projectSlug || !body.owner) {
+      ok(res, { error: "projectSlug and owner required" }, 400);
+      return;
+    }
+    if (!options.githubClient?.createRepository) {
+      ok(res, { error: "GitHub repository client not configured" }, 400);
+      return;
+    }
+    const result = await new GitHubRepositoryProvisionService(options.workspaceRoot, {
+      config: options.config,
+      githubClient: options.githubClient as GitHubRepositoryProvisionClient,
+    }).provision({
+      projectSlug: body.projectSlug,
+      owner: body.owner,
+      ...(typeof body.repo === "string" ? { repo: body.repo } : {}),
+      ...(body.ownerType === "org" || body.ownerType === "user" ? { ownerType: body.ownerType } : {}),
+      ...(typeof body.private === "boolean" ? { private: body.private } : {}),
+      ...(typeof body.description === "string" ? { description: body.description } : {}),
+      ...(typeof body.autoInit === "boolean" ? { autoInit: body.autoInit } : {}),
     });
     ok(res, result, result.status === "created" ? 201 : 202);
   },

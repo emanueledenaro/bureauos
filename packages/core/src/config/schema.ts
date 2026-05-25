@@ -118,6 +118,7 @@ const AutonomyConfig = z
     observe_signals: z.boolean().default(true),
     start_triage_runs: z.boolean().default(true),
     create_internal_reports: z.boolean().default(true),
+    create_repositories: z.boolean().default(true),
     create_issues: z.boolean().default(true),
     comment_on_issues: z.boolean().default(true),
     create_branches: z.boolean().default(true),

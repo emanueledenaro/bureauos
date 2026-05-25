@@ -5,6 +5,7 @@ import type {
   GitHubClientOptions,
   GitHubIssueRef,
   GitHubPullRequestRef,
+  GitHubRepositoryRef,
 } from "./client.js";
 
 /**
@@ -20,6 +21,27 @@ export class OctokitGitHubClient implements GitHubClient {
     const opts: ConstructorParameters<typeof Octokit>[0] = { auth: options.token };
     if (options.baseUrl) opts.baseUrl = options.baseUrl;
     this.octokit = new Octokit(opts);
+  }
+
+  async createRepository(input: {
+    owner: string;
+    name: string;
+    ownerType: "user" | "org";
+    private: boolean;
+    description?: string;
+    autoInit?: boolean;
+  }): Promise<GitHubRepositoryRef> {
+    const payload: { name: string; private: boolean; description?: string; auto_init?: boolean } = {
+      name: input.name,
+      private: input.private,
+    };
+    if (input.description !== undefined) payload.description = input.description;
+    if (input.autoInit !== undefined) payload.auto_init = input.autoInit;
+    const r =
+      input.ownerType === "org"
+        ? await this.octokit.repos.createInOrg({ org: input.owner, ...payload })
+        : await this.octokit.repos.createForAuthenticatedUser(payload);
+    return mapRepository(r.data as unknown as RawRepository);
   }
 
   async readIssue(owner: string, repo: string, number: number): Promise<GitHubIssueRef> {
@@ -138,6 +160,16 @@ interface RawIssue {
   pull_request?: unknown;
 }
 
+interface RawRepository {
+  name: string;
+  full_name: string;
+  html_url: string;
+  private: boolean;
+  default_branch?: string | null;
+  created_at?: string | null;
+  owner?: { login?: string | null } | null;
+}
+
 interface RawPull {
   number: number;
   title: string;
@@ -159,6 +191,19 @@ interface RawCheckRun {
   head_sha: string;
   started_at?: string | null;
   completed_at?: string | null;
+}
+
+function mapRepository(raw: RawRepository): GitHubRepositoryRef {
+  const [fallbackOwner, fallbackRepo] = raw.full_name.split("/") as [string, string];
+  return {
+    owner: raw.owner?.login ?? fallbackOwner,
+    repo: raw.name || fallbackRepo,
+    fullName: raw.full_name,
+    url: raw.html_url,
+    private: raw.private,
+    defaultBranch: raw.default_branch ?? "",
+    createdAt: raw.created_at ?? "",
+  };
 }
 
 function mapIssue(owner: string, repo: string, raw: RawIssue): GitHubIssueRef {

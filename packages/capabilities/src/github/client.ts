@@ -32,6 +32,16 @@ export interface GitHubPullRequestRef {
   updatedAt: string;
 }
 
+export interface GitHubRepositoryRef {
+  owner: string;
+  repo: string;
+  fullName: string;
+  url: string;
+  private: boolean;
+  defaultBranch: string;
+  createdAt: string;
+}
+
 export type GitHubCheckRunConclusion =
   | "success"
   | "failure"
@@ -63,6 +73,14 @@ export interface GitHubClientOptions {
 }
 
 export interface GitHubClient {
+  createRepository(input: {
+    owner: string;
+    name: string;
+    ownerType: "user" | "org";
+    private: boolean;
+    description?: string;
+    autoInit?: boolean;
+  }): Promise<GitHubRepositoryRef>;
   readIssue(owner: string, repo: string, number: number): Promise<GitHubIssueRef>;
   listIssues(
     owner: string,
@@ -113,6 +131,9 @@ export class StubGitHubClient implements GitHubClient {
   }
 
   async readIssue(): Promise<GitHubIssueRef> {
+    return this.notWired();
+  }
+  async createRepository(): Promise<GitHubRepositoryRef> {
     return this.notWired();
   }
   async listIssues(): Promise<readonly GitHubIssueRef[]> {

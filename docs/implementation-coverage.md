@@ -120,6 +120,7 @@ Every major capability described in the docs must become one of:
 | --- | --- | --- |
 | GitHub labels | `github ensure-labels` | implemented |
 | GitHub issue/PR/check sync | `github sync`, `/github/webhook`, daemon project-repo polling, `github-signal-report` artifacts, audit signals, threshold-triggered runs, Electron timeline signal cards | partial |
+| GitHub repository provisioning | `GitHubRepositoryProvisionService`, `github provision-repo`, `/github/provision-repository`, `repository-provisioning-report`, private-by-default visibility gate | partial |
 | GitHub issue draft generation | `github draft-issues`, `/github/issue-drafts`, Electron project cards | implemented |
 | GitHub issue creation from drafts | `github create-issues`, `/github/create-issues`, Electron project cards | implemented |
 | GitHub PR creation | `GitHubPullRequestPublishService`, `github create-pr`, `/github/create-pr`, `github-pr-publish-report`, policy gates for linked issue and test evidence | partial |

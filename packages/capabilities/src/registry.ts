@@ -48,6 +48,7 @@ export const DEFAULT_CAPABILITIES: readonly CapabilityDefinition[] = [
     type: "mcp",
     allowed_agents: ["supreme_coordinator", "project_manager", "development", "reviewer", "qa"],
     actions: {
+      create_repositories: true,
       read_issues: true,
       create_issues: true,
       comment: true,

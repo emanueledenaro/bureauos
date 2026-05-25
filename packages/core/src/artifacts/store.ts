@@ -41,6 +41,7 @@ export type ArtifactType =
   | "creative-brief"
   | "ad-campaign-brief"
   | "repository-provisioning-plan"
+  | "repository-provisioning-report"
   | "capability-audit"
   | "client-account-plan"
   | "github-issue-draft"

@@ -157,6 +157,7 @@ autonomy:
   observe_signals: true
   start_triage_runs: true
   create_internal_reports: true
+  create_repositories: true
   create_issues: true
   comment_on_issues: true
   create_branches: true

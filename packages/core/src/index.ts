@@ -273,6 +273,14 @@ export type {
   GitHubPullRequestPublishInput,
   GitHubPullRequestPublishResult,
 } from "./github/pr-publisher.js";
+export { GitHubRepositoryProvisionService } from "./github/repository-provisioner.js";
+export type {
+  GitHubRepositoryProvisionClient,
+  GitHubRepositoryProvisionClientRepo,
+  GitHubRepositoryProvisionDeps,
+  GitHubRepositoryProvisionInput,
+  GitHubRepositoryProvisionResult,
+} from "./github/repository-provisioner.js";
 export { GitHubSignalSyncService } from "./github/signal-sync.js";
 export type {
   GitHubSignalCheckConclusion,

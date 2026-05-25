@@ -38,6 +38,7 @@ const AUTONOMY_ACTIONS = new Set([
   "observe_signals",
   "start_triage_runs",
   "create_internal_reports",
+  "create_repositories",
   "create_issues",
   "comment_on_issues",
   "create_branches",

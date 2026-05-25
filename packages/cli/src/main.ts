@@ -14,6 +14,7 @@ import {
   GitHubIssueDraftService,
   GitHubIssuePublishService,
   GitHubPullRequestPublishService,
+  GitHubRepositoryProvisionService,
   GitHubSignalTriggerService,
   GitHubSignalSyncService,
   GrowthMemoryService,
@@ -120,6 +121,8 @@ Server:
   daemon run [--port N]                     Run scheduler + API server in foreground
 
 GitHub:
+  github provision-repo --project slug --owner O [--repo R]
+                                            Create and link a policy-gated GitHub repository
   github draft-issues --project slug         Generate GitHub-ready issue drafts from project artifacts
   github create-issues --project slug --owner O --repo R
                                             Create GitHub issues from approved drafts under policy
@@ -883,6 +886,55 @@ const handleGitHubCreateIssues: Handler = async (args) => {
   return 0;
 };
 
+const handleGitHubProvisionRepo: Handler = async (args) => {
+  const flags = parseFlags(args, {
+    project: { type: "string", alias: "p" },
+    owner: { type: "string" },
+    repo: { type: "string" },
+    token: { type: "string" },
+    org: { type: "boolean" },
+    public: { type: "boolean" },
+    private: { type: "boolean" },
+    description: { type: "string" },
+    "auto-init": { type: "boolean" },
+  });
+  if (typeof flags === "string") return err(`github provision-repo: ${flags}`);
+  if (typeof flags.project !== "string")
+    return err("github provision-repo: --project <slug> is required");
+  if (typeof flags.owner !== "string") return err("github provision-repo: --owner required");
+  if (flags.public === true && flags.private === true)
+    return err("github provision-repo: choose either --public or --private");
+
+  const token = typeof flags.token === "string" ? flags.token : process.env["GITHUB_TOKEN"];
+  if (!token) return err("github provision-repo: provide --token or set GITHUB_TOKEN");
+
+  const config = await loadWorkspaceConfig(process.cwd());
+  const result = await new GitHubRepositoryProvisionService(process.cwd(), {
+    config,
+    githubClient: new OctokitGitHubClient({ token }),
+  }).provision({
+    projectSlug: flags.project,
+    owner: flags.owner,
+    ...(typeof flags.repo === "string" ? { repo: flags.repo } : {}),
+    ownerType: flags.org === true ? "org" : "user",
+    private: flags.public === true ? false : true,
+    ...(typeof flags.description === "string" ? { description: flags.description } : {}),
+    ...(typeof flags["auto-init"] === "boolean" ? { autoInit: flags["auto-init"] } : {}),
+  });
+
+  if (result.status === "blocked") {
+    process.stdout.write(
+      `bureau: repository provisioning blocked by policy; approval ${result.approval?.id ?? "required"} requested\n`,
+    );
+    process.stdout.write(`policy: ${result.policy.reason}\n`);
+    return 0;
+  }
+
+  process.stdout.write(`bureau: provisioned repository ${result.repository.url}\n`);
+  if (result.report) process.stdout.write(`report: ${result.report.id}\n`);
+  return 0;
+};
+
 const handleGitHubCreatePr: Handler = async (args) => {
   const flags = parseFlags(args, {
     project: { type: "string", alias: "p" },
@@ -1460,6 +1512,7 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
   providers: { list: handleProvidersList },
   capabilities: { list: handleCapabilitiesList },
   github: {
+    "provision-repo": handleGitHubProvisionRepo,
     "draft-issues": handleGitHubDraftIssues,
     "create-issues": handleGitHubCreateIssues,
     "create-pr": handleGitHubCreatePr,

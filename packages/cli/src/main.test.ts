@@ -500,6 +500,29 @@ describe("bureau cli", () => {
     }
   });
 
+  it("requires a token before provisioning real GitHub repositories from CLI", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+    const previousToken = process.env["GITHUB_TOKEN"];
+    delete process.env["GITHUB_TOKEN"];
+
+    try {
+      const code = await main([
+        "node",
+        "bureau",
+        "github",
+        "provision-repo",
+        "--project",
+        "pizzeria-aurora-booking-website",
+        "--owner",
+        "emanueledenaro",
+      ]);
+
+      expect(code).toBe(1);
+    } finally {
+      if (previousToken) process.env["GITHUB_TOKEN"] = previousToken;
+    }
+  });
+
   it("requires a token before creating real GitHub pull requests from CLI", async () => {
     await main(["node", "bureau", "init", "--name", "BOS"]);
     const previousToken = process.env["GITHUB_TOKEN"];

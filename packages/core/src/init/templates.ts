@@ -121,6 +121,7 @@ Generated from bureauos.yaml. Edit the YAML and re-run \`bureau config validate\
 
 - observe_signals: ${a.observe_signals}
 - start_triage_runs: ${a.start_triage_runs}
+- create_repositories: ${a.create_repositories}
 - create_issues: ${a.create_issues}
 - comment_on_issues: ${a.comment_on_issues}
 - create_branches: ${a.create_branches}
@@ -249,6 +250,7 @@ autonomy:
   observe_signals: ${a.observe_signals}
   start_triage_runs: ${a.start_triage_runs}
   create_internal_reports: ${a.create_internal_reports}
+  create_repositories: ${a.create_repositories}
   create_issues: ${a.create_issues}
   comment_on_issues: ${a.comment_on_issues}
   create_branches: ${a.create_branches}
