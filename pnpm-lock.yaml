@@ -70,6 +70,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@bureauos/capabilities':
+        specifier: workspace:*
+        version: link:../capabilities
       '@bureauos/memory':
         specifier: workspace:*
         version: link:../memory

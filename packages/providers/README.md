@@ -14,6 +14,8 @@ Implemented adapter surfaces (see [docs/capabilities-and-integrations.md](../../
 
 The router selects the owner-chosen provider per agent role. `openai-codex` and `openai` are intentionally different providers, so OAuth never falls back to API-key billing. Credentials live in environment variables or the gitignored workspace auth store (`.bureauos/auth/providers.json`), never in the repository. If the selected route cannot run, BureauOS may emit an explicitly marked deterministic local draft, but it does not switch to another provider.
 
+The connector catalog follows the OpenCode pattern: built-in provider metadata can be filtered with `enabled_providers` / `disabled_providers` and extended through top-level `provider:` config, while auth remains stored by provider id outside the repo.
+
 ## Status
 
-Provider auth, browser PKCE login for OpenAI Codex OAuth, ChatGPT Codex backend generation/streaming, refresh-token persistence, auth-mode validation, role routing, and model-backed artifact drafting are implemented. Device/headless OAuth login, budget-aware routing, structured generation, and full capability-aware routing remain future work.
+Provider auth, browser PKCE login for OpenAI Codex OAuth, ChatGPT Codex backend generation/streaming, refresh-token persistence, auth-mode validation, OpenCode-style connector config, role routing, and model-backed artifact drafting are implemented. Device/headless OAuth login, budget-aware routing, structured generation, and full capability-aware routing remain future work.

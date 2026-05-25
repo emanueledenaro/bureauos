@@ -6,6 +6,7 @@ import {
   type ArtifactRecord,
   type AuditEvent,
   type BusinessReportResult,
+  type CapabilityDefinition,
   type CoordinatorAttachmentInput,
   type ClientRecord,
   type CompanyPulse,
@@ -74,6 +75,7 @@ interface DashboardState {
   approvals: ApprovalRecord[];
   runs: RunRecord[];
   agents: AgentDefinition[];
+  capabilities: CapabilityDefinition[];
   providers: ProviderConnection[];
   providerConnectors: ProviderConnector[];
   artifacts: ArtifactRecord[];
@@ -152,6 +154,7 @@ const emptyState: DashboardState = {
   approvals: [],
   runs: [],
   agents: [],
+  capabilities: [],
   providers: [],
   providerConnectors: [],
   artifacts: [],
@@ -172,6 +175,7 @@ function useDashboard(): { state: DashboardState; refresh: () => Promise<void> }
         approvals,
         runs,
         agents,
+        capabilities,
         artifacts,
         providers,
         providerConnectors,
@@ -184,6 +188,7 @@ function useDashboard(): { state: DashboardState; refresh: () => Promise<void> }
         Api.approvals(),
         Api.runs(),
         Api.agents(),
+        Api.capabilities(),
         Api.artifacts(),
         Api.providers(),
         Api.providerConnectors(),
@@ -197,6 +202,7 @@ function useDashboard(): { state: DashboardState; refresh: () => Promise<void> }
         approvals,
         runs,
         agents,
+        capabilities,
         artifacts,
         providers,
         providerConnectors,
@@ -1934,9 +1940,34 @@ function MemoryWorkspace({ state }: { state: DashboardState }) {
 }
 
 function AgentsWorkspace({ state }: { state: DashboardState }) {
+  const configured = state.capabilities.filter(
+    (capability) => capability.status === "configured" || capability.status === "available",
+  ).length;
+  const highRisk = state.capabilities.filter(
+    (capability) => capability.risk_class === "high" || capability.risk_class === "critical",
+  ).length;
+  const assignedTo = (agentId: string): CapabilityDefinition[] =>
+    state.capabilities.filter(
+      (capability) =>
+        capability.allowed_agents.includes(agentId) || capability.allowed_agents.includes("*"),
+    );
+  const enabledActions = (capability: CapabilityDefinition): string[] =>
+    Object.entries(capability.actions)
+      .filter(([, enabled]) => enabled)
+      .map(([action]) => action);
+
   return (
     <SectionShell title="Agents" description="The autonomous organization and role boundaries.">
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-3 gap-4">
+        <MetricTile label="Agents" value={String(state.agents.length)} detail="Role contracts" />
+        <MetricTile
+          label="Capabilities"
+          value={String(state.capabilities.length)}
+          detail={`${configured} configured or available`}
+        />
+        <MetricTile label="High risk" value={String(highRisk)} detail="Approval-sensitive tools" />
+      </div>
+      <div className="mt-5 grid grid-cols-3 gap-3">
         {state.agents.map((agent) => (
           <div key={agent.id} className="rounded-md border border-neutral-800 p-4">
             <div className="flex items-center gap-2">
@@ -1953,6 +1984,56 @@ function AgentsWorkspace({ state }: { state: DashboardState }) {
             <p className="mt-3 line-clamp-3 text-[11px] leading-relaxed text-neutral-500">
               {agent.description}
             </p>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {assignedTo(agent.id)
+                .slice(0, 4)
+                .map((capability) => (
+                  <span
+                    key={capability.id}
+                    className="rounded border border-neutral-800 px-2 py-1 text-[9px] text-neutral-400"
+                    title={`${capability.name}: ${
+                      enabledActions(capability).join(", ") || "no enabled actions"
+                    }`}
+                  >
+                    {capability.id}
+                  </span>
+                ))}
+              {assignedTo(agent.id).length === 0 ? (
+                <span className="text-[10px] text-neutral-600">No capability assigned</span>
+              ) : null}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-5 divide-y divide-neutral-800 rounded-md border border-neutral-800">
+        {state.capabilities.map((capability) => (
+          <div
+            key={capability.id}
+            className="grid grid-cols-[170px_90px_90px_1fr_160px] items-center gap-4 px-4 py-3 text-[11px]"
+          >
+            <div>
+              <div className="font-medium text-neutral-50">{capability.name}</div>
+              <div className="mt-1 text-[10px] text-neutral-500">{capability.id}</div>
+            </div>
+            <span className="text-neutral-500">{capability.type}</span>
+            <StatusPill
+              value={capability.status}
+              tone={
+                capability.status === "blocked"
+                  ? "red"
+                  : capability.status === "configured"
+                    ? "green"
+                    : "muted"
+              }
+            />
+            <span className="truncate text-neutral-500">
+              {enabledActions(capability).join(", ") || "No enabled actions"}
+            </span>
+            <span className="truncate text-neutral-500">
+              {capability.required_approvals.length
+                ? capability.required_approvals.join(", ")
+                : "No approval gate"}
+            </span>
           </div>
         ))}
       </div>
@@ -2170,6 +2251,17 @@ function SettingsView({
             <div>
               <div className="text-[11px] font-semibold text-neutral-50">{connector.name}</div>
               <div className="mt-1 text-[11px] text-neutral-500">{connector.description}</div>
+              <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-neutral-500">
+                <span className="rounded border border-neutral-800 px-2 py-1">
+                  {connector.source === "config" ? "Config override" : "Built-in connector"}
+                </span>
+                <span className="rounded border border-neutral-800 px-2 py-1">
+                  Default {connector.defaultModel}
+                </span>
+                <span className="rounded border border-neutral-800 px-2 py-1">
+                  {connector.models.length} models
+                </span>
+              </div>
             </div>
             <div className="text-right text-[10px] uppercase tracking-[0.08em] text-neutral-600">
               {connector.authMethods.map((method) => method.label).join(" / ")}

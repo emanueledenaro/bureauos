@@ -149,6 +149,14 @@ capabilities:
       change_budget: false
 ```
 
+Runtime status:
+
+- `@bureauos/capabilities` exposes `CapabilityRegistry`.
+- `bureauos.yaml` can define or override capability assignments.
+- `GET /capabilities` returns the active capability matrix to ElectronJS.
+- `bureau capabilities list` prints the same capability boundaries in the CLI.
+- The ElectronJS Agents view shows assigned capabilities, enabled actions, risk class, and approval gates.
+
 ## Per-Agent Capability Boundaries
 
 The same tool can mean different permissions for different agents.
@@ -243,4 +251,3 @@ More capability requires stronger policy.
 Drafting is usually safe.
 
 External actions, payments, ad spend, client communication, production deployment, secrets, and destructive operations require explicit policy gates.
-

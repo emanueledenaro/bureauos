@@ -5,6 +5,7 @@ import {
   exchangeOpenAICodexCode,
   parseOpenAICodexAuthorizationInput,
   providerAuthMethods as listProviderAuthMethods,
+  type ProviderCatalogConfig,
   type ProviderAuthMethod,
   type OpenAICodexOAuthFetch,
 } from "@bureauos/providers";
@@ -40,8 +41,10 @@ const DEFAULT_CALLBACK_PORT = 1455;
 
 let pendingCodexOAuth: PendingCodexOAuth | undefined;
 
-export function providerAuthMethods(): Record<string, ProviderAuthMethod[]> {
-  return listProviderAuthMethods();
+export function providerAuthMethods(
+  config: ProviderCatalogConfig = {},
+): Record<string, ProviderAuthMethod[]> {
+  return listProviderAuthMethods(config);
 }
 
 function closePendingServer(): void {

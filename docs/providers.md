@@ -6,6 +6,7 @@ The provider layer follows the OpenCode-style connector pattern:
 
 - provider metadata lives in one connector catalog
 - each connector declares its auth methods
+- `bureauos.yaml` may override connector metadata, enabled providers, disabled providers, and model names
 - the desktop UI asks the API which methods are supported
 - credentials are saved by provider id
 - runtime routing only uses explicitly connected or environment-backed providers
@@ -34,6 +35,28 @@ Environment variables still work only for their matching provider:
 - `GOOGLE_API_KEY`
 - `OPENROUTER_API_KEY`
 - `LOCAL_MODEL_URL`
+
+## Connector Config
+
+BureauOS supports the same separation that OpenCode uses: configuration describes which provider connector exists and which models are visible; authentication stays outside the repo.
+
+```yaml
+provider:
+  openai:
+    name: "OpenAI Enterprise"
+    env:
+      - "OPENAI_ENTERPRISE_KEY"
+    options:
+      defaultModel: "gpt-5-enterprise"
+    models:
+      gpt-5-enterprise:
+        name: "GPT-5 Enterprise"
+
+disabled_providers:
+  - "openrouter"
+```
+
+This changes the connector catalog and default model choice, but it does not store an API key. To connect the provider, use `bureau auth login` or a matching environment variable.
 
 ## CLI
 
@@ -68,7 +91,7 @@ The local API exposes provider auth for the desktop interface:
 - `POST /providers/auth/login`
 - `POST /providers/auth/logout`
 
-The singular `/provider/...` endpoints follow OpenCode's provider auth pattern: the UI asks which connectors exist, which auth methods each provider supports, starts OAuth authorization when needed, then completes the callback. ElectronJS Settings uses browser OAuth for `openai-codex`; API-key providers still use explicit API-key login. Raw secrets are never returned in renderer responses.
+The singular `/provider/...` endpoints follow OpenCode's provider auth pattern: the UI asks which connectors exist, which auth methods each provider supports, starts OAuth authorization when needed, then completes the callback. `GET /provider/connectors` applies `provider`, `enabled_providers`, and `disabled_providers` from `bureauos.yaml`; `GET /providers` only returns real stored or environment-backed connections. ElectronJS Settings uses browser OAuth for `openai-codex`; API-key providers still use explicit API-key login. Raw secrets are never returned in renderer responses.
 
 ## Current Runtime State
 
@@ -76,7 +99,7 @@ The singular `/provider/...` endpoints follow OpenCode's provider auth pattern: 
 - OpenAI API: SDK-backed `generateText` and `stream`.
 - Anthropic: SDK-backed `generateText` and `stream`.
 - Google, OpenRouter, Local: registered adapters with credential validation, model calls still stubbed.
-- Provider connectors: catalog-backed metadata and auth methods for OpenAI Codex, OpenAI API, Anthropic, Google, OpenRouter, Local, and Custom API.
+- Provider connectors: catalog-backed metadata, config overrides, enabled/disabled provider filtering, auth methods, default models, and env mappings for OpenAI Codex, OpenAI API, Anthropic, Google, OpenRouter, Local, and Custom API.
 - Codex runtime: adapter contract exists, execution still stubbed.
 
 ## Next Steps

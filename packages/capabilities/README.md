@@ -11,8 +11,8 @@ Capability surfaces (see [docs/capabilities-and-integrations.md](../../docs/capa
 - Browser automation
 - Stripe, Gmail, Calendar, Slack, Google Drive, Supabase, Vercel, ads platforms (Phase 10)
 
-Each capability declares allowed agents, allowed actions, required approvals, risk class, and audit requirements. Capabilities are off by default and gated by the policy engine.
+Each capability declares allowed agents, allowed actions, required approvals, risk class, audit requirements, connector identity, and runtime status.
 
 ## Status
 
-GitHub issue, label, PR, and check-run reads are wired through the Octokit adapter. Other connectors remain adapter-level or designed.
+`CapabilityRegistry` is wired and tested. It merges built-in defaults with workspace `bureauos.yaml`, checks agent/action boundaries, and feeds the API, CLI, and Electron Agents view. GitHub issue, label, PR, and check-run reads are wired through the Octokit adapter. Other connectors remain adapter-level or designed.

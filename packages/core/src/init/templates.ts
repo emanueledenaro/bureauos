@@ -1,3 +1,4 @@
+import { CapabilityRegistry } from "@bureauos/capabilities";
 import type { BureauConfig } from "../config/schema.js";
 
 /**
@@ -183,6 +184,40 @@ export function emptyDailyNote(isoDate: string): string {
 `;
 }
 
+function yamlString(value: string): string {
+  return `"${value.replace(/"/g, '\\"')}"`;
+}
+
+function renderStringList(values: readonly string[], indent: string): string {
+  if (values.length === 0) return `${indent}[]`;
+  return values.map((value) => `${indent}- ${yamlString(value)}`).join("\n");
+}
+
+function capabilityConfigYaml(config: BureauConfig): string {
+  const capabilities = CapabilityRegistry.fromConfig(config.capabilities).list();
+  return `capabilities:
+${capabilities
+  .map((capability) => {
+    const actions = Object.entries(capability.actions);
+    return `  ${capability.id}:
+    name: ${yamlString(capability.name)}
+    description: ${yamlString(capability.description)}
+    type: "${capability.type}"
+    allowed_agents:
+${renderStringList(capability.allowed_agents, "      ")}
+    actions:
+${actions.map(([action, enabled]) => `      ${action}: ${enabled}`).join("\n") || "      {}"}
+    required_approvals:
+${renderStringList(capability.required_approvals, "      ")}
+    risk_class: "${capability.risk_class}"
+    audit_required: ${capability.audit_required}
+    status: "${capability.status}"${
+      capability.connector ? `\n    connector: ${yamlString(capability.connector)}` : ""
+    }`;
+  })
+  .join("\n")}`;
+}
+
 export function defaultConfigYaml(config: BureauConfig, orgName: string): string {
   // We render YAML by hand instead of using js-yaml's dump so that the
   // output stays close to examples/bureauos.example.yaml and human-readable.
@@ -241,6 +276,11 @@ growth_autonomy:
   change_ad_budget: ${g.change_ad_budget}
   allow_one_off_owner_approval: ${g.allow_one_off_owner_approval}
   require_action_sensitive_memory_for_approval: ${g.require_action_sensitive_memory_for_approval}
+
+provider: {}
+disabled_providers: []
+
+${capabilityConfigYaml(config)}
 
 limits:
   max_retries_per_task: ${l.max_retries_per_task}

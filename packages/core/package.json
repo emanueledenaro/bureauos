@@ -25,6 +25,7 @@
     "lint": "echo 'lint pending'"
   },
   "dependencies": {
+    "@bureauos/capabilities": "workspace:*",
     "@bureauos/memory": "workspace:*",
     "@bureauos/providers": "workspace:*",
     "js-yaml": "^4.1.0",

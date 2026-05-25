@@ -32,7 +32,36 @@ describe("provider connector catalog", () => {
     const connectors = listProviderConnectors();
 
     expect(connectors.map((connector) => connector.id)).toContain("anthropic");
+    expect(connectors.find((connector) => connector.id === "openai")?.defaultModel).toBe("gpt-5");
     expect(defaultProviderCredentialId("anthropic")).toBe("anthropic-default");
     expect(defaultProviderAuthMode("local")).toBe("local");
+  });
+
+  it("applies OpenCode-style enabled, disabled, and provider model overrides", () => {
+    const connectors = listProviderConnectors({
+      enabled_providers: ["openai", "anthropic"],
+      disabled_providers: ["anthropic"],
+      provider: {
+        openai: {
+          name: "OpenAI Enterprise",
+          env: ["OPENAI_ENTERPRISE_KEY"],
+          options: { defaultModel: "gpt-5-enterprise" },
+          models: {
+            "gpt-5-enterprise": { name: "GPT-5 Enterprise" },
+            "gpt-4o-mini": { disabled: true },
+          },
+        },
+      },
+    });
+
+    expect(connectors.map((connector) => connector.id)).toEqual(["openai"]);
+    expect(connectors[0]).toMatchObject({
+      name: "OpenAI Enterprise",
+      source: "config",
+      defaultModel: "gpt-5-enterprise",
+      env: { apiKey: ["OPENAI_ENTERPRISE_KEY"] },
+    });
+    expect(connectors[0]?.models.map((model) => model.id)).toContain("gpt-5-enterprise");
+    expect(connectors[0]?.models.map((model) => model.id)).not.toContain("gpt-4o-mini");
   });
 });

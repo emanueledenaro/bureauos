@@ -443,7 +443,17 @@ describe("API server", () => {
   });
 
   it("exposes provider connector metadata for the desktop settings view", async () => {
-    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+    const config = defaultConfig("agency");
+    config.provider.openai = {
+      name: "OpenAI Enterprise",
+      env: ["OPENAI_ENTERPRISE_KEY"],
+      options: { defaultModel: "gpt-5-enterprise" },
+      models: {
+        "gpt-5-enterprise": { name: "GPT-5 Enterprise" },
+      },
+    };
+    config.disabled_providers = ["openrouter"];
+    server = await startApiServer({ workspaceRoot: dir, config });
 
     const response = await fetch(`${server.url}/provider/connectors`);
 
@@ -451,6 +461,8 @@ describe("API server", () => {
     const body = (await response.json()) as Array<{
       id: string;
       name: string;
+      source: string;
+      defaultModel: string;
       noApiFallback: boolean;
       authMethods: Array<{ type: string; label: string }>;
     }>;
@@ -459,6 +471,43 @@ describe("API server", () => {
       name: "OpenAI Codex",
       noApiFallback: true,
       authMethods: [{ type: "oauth", label: "ChatGPT Plus/Pro (browser)" }],
+    });
+    const openai = body.find((item) => item.id === "openai");
+    expect(openai).toMatchObject({
+      name: "OpenAI Enterprise",
+      source: "config",
+      defaultModel: "gpt-5-enterprise",
+    });
+    expect(body.find((item) => item.id === "openrouter")).toBeUndefined();
+  });
+
+  it("exposes configured capability boundaries", async () => {
+    const config = defaultConfig("agency");
+    config.capabilities.codex = {
+      type: "runtime",
+      allowed_agents: ["development"],
+      actions: { edit_code: true, deploy: false },
+      required_approvals: ["linked_issue"],
+      risk_class: "high",
+      audit_required: true,
+      status: "configured",
+    };
+    server = await startApiServer({ workspaceRoot: dir, config });
+
+    const response = await fetch(`${server.url}/capabilities`);
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as Array<{
+      id: string;
+      allowed_agents: string[];
+      actions: Record<string, boolean>;
+      required_approvals: string[];
+    }>;
+    const codex = body.find((item) => item.id === "codex");
+    expect(codex).toMatchObject({
+      allowed_agents: ["development"],
+      actions: { edit_code: true, deploy: false },
+      required_approvals: ["linked_issue"],
     });
   });
 

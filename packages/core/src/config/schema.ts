@@ -31,6 +31,40 @@ const ProviderName = z.enum([
 ]);
 export type ProviderName = z.infer<typeof ProviderName>;
 
+const ProviderConfig = z
+  .object({
+    name: z.string().optional(),
+    description: z.string().optional(),
+    env: z.array(z.string()).optional(),
+    options: z.record(z.string(), z.unknown()).default({}),
+    models: z
+      .record(
+        z.string(),
+        z
+          .object({
+            id: z.string().optional(),
+            name: z.string().optional(),
+            disabled: z.boolean().optional(),
+          })
+          .passthrough(),
+      )
+      .default({}),
+  })
+  .passthrough();
+
+const RiskClass = z.enum(["low", "medium", "high", "critical"]);
+const CapabilityType = z.enum([
+  "mcp",
+  "runtime",
+  "skill",
+  "registry",
+  "tool_bus",
+  "shell",
+  "browser",
+  "custom",
+]);
+const CapabilityStatus = z.enum(["available", "configured", "designed", "blocked"]);
+
 const OrganizationConfig = z.object({
   name: z.string().min(1).default("Untitled BureauOS Workspace"),
 });
@@ -140,6 +174,21 @@ const GitHubConfig = z
   })
   .default({});
 
+const CapabilityConfig = z
+  .object({
+    name: z.string().optional(),
+    description: z.string().optional(),
+    type: CapabilityType.default("custom"),
+    allowed_agents: z.array(z.string()).default([]),
+    actions: z.record(z.string(), z.boolean()).default({}),
+    required_approvals: z.array(z.string()).default([]),
+    risk_class: RiskClass.default("medium"),
+    audit_required: z.boolean().default(true),
+    status: CapabilityStatus.default("configured"),
+    connector: z.string().optional(),
+  })
+  .passthrough();
+
 const TriggerConfig = z
   .object({
     github: z
@@ -181,6 +230,10 @@ export const BureauConfigSchema = z.object({
   limits: LimitsConfig,
   memory: MemoryConfig,
   github: GitHubConfig,
+  provider: z.record(z.string(), ProviderConfig).default({}),
+  enabled_providers: z.array(z.string()).optional(),
+  disabled_providers: z.array(z.string()).default([]),
+  capabilities: z.record(z.string(), CapabilityConfig).default({}),
   triggers: TriggerConfig,
 });
 

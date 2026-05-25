@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { initWorkspace, InitError } from "./initializer.js";
 import { workspacePaths } from "../paths.js";
+import { loadConfig } from "../config/loader.js";
 
 async function exists(path: string): Promise<boolean> {
   try {
@@ -75,6 +76,11 @@ describe("initWorkspace", () => {
     expect(result.config.setup.preset).toBe("agency");
     const yaml = await readFile(result.configFile, "utf8");
     expect(yaml).toContain('preset: "agency"');
+    const parsed = await loadConfig(result.configFile);
+    expect(parsed.provider).toEqual({});
+    expect(parsed.disabled_providers).toEqual([]);
+    expect(parsed.capabilities.codex?.actions.edit_code).toBe(true);
+    expect(parsed.capabilities.github?.actions.merge_pr).toBe(false);
   });
 
   it("records an audit entry for the init action", async () => {

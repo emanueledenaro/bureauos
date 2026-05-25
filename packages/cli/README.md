@@ -19,7 +19,8 @@ See [BACKLOG.md](../../BACKLOG.md) Phase 1.
 - `bureau auth login --provider <p>` — store provider credentials in the local auth store
 - `bureau auth list` — list stored provider credentials with masked secrets
 - `bureau auth logout --provider <p>` — remove stored provider credentials
-- `bureau providers list` — provider management
+- `bureau providers list` — provider management using connected/env-backed OpenCode-style connectors
+- `bureau capabilities list` — inspect agent tool/runtime capability boundaries
 - `bureau github draft-issues --project <slug>` — generate GitHub-ready issue drafts from project artifacts
 - `bureau github create-issues --project <slug> --owner <o> --repo <r>` — create GitHub issues from approved drafts under policy
 - `bureau github ensure-labels --owner <o> --repo <r>` — apply the BureauOS label taxonomy
@@ -28,4 +29,4 @@ See [BACKLOG.md](../../BACKLOG.md) Phase 1.
 
 ## Status
 
-The CLI is an operational local surface for workspace setup, intake, memory, project dispatch, reports, approvals, provider auth and checks, GitHub label setup, GitHub issue draft generation, policy-gated GitHub issue creation, GitHub issue/PR/check sync, GitHub webhook ingestion through `serve`/`daemon`, daemon polling for linked project repositories, threshold-triggered triage runs, and daemon mode.
+The CLI is an operational local surface for workspace setup, intake, memory, project dispatch, reports, approvals, provider auth and checks, OpenCode-style provider connector filtering/config overrides, capability boundaries, GitHub label setup, GitHub issue draft generation, policy-gated GitHub issue creation, GitHub issue/PR/check sync, GitHub webhook ingestion through `serve`/`daemon`, daemon polling for linked project repositories, threshold-triggered triage runs, and daemon mode.

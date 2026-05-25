@@ -382,7 +382,11 @@ export class ProjectDispatchService {
       return this.providerRouter;
     }
 
-    const configured = await buildConfiguredProviderRouter(this.workspaceRoot, this.providerEnv);
+    const configured = await buildConfiguredProviderRouter(
+      this.workspaceRoot,
+      this.providerEnv,
+      this.config,
+    );
     if (configured.credentials.length === 0) return undefined;
     configureAgentProviderRouting(configured.router, this.config, pipeline);
     return configured.router;

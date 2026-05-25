@@ -48,6 +48,20 @@ supreme_coordinator:
     archive: ".bureauos/memory/archive"
     search_index: ".bureauos/memory/indexes/memory.sqlite"
 
+provider:
+  openai:
+    name: "OpenAI API"
+    env:
+      - "OPENAI_API_KEY"
+    options:
+      defaultModel: "gpt-5"
+  openai-codex:
+    name: "OpenAI Codex"
+    options:
+      defaultModel: "gpt-5"
+
+disabled_providers: []
+
 agents:
   project_manager:
     provider: openai

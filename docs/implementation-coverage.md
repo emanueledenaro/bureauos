@@ -77,8 +77,8 @@ Every major capability described in the docs must become one of:
 | Growth agents | template agents with provider-backed drafting and deterministic local template when selected route is unavailable | partial |
 | Compliance agent | concrete compliance agent with provider-backed drafting and deterministic local template when selected route is unavailable | partial |
 | Agent provider routing | `ProviderRouter`, `configureAgentProviderRouting`, dispatcher model capability | implemented |
-| Codex runtime capability | adapter placeholder | designed |
-| MCP capability bus | config/capability model | designed |
+| Codex runtime capability | capability registry boundary plus adapter placeholder | partial |
+| MCP capability bus | `CapabilityRegistry`, config parsing, `/capabilities`, `bureau capabilities list`, Electron Agents capability matrix | partial |
 
 ## Growth and Revenue
 
@@ -124,7 +124,7 @@ Every major capability described in the docs must become one of:
 | Google provider | provider adapter | partial |
 | OpenRouter provider | provider adapter | partial |
 | Local provider | provider adapter | partial |
-| Provider connector catalog | `listProviderConnectors`, `/provider/connectors`, catalog-backed auth methods and env mappings | implemented |
+| Provider connector catalog | `listProviderConnectors`, OpenCode-style `provider` config overrides, `enabled_providers`/`disabled_providers`, `/provider/connectors`, catalog-backed auth methods, model defaults, and env mappings | implemented |
 | Provider auth/connect | `ProviderAuthStore`, auth modes, OpenCode-style `/provider/auth` and OAuth authorize/callback endpoints, `.bureauos/auth/providers.json` | implemented |
 | Electron provider settings | Settings mode, connector catalog selector, browser OAuth for `openai-codex`, explicit API-key/local endpoint connect for API providers | implemented |
 | Gmail/Slack/Drive/Calendar | not implemented | designed |

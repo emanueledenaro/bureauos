@@ -59,6 +59,42 @@ describe("buildConfiguredProviderRouter", () => {
     expect(configured.router.get("anthropic-default")).toBeDefined();
   });
 
+  it("honors provider connector config when building runtime routes", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "bureauos-provider-router-"));
+    const store = ProviderAuthStore.forWorkspace(workspaceRoot);
+    await store.upsert({
+      provider: "openrouter",
+      apiKey: "sk-disabled",
+    });
+
+    const configured = await buildConfiguredProviderRouter(
+      workspaceRoot,
+      { OPENAI_ENTERPRISE_KEY: "sk-openai-enterprise" },
+      {
+        disabled_providers: ["openrouter"],
+        provider: {
+          openai: {
+            name: "OpenAI Enterprise",
+            env: ["OPENAI_ENTERPRISE_KEY"],
+            options: { defaultModel: "gpt-5-enterprise" },
+            models: {
+              "gpt-5-enterprise": { name: "GPT-5 Enterprise" },
+            },
+          },
+        },
+      },
+    );
+
+    expect(configured.connections.map((connection) => connection.provider)).toEqual(["openai"]);
+    expect(configured.connections[0]).toMatchObject({
+      provider_name: "OpenAI Enterprise",
+      source: "env",
+      default_model: "gpt-5-enterprise",
+    });
+    expect(configured.router.get("openrouter-default")).toBeUndefined();
+    expect(configured.router.get("openai-default")?.defaultModel).toBe("gpt-5-enterprise");
+  });
+
   it("persists refreshed OpenAI Codex OAuth tokens for stored credentials", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "bureauos-provider-router-"));
     const store = ProviderAuthStore.forWorkspace(workspaceRoot);

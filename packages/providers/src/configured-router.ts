@@ -14,6 +14,7 @@ import {
   defaultProviderCredentialId,
   getProviderConnector,
   listProviderConnectors,
+  type ProviderCatalogConfig,
 } from "./catalog.js";
 import { ProviderRouter } from "./router.js";
 import type { ProviderType } from "./types.js";
@@ -45,11 +46,13 @@ export type ProviderEnv = Record<string, string | undefined>;
 function registerCredential(
   router: ProviderRouter,
   credential: ProviderCredentialRecord,
+  config: ProviderCatalogConfig = {},
   authStore?: ProviderAuthStore,
 ): void {
   const apiKey = credential.apiKey || undefined;
   const baseUrl = credential.baseUrl || undefined;
-  const defaultModel = credential.defaultModel || undefined;
+  const defaultModel =
+    credential.defaultModel || getProviderConnector(credential.provider, config).defaultModel;
   switch (credential.provider) {
     case "openai-codex":
       router.register(
@@ -97,8 +100,11 @@ function registerCredential(
   }
 }
 
-function connectionFromCredential(credential: ProviderCredentialRecord): ProviderConnection {
-  const connector = getProviderConnector(credential.provider);
+function connectionFromCredential(
+  credential: ProviderCredentialRecord,
+  config: ProviderCatalogConfig = {},
+): ProviderConnection {
+  const connector = getProviderConnector(credential.provider, config);
   return {
     provider: credential.provider,
     provider_name: connector.name,
@@ -113,7 +119,7 @@ function connectionFromCredential(credential: ProviderCredentialRecord): Provide
         ? maskSecret(credential.refreshToken)
         : "",
     base_url: credential.baseUrl,
-    default_model: credential.defaultModel,
+    default_model: credential.defaultModel || connector.defaultModel,
     no_api_fallback: connector.noApiFallback,
   };
 }
@@ -127,8 +133,9 @@ function firstEnv(env: ProviderEnv, names?: readonly string[]): string {
 function envCredential(
   provider: ProviderType,
   env: ProviderEnv,
+  config: ProviderCatalogConfig = {},
 ): ProviderCredentialRecord | undefined {
-  const connector = getProviderConnector(provider);
+  const connector = getProviderConnector(provider, config);
   const now = new Date().toISOString();
   const apiKey = firstEnv(env, connector.env.apiKey);
   const accessToken = firstEnv(env, connector.env.accessToken);
@@ -149,7 +156,7 @@ function envCredential(
     refreshToken,
     expiresAt,
     baseUrl,
-    defaultModel: "",
+    defaultModel: connector.defaultModel,
     created: now,
     updated: now,
   };
@@ -158,30 +165,38 @@ function envCredential(
 export async function buildConfiguredProviderRouter(
   workspaceRoot: string,
   env: ProviderEnv,
+  config: ProviderCatalogConfig = {},
 ): Promise<ConfiguredProviderRouter> {
   const authStore = ProviderAuthStore.forWorkspace(workspaceRoot);
   const credentials = await authStore.list();
   const router = new ProviderRouter();
-  const connections = credentials.map(connectionFromCredential);
+  const enabledProviders = new Set(listProviderConnectors(config).map((connector) => connector.id));
+  const activeCredentials = credentials.filter((credential) =>
+    enabledProviders.has(credential.provider),
+  );
+  const connections = activeCredentials.map((credential) =>
+    connectionFromCredential(credential, config),
+  );
 
-  for (const credential of credentials) registerCredential(router, credential, authStore);
+  for (const credential of activeCredentials)
+    registerCredential(router, credential, config, authStore);
 
   const hasStored = (provider: ProviderType) =>
-    credentials.some((credential) => credential.provider === provider);
-  const envProviders = listProviderConnectors()
+    activeCredentials.some((credential) => credential.provider === provider);
+  const envProviders = listProviderConnectors(config)
     .filter((connector) => connector.id !== "custom")
     .map((connector) => connector.id);
 
   for (const provider of envProviders) {
     if (hasStored(provider)) continue;
-    const credential = envCredential(provider, env);
+    const credential = envCredential(provider, env, config);
     if (!credential) continue;
-    registerCredential(router, credential);
+    registerCredential(router, credential, config);
     connections.push({
-      ...connectionFromCredential(credential),
+      ...connectionFromCredential(credential, config),
       source: "env",
     });
   }
 
-  return { router, connections, credentials };
+  return { router, connections, credentials: activeCredentials };
 }

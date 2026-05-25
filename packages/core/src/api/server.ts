@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { readFile, stat, open } from "node:fs/promises";
 import { URL } from "node:url";
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { CapabilityRegistry } from "@bureauos/capabilities";
 import type { BureauConfig } from "../config/schema.js";
 import { workspacePaths } from "../paths.js";
 import { ClientRegistry } from "../registries/client.js";
@@ -31,6 +32,7 @@ import {
   buildConfiguredProviderRouter,
   listProviderConnectors,
   type OpenAICodexOAuthFetch,
+  type ProviderCatalogConfig,
   type ProviderConnection,
   type ProviderType,
 } from "@bureauos/providers";
@@ -189,8 +191,15 @@ function parseAttachments(value: unknown): CoordinatorAttachmentInput[] {
   });
 }
 
-async function providerStatuses(workspaceRoot: string): Promise<ProviderStatus[]> {
-  const { router, connections } = await buildConfiguredProviderRouter(workspaceRoot, process.env);
+async function providerStatuses(
+  workspaceRoot: string,
+  config: ProviderCatalogConfig,
+): Promise<ProviderStatus[]> {
+  const { router, connections } = await buildConfiguredProviderRouter(
+    workspaceRoot,
+    process.env,
+    config,
+  );
   const validations = await router.validate();
   return connections.map((connection) => {
     const validation = validations.get(connection.id);
@@ -246,16 +255,20 @@ const ROUTES: Record<string, RouteHandler> = {
   "GET /artifacts": async ({ res, options }) => ok(res, await deps(options).artifacts.list()),
   "GET /agents": ({ res }) => ok(res, AGENT_ROLES),
 
+  "GET /capabilities": ({ res, options }) => {
+    ok(res, CapabilityRegistry.fromConfig(options.config.capabilities).list());
+  },
+
   "GET /providers": async ({ res, options }) => {
-    ok(res, await providerStatuses(options.workspaceRoot));
+    ok(res, await providerStatuses(options.workspaceRoot, options.config));
   },
 
-  "GET /provider/connectors": ({ res }) => {
-    ok(res, listProviderConnectors());
+  "GET /provider/connectors": ({ res, options }) => {
+    ok(res, listProviderConnectors(options.config));
   },
 
-  "GET /provider/auth": ({ res }) => {
-    ok(res, providerAuthMethods());
+  "GET /provider/auth": ({ res, options }) => {
+    ok(res, providerAuthMethods(options.config));
   },
 
   "POST /provider/openai-codex/oauth/authorize": async ({ res, options }) => {
@@ -289,7 +302,11 @@ const ROUTES: Record<string, RouteHandler> = {
       target: "openai-codex",
       result: "ok",
     });
-    ok(res, { ...result, providers: await providerStatuses(options.workspaceRoot) }, 201);
+    ok(
+      res,
+      { ...result, providers: await providerStatuses(options.workspaceRoot, options.config) },
+      201,
+    );
   },
 
   "POST /providers/auth/login": async ({ res, options, req }) => {
@@ -327,7 +344,7 @@ const ROUTES: Record<string, RouteHandler> = {
       target: `${provider}:${record.id}`,
       result: "ok",
     });
-    ok(res, await providerStatuses(options.workspaceRoot), 201);
+    ok(res, await providerStatuses(options.workspaceRoot, options.config), 201);
   },
 
   "POST /providers/auth/logout": async ({ res, options, req }) => {
@@ -353,7 +370,7 @@ const ROUTES: Record<string, RouteHandler> = {
         result: "ok",
       });
     }
-    ok(res, { removed, providers: await providerStatuses(options.workspaceRoot) });
+    ok(res, { removed, providers: await providerStatuses(options.workspaceRoot, options.config) });
   },
 
   "GET /reports": async ({ res, options }) => {

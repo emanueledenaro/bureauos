@@ -37,7 +37,11 @@ import {
   maskSecret,
   type ProviderType,
 } from "@bureauos/providers";
-import { GITHUB_LABEL_TAXONOMY, OctokitGitHubClient } from "@bureauos/capabilities";
+import {
+  CapabilityRegistry,
+  GITHUB_LABEL_TAXONOMY,
+  OctokitGitHubClient,
+} from "@bureauos/capabilities";
 
 const HELP = `bureau ${VERSION}
 
@@ -89,6 +93,9 @@ Providers:
   auth list
   auth logout --provider p [--id provider-default]
   providers list
+
+Capabilities:
+  capabilities list                         Show agent tool/runtime capability boundaries
 
 Server:
   serve [--port N]                          Start the local HTTP API server
@@ -882,7 +889,11 @@ const handleAuthLogout: Handler = async (args) => {
 
 const handleProvidersList: Handler = async () => {
   const config = await loadWorkspaceConfig(process.cwd()).catch(() => defaultConfig("freelancer"));
-  const { router, connections } = await buildConfiguredProviderRouter(process.cwd(), process.env);
+  const { router, connections } = await buildConfiguredProviderRouter(
+    process.cwd(),
+    process.env,
+    config,
+  );
   const validations = await router.validate();
   process.stdout.write(
     `Configured for: ${config.supreme_coordinator.provider} (${config.supreme_coordinator.model})\n\n`,
@@ -895,6 +906,25 @@ const handleProvidersList: Handler = async () => {
     process.stdout.write(
       `${adapter.type.padEnd(12)}  ${adapter.id.padEnd(22)}  ${source.padEnd(5)}  ${status}\n`,
     );
+  }
+  return 0;
+};
+
+const handleCapabilitiesList: Handler = async () => {
+  const config = await loadWorkspaceConfig(process.cwd()).catch(() => defaultConfig("freelancer"));
+  const registry = CapabilityRegistry.fromConfig(config.capabilities);
+  for (const capability of registry.list()) {
+    const actions = Object.entries(capability.actions)
+      .filter(([, enabled]) => enabled)
+      .map(([action]) => action)
+      .join(", ");
+    process.stdout.write(
+      `${capability.id.padEnd(22)}  ${capability.type.padEnd(8)}  ${capability.status.padEnd(10)}  ${capability.risk_class.padEnd(8)}  ${capability.allowed_agents.join(",") || "-"}\n`,
+    );
+    process.stdout.write(`  actions: ${actions || "(none)"}\n`);
+    if (capability.required_approvals.length > 0) {
+      process.stdout.write(`  approvals: ${capability.required_approvals.join(", ")}\n`);
+    }
   }
   return 0;
 };
@@ -1017,6 +1047,7 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
     logout: handleAuthLogout,
   },
   providers: { list: handleProvidersList },
+  capabilities: { list: handleCapabilitiesList },
   github: {
     "draft-issues": handleGitHubDraftIssues,
     "create-issues": handleGitHubCreateIssues,

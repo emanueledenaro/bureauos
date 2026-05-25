@@ -18,4 +18,4 @@ This package runs on Node 20 LTS, local-first. It does not perform external acti
 
 ## Status
 
-Local-first kernel primitives, registries, policy gates, run lifecycle, reports, GitHub signal ingestion, provider-aware agent drafting, and internal operational signal triggers are implemented. Runtime execution adapters and deeper external connectors are still being wired behind policy.
+Local-first kernel primitives, registries, policy gates, run lifecycle, reports, GitHub signal ingestion, provider-aware agent drafting, OpenCode-style provider connector config, capability registry exposure, and internal operational signal triggers are implemented. Runtime execution adapters and deeper external connectors are still being wired behind policy.

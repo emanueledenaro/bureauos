@@ -21,14 +21,19 @@ export {
   getProviderConnector,
   listProviderConnectors,
   providerAuthMethods,
+  resolveProviderCatalog,
 } from "./catalog.js";
 export type {
   ProviderAuthMethod,
   ProviderAuthMethodType,
   ProviderAuthPrompt,
+  ProviderCatalogConfig,
+  ProviderCatalogResult,
+  ProviderConfigInput,
   ProviderConnector,
   ProviderConnectorAuthMode,
   ProviderEnvironmentMapping,
+  ProviderModelInfo,
 } from "./catalog.js";
 export { buildConfiguredProviderRouter } from "./configured-router.js";
 export type {

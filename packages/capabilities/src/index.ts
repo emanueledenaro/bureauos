@@ -1,6 +1,16 @@
 export const VERSION = "0.0.0";
 
-export type { CapabilityDefinition, CapabilityUseRecord, RiskClass } from "./types.js";
+export type {
+  CapabilityDefinition,
+  CapabilityStatus,
+  CapabilityType,
+  CapabilityUseDecision,
+  CapabilityUseRecord,
+  CapabilityUseRequest,
+  RiskClass,
+} from "./types.js";
+export { CapabilityRegistry, DEFAULT_CAPABILITIES, defaultCapabilityConfig } from "./registry.js";
+export type { CapabilityConfigInput } from "./registry.js";
 export { StubGitHubClient } from "./github/client.js";
 export { OctokitGitHubClient } from "./github/octokit-client.js";
 export type {

@@ -215,6 +215,18 @@ describe("bureau cli", () => {
     expect(await exists(authFile)).toBe(false);
   });
 
+  it("lists capability boundaries from the workspace config", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+
+    const code = await main(["node", "bureau", "capabilities", "list"]);
+
+    expect(code).toBe(0);
+    const yaml = await readFile(join(dir, ".bureauos", "bureauos.yaml"), "utf8");
+    expect(yaml).toContain("capabilities:");
+    expect(yaml).toContain("codex:");
+    expect(yaml).toContain("edit_code: true");
+  });
+
   it("keeps OpenAI Codex OAuth separate from OpenAI API auth", async () => {
     await main(["node", "bureau", "init", "--name", "BOS"]);
     const oauthCode = await main([

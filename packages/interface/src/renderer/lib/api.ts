@@ -118,6 +118,19 @@ export interface AgentDefinition {
   scope: string;
   description: string;
 }
+export interface CapabilityDefinition {
+  id: string;
+  name: string;
+  description: string;
+  type: string;
+  allowed_agents: string[];
+  actions: Record<string, boolean>;
+  required_approvals: string[];
+  risk_class: "low" | "medium" | "high" | "critical";
+  audit_required: boolean;
+  status: "available" | "configured" | "designed" | "blocked";
+  connector?: string;
+}
 export interface ArtifactRecord {
   id: string;
   type: string;
@@ -262,7 +275,10 @@ export interface ProviderConnector {
   id: string;
   name: string;
   description: string;
+  source: "builtin" | "config";
   defaultAuthMode: "oauth" | "api-key" | "local";
+  defaultModel: string;
+  models: Array<{ id: string; name: string }>;
   authMethods: ProviderAuthMethod[];
   popular: boolean;
   requiresBaseUrl: boolean;
@@ -286,6 +302,7 @@ export const Api = {
   approvals: () => api<ApprovalRecord[]>("/approvals"),
   runs: () => api<RunRecord[]>("/runs"),
   agents: () => api<AgentDefinition[]>("/agents"),
+  capabilities: () => api<CapabilityDefinition[]>("/capabilities"),
   artifacts: () => api<ArtifactRecord[]>("/artifacts"),
   providers: () => api<ProviderConnection[]>("/providers"),
   providerConnectors: () => api<ProviderConnector[]>("/provider/connectors"),

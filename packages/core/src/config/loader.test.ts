@@ -23,6 +23,9 @@ describe("loadConfig", () => {
     expect(config.setup.preset).toBe("freelancer");
     expect(config.autonomy.merge_pull_requests).toBe(false);
     expect(config.growth_autonomy.publish_public_content).toBe(false);
+    expect(config.provider).toEqual({});
+    expect(config.disabled_providers).toEqual([]);
+    expect(config.capabilities).toEqual({});
   });
 
   it("loads a full preset choice", async () => {
@@ -52,6 +55,60 @@ describe("loadConfig", () => {
     const path = join(dir, "bureauos.yaml");
     await writeFile(path, `autonomy:\n  merge_pull_requests: "yes"\n`, "utf8");
     await expect(loadConfig(path)).rejects.toBeInstanceOf(ConfigError);
+  });
+
+  it("loads capability assignments from bureauos.yaml", async () => {
+    const path = join(dir, "bureauos.yaml");
+    await writeFile(
+      path,
+      [
+        "capabilities:",
+        "  codex:",
+        '    type: "runtime"',
+        "    allowed_agents:",
+        '      - "development"',
+        "    actions:",
+        "      edit_code: true",
+        "      deploy: false",
+        '    risk_class: "high"',
+        "    audit_required: true",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const config = await loadConfig(path);
+    expect(config.capabilities.codex?.type).toBe("runtime");
+    expect(config.capabilities.codex?.allowed_agents).toEqual(["development"]);
+    expect(config.capabilities.codex?.actions.edit_code).toBe(true);
+    expect(config.capabilities.codex?.actions.deploy).toBe(false);
+  });
+
+  it("loads OpenCode-style provider connector configuration", async () => {
+    const path = join(dir, "bureauos.yaml");
+    await writeFile(
+      path,
+      [
+        "provider:",
+        "  openai:",
+        '    name: "OpenAI Enterprise"',
+        "    env:",
+        '      - "OPENAI_ENTERPRISE_KEY"',
+        "    options:",
+        '      defaultModel: "gpt-5-enterprise"',
+        "    models:",
+        "      gpt-5-enterprise:",
+        '        name: "GPT-5 Enterprise"',
+        "disabled_providers:",
+        '  - "openrouter"',
+      ].join("\n"),
+      "utf8",
+    );
+
+    const config = await loadConfig(path);
+    expect(config.provider.openai?.name).toBe("OpenAI Enterprise");
+    expect(config.provider.openai?.env).toEqual(["OPENAI_ENTERPRISE_KEY"]);
+    expect(config.provider.openai?.models["gpt-5-enterprise"]?.name).toBe("GPT-5 Enterprise");
+    expect(config.disabled_providers).toEqual(["openrouter"]);
   });
 });
 
