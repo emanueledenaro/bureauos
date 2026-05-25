@@ -673,7 +673,7 @@ describe("API server", () => {
       body: JSON.stringify({
         provider: "openai",
         apiKey: "sk-test-provider-secret",
-        defaultModel: "gpt-5",
+        defaultModel: "gpt-5.5",
       }),
     });
 
@@ -719,7 +719,7 @@ describe("API server", () => {
         provider: "openai-codex",
         accessToken: "oauth-access-token-api",
         refreshToken: "oauth-refresh-token-api",
-        defaultModel: "gpt-5",
+        defaultModel: "gpt-5.3-codex",
       }),
     });
 
@@ -850,7 +850,7 @@ describe("API server", () => {
     expect(body.source).toBe("connection");
     expect(body.defaultModel).toBe("gpt-4o");
     expect(body.models.map((model) => model.id)).toEqual(
-      expect.arrayContaining(["gpt-5", "gpt-4o"]),
+      expect.arrayContaining(["gpt-5.5", "gpt-4o"]),
     );
   });
 
@@ -918,7 +918,7 @@ describe("API server", () => {
     const complete = await fetch(`${server.url}/provider/openai-codex/oauth/callback`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ method: 0, defaultModel: "gpt-5" }),
+      body: JSON.stringify({ method: 0, defaultModel: "gpt-5.3-codex" }),
     });
     expect(complete.status).toBe(201);
     const body = (await complete.json()) as {

@@ -308,7 +308,7 @@ describe("bureau cli", () => {
       "--api-key",
       "sk-test-provider-auth",
       "--model",
-      "gpt-5",
+      "gpt-5.5",
     ]);
 
     expect(code).toBe(0);
@@ -354,7 +354,7 @@ describe("bureau cli", () => {
       "--refresh-token",
       "oauth-refresh-token-cli",
       "--model",
-      "gpt-5",
+      "gpt-5.3-codex",
     ]);
     const apiCode = await main([
       "node",
@@ -366,7 +366,7 @@ describe("bureau cli", () => {
       "--api-key",
       "sk-test-provider-auth",
       "--model",
-      "gpt-5",
+      "gpt-5.5",
     ]);
 
     expect(oauthCode).toBe(0);

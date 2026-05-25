@@ -5,7 +5,7 @@ import { OpenRouterAdapter } from "./openrouter.js";
 function completionResponse(text: string): Response {
   return new Response(
     JSON.stringify({
-      model: "openai/gpt-5",
+      model: "openai/gpt-5.4-mini",
       choices: [{ message: { content: text } }],
       usage: { prompt_tokens: 5, completion_tokens: 3 },
     }),
@@ -30,7 +30,7 @@ describe("OpenRouterAdapter", () => {
   it("throws NotConfiguredError when generating without a key", async () => {
     const adapter = new OpenRouterAdapter("openrouter-test", {});
     await expect(
-      adapter.generateText({ model: "openai/gpt-5", prompt: "hello" }),
+      adapter.generateText({ model: "openai/gpt-5.4-mini", prompt: "hello" }),
     ).rejects.toBeInstanceOf(NotConfiguredError);
   });
 
@@ -40,14 +40,17 @@ describe("OpenRouterAdapter", () => {
       baseUrl: "https://openrouter.test/api",
       fetch: (async () =>
         new Response(
-          JSON.stringify({ data: [{ id: "openai/gpt-5" }, { id: "anthropic/claude" }] }),
+          JSON.stringify({ data: [{ id: "openai/gpt-5.4-mini" }, { id: "anthropic/claude" }] }),
           {
             headers: { "content-type": "application/json" },
           },
         )) as typeof fetch,
     });
 
-    await expect(adapter.listModels()).resolves.toEqual(["openai/gpt-5", "anthropic/claude"]);
+    await expect(adapter.listModels()).resolves.toEqual([
+      "openai/gpt-5.4-mini",
+      "anthropic/claude",
+    ]);
   });
 
   it("generates text through the OpenAI-compatible chat API", async () => {
@@ -62,14 +65,14 @@ describe("OpenRouterAdapter", () => {
     });
 
     const result = await adapter.generateText({
-      model: "openai/gpt-5",
+      model: "openai/gpt-5.4-mini",
       system: "You are BureauOS.",
       prompt: "Plan work.",
     });
 
     expect(result).toEqual({
       text: "hello openrouter",
-      model: "openai/gpt-5",
+      model: "openai/gpt-5.4-mini",
       usage: { inputTokens: 5, outputTokens: 3 },
     });
     expect(String(calls[0]?.input)).toBe("https://openrouter.test/api/v1/chat/completions");
@@ -80,7 +83,7 @@ describe("OpenRouterAdapter", () => {
       model: string;
       messages: Array<{ role: string; content: string }>;
     };
-    expect(body.model).toBe("openai/gpt-5");
+    expect(body.model).toBe("openai/gpt-5.4-mini");
     expect(body.messages).toEqual([
       { role: "system", content: "You are BureauOS." },
       { role: "user", content: "Plan work." },
@@ -104,7 +107,7 @@ describe("OpenRouterAdapter", () => {
     });
 
     const chunks: string[] = [];
-    for await (const chunk of adapter.stream({ model: "openai/gpt-5", prompt: "hi" })) {
+    for await (const chunk of adapter.stream({ model: "openai/gpt-5.4-mini", prompt: "hi" })) {
       chunks.push(chunk);
     }
 

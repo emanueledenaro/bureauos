@@ -108,7 +108,7 @@ describe("buildConfiguredProviderRouter", () => {
       accessToken: accessToken("acct_old"),
       refreshToken: "refresh-old",
       expiresAt: new Date(0).toISOString(),
-      defaultModel: "gpt-5",
+      defaultModel: "gpt-5.3-codex",
     });
 
     const refreshedToken = accessToken("acct_new");
@@ -134,7 +134,7 @@ describe("buildConfiguredProviderRouter", () => {
     const adapter = router.get("openai-codex-default");
     expect(adapter).toBeDefined();
 
-    const result = await adapter?.generateText({ model: "gpt-5", prompt: "run" });
+    const result = await adapter?.generateText({ model: "gpt-5.3-codex", prompt: "run" });
     const stored = await store.get("openai-codex");
 
     expect(result?.text).toBe("persisted refresh");
@@ -145,7 +145,7 @@ describe("buildConfiguredProviderRouter", () => {
       mode: "oauth",
       accessToken: refreshedToken,
       refreshToken: "refresh-new",
-      defaultModel: "gpt-5",
+      defaultModel: "gpt-5.3-codex",
     });
     expect(Date.parse(stored?.expiresAt ?? "")).toBeGreaterThan(Date.now());
   });

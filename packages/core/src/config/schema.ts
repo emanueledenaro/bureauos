@@ -93,7 +93,7 @@ const InterfaceConfig = z
 
 const AgentConfig = z.object({
   provider: ProviderName.default("openai-codex"),
-  model: z.string().default("gpt-5"),
+  model: z.string().default("gpt-5.3-codex"),
   runtime: z.string().optional(),
   capabilities: z.array(z.string()).default([]),
   required_model_capabilities: z.array(z.string()).default([]),
@@ -104,7 +104,7 @@ const AgentConfig = z.object({
 const SupremeCoordinatorConfig = z
   .object({
     provider: ProviderName.default("openai-codex"),
-    model: z.string().default("gpt-5"),
+    model: z.string().default("gpt-5.3-codex"),
     user_facing: z.boolean().default(true),
     always_on: z.boolean().default(true),
     required_model_capabilities: z.array(z.string()).default([]),

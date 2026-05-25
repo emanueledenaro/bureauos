@@ -26,7 +26,7 @@ describe("GoogleAdapter", () => {
   it("lists default model identifiers", async () => {
     const adapter = new GoogleAdapter("google-test", {});
     const models = await adapter.listModels();
-    expect(models).toContain("gemini-2.5-pro");
+    expect(models).toContain("gemini-3.5-flash");
   });
 
   it("generates text through the Gemini REST API", async () => {

@@ -35,8 +35,8 @@ interface:
     low_value_activity: false
 
 supreme_coordinator:
-  provider: openai
-  model: gpt-5
+  provider: openai-codex
+  model: gpt-5.3-codex
   user_facing: true
   always_on: true
   memory:
@@ -54,9 +54,9 @@ provider:
     env:
       - "OPENAI_API_KEY"
     options:
-      defaultModel: "gpt-5"
+      defaultModel: "gpt-5.5"
     models:
-      gpt-5:
+      gpt-5.5:
         capabilities:
           - chat
           - reasoning
@@ -65,9 +65,10 @@ provider:
           - streaming
           - tool-use
         budget_tier: high
-      gpt-4o-mini:
+      gpt-5.4-nano:
         capabilities:
           - chat
+          - reasoning
           - streaming
           - low-latency
           - low-cost
@@ -75,20 +76,20 @@ provider:
   openai-codex:
     name: "OpenAI Codex"
     options:
-      defaultModel: "gpt-5"
+      defaultModel: "gpt-5.3-codex"
 
 disabled_providers: []
 
 agents:
   project_manager:
     provider: openai
-    model: gpt-5
+    model: gpt-5.5
   product:
     provider: anthropic
-    model: claude-sonnet
+    model: claude-sonnet-4-6
   ux:
     provider: openai
-    model: gpt-5
+    model: gpt-5.5
   development:
     provider: codex
     runtime: codex
@@ -101,56 +102,56 @@ agents:
       - mcp
   qa:
     provider: openai
-    model: gpt-5
+    model: gpt-5.5
   security:
     provider: anthropic
-    model: claude-opus
+    model: claude-opus-4-7
   reviewer:
     provider: anthropic
-    model: claude-opus
+    model: claude-opus-4-7
   release:
     provider: openai
-    model: gpt-5
+    model: gpt-5.5
   visibility:
     provider: openai
-    model: gpt-5
+    model: gpt-5.5
   content:
     provider: openai
-    model: gpt-4o-mini
+    model: gpt-5.4-nano
     max_budget_tier: standard
     prefer_low_cost: true
   social:
     provider: openai
-    model: gpt-4o-mini
+    model: gpt-5.4-nano
     max_budget_tier: standard
     prefer_low_cost: true
   creative:
     provider: openai
-    model: gpt-5
+    model: gpt-5.5
   ads:
     provider: openai
-    model: gpt-5
+    model: gpt-5.5
   marketing:
     provider: openai
-    model: gpt-5
+    model: gpt-5.5
   conversion:
     provider: openai
-    model: gpt-5
+    model: gpt-5.5
   sales:
     provider: openai
-    model: gpt-5
+    model: gpt-5.5
   pricing:
     provider: openai
-    model: gpt-5
+    model: gpt-5.5
   proposal:
     provider: openai
-    model: gpt-5
+    model: gpt-5.5
   compliance:
     provider: openai
-    model: gpt-5
+    model: gpt-5.5
   client_success:
     provider: openai
-    model: gpt-5
+    model: gpt-5.5
 
 autonomy:
   observe_signals: true

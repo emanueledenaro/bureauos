@@ -8,7 +8,16 @@ import { NotConfiguredError } from "./openai.js";
 import { OpenAICompatibleChatAdapter, type ProviderFetch } from "./openai-compatible.js";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api";
-const OPENROUTER_MODELS = ["openai/gpt-5", "anthropic/claude-sonnet-4.6"] as const;
+const OPENROUTER_MODELS = [
+  "openai/gpt-5.5",
+  "openai/gpt-5.4",
+  "openai/gpt-5.4-mini",
+  "openai/gpt-5.4-nano",
+  "anthropic/claude-opus-4.7",
+  "anthropic/claude-sonnet-4.6",
+  "google/gemini-3.5-flash",
+  "google/gemini-3.1-pro-preview",
+] as const;
 
 export class OpenRouterAdapter implements ProviderAdapter {
   public readonly id: string;

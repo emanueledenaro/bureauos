@@ -31,13 +31,17 @@ export interface OpenAICodexOAuthOptions {
 
 interface ResponsesApiRequest {
   model: string;
-  input: Array<{ type: "message"; role: "developer" | "user"; content: string }>;
+  input: Array<{
+    type: "message";
+    role: "user";
+    content: Array<{ type: "input_text"; text: string }>;
+  }>;
   stream: true;
+  store: false;
+  instructions: string;
   include: string[];
   reasoning: { effort: "medium"; summary: "auto" };
   text: { verbosity: "medium" };
-  temperature?: number;
-  max_output_tokens?: number;
 }
 
 interface SseParseResult {
@@ -76,21 +80,37 @@ function isExpired(expiresAt?: string): boolean {
   return timestamp <= Date.now() + 60_000;
 }
 
+const DEFAULT_CODEX_MODEL = "gpt-5.3-codex";
+const CODEX_OAUTH_MODELS = ["gpt-5.3-codex"] as const;
+const DEFAULT_CODEX_INSTRUCTIONS =
+  "You are BureauOS Supreme Coordinator. Answer clearly, use the supplied context, and never claim actions were completed unless they were actually completed.";
+
+function normalizeCodexModel(model?: string): string {
+  if (!model) return DEFAULT_CODEX_MODEL;
+  const id = model.includes("/") ? model.split("/").pop() || model : model;
+  if (id === "gpt-5" || id === "gpt-5-codex" || id === "codex-mini-latest") {
+    return DEFAULT_CODEX_MODEL;
+  }
+  return id;
+}
+
 function buildRequestBody(options: GenerateTextOptions): ResponsesApiRequest {
+  const instructions = options.system?.trim() || DEFAULT_CODEX_INSTRUCTIONS;
   return {
-    model: options.model,
+    model: normalizeCodexModel(options.model),
     input: [
-      ...(options.system
-        ? [{ type: "message" as const, role: "developer" as const, content: options.system }]
-        : []),
-      { type: "message", role: "user", content: options.prompt },
+      {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: options.prompt }],
+      },
     ],
     stream: true,
+    store: false,
+    instructions,
     include: ["reasoning.encrypted_content"],
     reasoning: { effort: "medium", summary: "auto" },
     text: { verbosity: "medium" },
-    ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
-    ...(options.maxTokens !== undefined ? { max_output_tokens: options.maxTokens } : {}),
   };
 }
 
@@ -234,7 +254,11 @@ export class OpenAICodexOAuthAdapter implements ProviderAdapter {
   }
 
   async listModels(): Promise<readonly string[]> {
-    return [this.defaultModel ?? "gpt-5"];
+    const normalizedDefault = normalizeCodexModel(this.defaultModel);
+    return [
+      normalizedDefault,
+      ...CODEX_OAUTH_MODELS.filter((model) => model !== normalizedDefault),
+    ];
   }
 
   async validateCredentials(): Promise<ValidationResult> {

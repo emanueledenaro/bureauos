@@ -32,7 +32,12 @@ describe("provider connector catalog", () => {
     const connectors = listProviderConnectors();
 
     expect(connectors.map((connector) => connector.id)).toContain("anthropic");
-    expect(connectors.find((connector) => connector.id === "openai")?.defaultModel).toBe("gpt-5");
+    expect(connectors.find((connector) => connector.id === "openai")?.defaultModel).toBe(
+      "gpt-5.5",
+    );
+    expect(connectors.find((connector) => connector.id === "openai-codex")?.defaultModel).toBe(
+      "gpt-5.3-codex",
+    );
     expect(defaultProviderCredentialId("anthropic")).toBe("anthropic-default");
     expect(defaultProviderAuthMode("local")).toBe("local");
   });
@@ -52,7 +57,7 @@ describe("provider connector catalog", () => {
               capabilities: ["chat", "reasoning"],
               budgetTier: "premium",
             },
-            "gpt-4o-mini": { disabled: true },
+            "gpt-5.4-nano": { disabled: true },
           },
         },
       },
@@ -66,7 +71,7 @@ describe("provider connector catalog", () => {
       env: { apiKey: ["OPENAI_ENTERPRISE_KEY"] },
     });
     expect(connectors[0]?.models.map((model) => model.id)).toContain("gpt-5-enterprise");
-    expect(connectors[0]?.models.map((model) => model.id)).not.toContain("gpt-4o-mini");
+    expect(connectors[0]?.models.map((model) => model.id)).not.toContain("gpt-5.4-nano");
     expect(connectors[0]?.models.find((model) => model.id === "gpt-5-enterprise")).toMatchObject({
       capabilities: ["chat", "reasoning"],
       budgetTier: "premium",

@@ -126,7 +126,7 @@ describe("ProviderRouter", () => {
   it("uses route-specific profile overrides for model-level budget checks", async () => {
     const router = new ProviderRouter();
     router.register(new FakeProvider("openai-default", "openai", { ok: true }), {
-      model: "gpt-5",
+      model: "gpt-5.5",
       capabilities: ["chat", "reasoning"],
       budgetTier: "high",
     });
@@ -137,7 +137,7 @@ describe("ProviderRouter", () => {
       maxBudgetTier: "low",
       routeProfiles: {
         "openai-default": {
-          model: "gpt-4o-mini",
+          model: "gpt-5.4-nano",
           capabilities: ["chat", "low-cost"],
           budgetTier: "low",
         },
@@ -145,7 +145,7 @@ describe("ProviderRouter", () => {
     });
 
     expect(selected?.profile).toMatchObject({
-      model: "gpt-4o-mini",
+      model: "gpt-5.4-nano",
       budgetTier: "low",
     });
   });

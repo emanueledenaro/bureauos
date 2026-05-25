@@ -133,7 +133,7 @@ describe("agent provider routing", () => {
     const config = defaultConfig("freelancer");
     config.agents.content = {
       provider: "openai",
-      model: "gpt-4o-mini",
+      model: "gpt-5.4-nano",
       capabilities: [],
       required_model_capabilities: ["chat"],
       max_budget_tier: "low",
@@ -141,7 +141,7 @@ describe("agent provider routing", () => {
     };
     const router = new ProviderRouter();
     router.register(new FakeProvider("openai-default", "openai", { ok: true }), {
-      model: "gpt-5",
+      model: "gpt-5.5",
       capabilities: ["chat", "reasoning", "coding"],
       budgetTier: "high",
     });
@@ -151,6 +151,6 @@ describe("agent provider routing", () => {
     const selected = await selectAgentModel(router, config, "content");
 
     expect(selected?.provider.id).toBe("openai-default");
-    expect(selected?.model).toBe("gpt-4o-mini");
+    expect(selected?.model).toBe("gpt-5.4-nano");
   });
 });

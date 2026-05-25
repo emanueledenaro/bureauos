@@ -27,5 +27,6 @@ describe("AnthropicAdapter", () => {
     const a = new AnthropicAdapter("anthropic-test", {});
     const models = await a.listModels();
     expect(models).toContain("claude-opus-4-7");
+    expect(models).toContain("claude-haiku-4-5-20251001");
   });
 });

@@ -61,7 +61,8 @@ This changes the connector catalog and default model choice, but it does not sto
 ## CLI
 
 ```sh
-bureau auth login --provider openai --api-key "$OPENAI_API_KEY" --model gpt-5
+bureau auth login --provider openai --api-key "$OPENAI_API_KEY" --model gpt-5.5
+bureau auth login --provider openai-codex --model gpt-5.3-codex
 bureau auth login --provider anthropic --api-key "$ANTHROPIC_API_KEY" --model claude-sonnet-4-6
 bureau auth login --provider openrouter --api-key "$OPENROUTER_API_KEY"
 bureau auth login --provider local --base-url http://localhost:11434 --model qwen3-coder
@@ -96,7 +97,7 @@ The singular `/provider/...` endpoints follow OpenCode's provider auth pattern: 
 
 ## Current Runtime State
 
-- OpenAI Codex OAuth: separate provider profile, browser PKCE login, token validation, token refresh persistence, live ChatGPT Codex backend requests, SSE streaming, no API-key fallback.
+- OpenAI Codex OAuth: separate provider profile, browser PKCE login, token validation, token refresh persistence, live ChatGPT Codex backend requests using the Codex-compatible `instructions`/`store=false` payload, SSE streaming, no API-key fallback.
 - OpenAI API: SDK-backed `generateText` and `stream`.
 - Anthropic: SDK-backed `generateText` and `stream`.
 - Google: REST-backed Gemini `generateText` and SSE `stream`.

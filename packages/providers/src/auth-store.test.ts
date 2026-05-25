@@ -30,12 +30,12 @@ describe("ProviderAuthStore", () => {
     const record = await store.upsert({
       provider: "openai",
       apiKey: "sk-test-1234567890",
-      defaultModel: "gpt-5",
+      defaultModel: "gpt-5.5",
     });
 
     expect(record.id).toBe("openai-default");
     expect(record.mode).toBe("api-key");
-    expect(record.defaultModel).toBe("gpt-5");
+    expect(record.defaultModel).toBe("gpt-5.5");
     expect(await exists(providerAuthPath(dir))).toBe(true);
     const mode = (await stat(providerAuthPath(dir))).mode & 0o777;
     expect(mode).toBe(0o600);
@@ -62,12 +62,12 @@ describe("ProviderAuthStore", () => {
       provider: "openai-codex",
       accessToken: "oauth-access-token-123456",
       refreshToken: "oauth-refresh-token-123456",
-      defaultModel: "gpt-5",
+      defaultModel: "gpt-5.3-codex",
     });
     const api = await store.upsert({
       provider: "openai",
       apiKey: "sk-openai-api-key",
-      defaultModel: "gpt-5",
+      defaultModel: "gpt-5.5",
     });
 
     expect(oauth.id).toBe("openai-codex-default");

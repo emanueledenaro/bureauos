@@ -232,7 +232,7 @@ Agents can request additional model capabilities and budget ceilings:
 agents:
   social:
     provider: openai
-    model: gpt-4o-mini
+    model: gpt-5.4-nano
     required_model_capabilities:
       - chat
     max_budget_tier: standard

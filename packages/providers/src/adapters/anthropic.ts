@@ -21,7 +21,7 @@ export class AnthropicAdapter implements ProviderAdapter {
   }
 
   async listModels(): Promise<readonly string[]> {
-    return ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"];
+    return ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"];
   }
 
   async validateCredentials(): Promise<ValidationResult> {

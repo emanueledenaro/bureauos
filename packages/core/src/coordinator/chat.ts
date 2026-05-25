@@ -67,6 +67,22 @@ function hasIntakeIntent(
   attachments: readonly CoordinatorAttachmentInput[],
 ): boolean {
   const lower = message.toLowerCase();
+  const dryRunSignals = [
+    "senza creare",
+    "non creare",
+    "non aprire",
+    "non generare",
+    "solo dimmi",
+    "solo spiegami",
+    "solo analisi",
+    "solo un consiglio",
+    "dry run",
+    "do not create",
+    "don't create",
+    "without creating",
+    "analysis only",
+  ];
+  if (dryRunSignals.some((signal) => lower.includes(signal))) return false;
   const intakeSignals = [
     "ho parlato",
     "mi hanno chiesto",

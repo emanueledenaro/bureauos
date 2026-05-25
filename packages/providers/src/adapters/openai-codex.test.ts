@@ -35,7 +35,7 @@ function sseResponse(text: string): Response {
       `data: ${JSON.stringify({
         type: "response.done",
         response: {
-          model: "gpt-5",
+          model: "gpt-5.3-codex",
           usage: { input_tokens: 10, output_tokens: 3 },
         },
       })}`,
@@ -88,7 +88,7 @@ describe("OpenAICodexOAuthAdapter", () => {
 
     try {
       const result = await adapter.generateText({
-        model: "gpt-5",
+        model: "gpt-5.3-codex",
         system: "You are BureauOS.",
         prompt: "Write the next action.",
         temperature: 0.2,
@@ -97,7 +97,7 @@ describe("OpenAICodexOAuthAdapter", () => {
 
       expect(result).toEqual({
         text: "hello from codex",
-        model: "gpt-5",
+        model: "gpt-5.3-codex",
         usage: { inputTokens: 10, outputTokens: 3 },
       });
       expect(calls).toHaveLength(1);
@@ -113,26 +113,44 @@ describe("OpenAICodexOAuthAdapter", () => {
 
       const body = JSON.parse(String(calls[0]?.init?.body)) as {
         model: string;
-        input: Array<{ role: string; content: string }>;
+        input: Array<{
+          role: string;
+          content: Array<{ type: string; text: string }>;
+        }>;
         stream: boolean;
-        temperature: number;
-        max_output_tokens: number;
+        store: boolean;
+        instructions: string;
+        temperature?: number;
+        max_output_tokens?: number;
       };
       expect(body).toMatchObject({
-        model: "gpt-5",
+        model: "gpt-5.3-codex",
         stream: true,
-        temperature: 0.2,
-        max_output_tokens: 120,
+        store: false,
+        instructions: "You are BureauOS.",
       });
       expect(body.input).toEqual([
-        { type: "message", role: "developer", content: "You are BureauOS." },
-        { type: "message", role: "user", content: "Write the next action." },
+        {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: "Write the next action." }],
+        },
       ]);
+      expect(body.temperature).toBeUndefined();
+      expect(body.max_output_tokens).toBeUndefined();
       expect(JSON.stringify(body)).not.toContain("sk-should-not-be-used");
     } finally {
       if (previousApiKey === undefined) delete process.env["OPENAI_API_KEY"];
       else process.env["OPENAI_API_KEY"] = previousApiKey;
     }
+  });
+
+  it("lists the current Codex OAuth model first even when old defaults are present", async () => {
+    const adapter = new OpenAICodexOAuthAdapter("openai-codex-test", {
+      defaultModel: "gpt-5",
+    });
+
+    await expect(adapter.listModels()).resolves.toEqual(["gpt-5.3-codex"]);
   });
 
   it("streams Codex SSE deltas without duplicating the final response text", async () => {
@@ -155,7 +173,7 @@ describe("OpenAICodexOAuthAdapter", () => {
     });
 
     const chunks: string[] = [];
-    for await (const chunk of adapter.stream({ model: "gpt-5", prompt: "hello" })) {
+    for await (const chunk of adapter.stream({ model: "gpt-5.3-codex", prompt: "hello" })) {
       chunks.push(chunk);
     }
 
@@ -191,7 +209,7 @@ describe("OpenAICodexOAuthAdapter", () => {
       },
     });
 
-    const result = await adapter.generateText({ model: "gpt-5", prompt: "continue" });
+    const result = await adapter.generateText({ model: "gpt-5.3-codex", prompt: "continue" });
 
     expect(result.text).toBe("fresh run");
     expect(calls.map((call) => call.url)).toEqual([OPENAI_CODEX_TOKEN_URL, CODEX_RESPONSES_URL]);
@@ -213,8 +231,8 @@ describe("OpenAICodexOAuthAdapter", () => {
       fetch: async () => sseResponse("never called"),
     });
 
-    await expect(adapter.generateText({ model: "gpt-5", prompt: "hello" })).rejects.toThrow(
-      OpenAICodexOAuthError,
-    );
+    await expect(
+      adapter.generateText({ model: "gpt-5.3-codex", prompt: "hello" }),
+    ).rejects.toThrow(OpenAICodexOAuthError);
   });
 });

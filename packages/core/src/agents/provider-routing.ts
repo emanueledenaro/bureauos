@@ -19,13 +19,13 @@ export interface AgentModelSelection {
 }
 
 const PROVIDER_DEFAULT_MODELS: Record<ProviderType, string> = {
-  "openai-codex": "gpt-5",
-  openai: "gpt-5",
+  "openai-codex": "gpt-5.3-codex",
+  openai: "gpt-5.5",
   anthropic: "claude-opus-4-7",
-  google: "gemini-2.5-pro",
-  openrouter: "openai/gpt-5",
+  google: "gemini-3.5-flash",
+  openrouter: "openai/gpt-5.5",
   local: "llama3.1",
-  custom: "gpt-5",
+  custom: "gpt-5.5",
 };
 
 function toProviderType(provider: ProviderName): ProviderType {
