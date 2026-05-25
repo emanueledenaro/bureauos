@@ -284,6 +284,12 @@ export interface ProviderConnector {
   requiresBaseUrl: boolean;
   noApiFallback: boolean;
 }
+export interface ProviderModelList {
+  provider: string;
+  source: "connector" | "connection";
+  defaultModel: string;
+  models: Array<{ id: string; name: string }>;
+}
 export interface ProviderAuthAuthorization {
   url: string;
   method: "auto" | "code";
@@ -306,6 +312,8 @@ export const Api = {
   artifacts: () => api<ArtifactRecord[]>("/artifacts"),
   providers: () => api<ProviderConnection[]>("/providers"),
   providerConnectors: () => api<ProviderConnector[]>("/provider/connectors"),
+  providerModels: (provider: string) =>
+    api<ProviderModelList>(`/provider/models?provider=${encodeURIComponent(provider)}`),
   audit: (n = 50) => api<AuditEvent[]>(`/audit?n=${n}`),
   coordinatorIntake: (input: {
     message: string;

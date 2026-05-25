@@ -15,6 +15,7 @@ import {
   type ProviderAuthAuthorization,
   type ProviderConnection,
   type ProviderConnector,
+  type ProviderModelList,
   type ProjectRecord,
   type RunRecord,
 } from "./lib/api";
@@ -2105,14 +2106,60 @@ function SettingsView({
     ProviderAuthAuthorization | undefined
   >();
   const [oauthStatus, setOauthStatus] = useState<string | undefined>();
+  const [modelList, setModelList] = useState<ProviderModelList | undefined>();
   const [busy, setBusy] = useState(false);
   const connector = providerConnectors.find((item) => item.id === provider);
+  const connectedProvider = providers.find((item) => item.provider === provider);
   const mode =
     connector?.defaultAuthMode ??
     (provider === "openai-codex" ? "oauth" : provider === "local" ? "local" : "api-key");
   const authMethod = connector?.authMethods[0];
   const requiresApiKey = authMethod?.type === "api";
   const requiresBaseUrl = connector?.requiresBaseUrl || provider === "custom";
+  const modelChoices = useMemo(() => {
+    const seen = new Set<string>();
+    return [
+      ...(modelList?.models ?? []),
+      ...(connector?.models ?? []),
+      ...(connectedProvider?.default_model
+        ? [{ id: connectedProvider.default_model, name: connectedProvider.default_model }]
+        : []),
+    ].filter((model) => {
+      if (seen.has(model.id)) return false;
+      seen.add(model.id);
+      return true;
+    });
+  }, [connector?.models, connectedProvider?.default_model, modelList?.models]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fallback = connector
+      ? {
+          provider,
+          source: "connector" as const,
+          defaultModel: connectedProvider?.default_model || connector.defaultModel,
+          models: connector.models,
+        }
+      : undefined;
+    setModelList(fallback);
+    const nextDefault = connectedProvider?.default_model || fallback?.defaultModel || "";
+    setDefaultModel(nextDefault);
+
+    Api.providerModels(provider)
+      .then((models) => {
+        if (cancelled) return;
+        setModelList(models);
+        setDefaultModel(models.defaultModel || models.models[0]?.id || "");
+      })
+      .catch(() => {
+        if (cancelled || !fallback) return;
+        setModelList(fallback);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [connector, connectedProvider?.default_model, provider]);
 
   const openAuthorizationUrl = async (url: string): Promise<void> => {
     if (window.bureau) {
@@ -2230,12 +2277,17 @@ function SettingsView({
               placeholder="Base URL"
             />
           ) : null}
-          <input
+          <select
             value={defaultModel}
             onChange={(event) => setDefaultModel(event.target.value)}
-            className="h-9 rounded-md border border-neutral-800 bg-neutral-950 px-3 text-[11px] text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-neutral-700"
-            placeholder="model"
-          />
+            className="h-9 min-w-36 rounded-md border border-neutral-800 bg-neutral-950 px-3 text-[11px] text-neutral-100 outline-none focus:border-neutral-700"
+          >
+            {modelChoices.map((model) => (
+              <option key={model.id} value={model.id}>
+                {model.name || model.id}
+              </option>
+            ))}
+          </select>
           <button
             onClick={() => void connect()}
             disabled={busy}
@@ -2261,6 +2313,11 @@ function SettingsView({
                 <span className="rounded border border-neutral-800 px-2 py-1">
                   {connector.models.length} models
                 </span>
+                {modelList ? (
+                  <span className="rounded border border-neutral-800 px-2 py-1">
+                    Models from {modelList.source}
+                  </span>
+                ) : null}
               </div>
             </div>
             <div className="text-right text-[10px] uppercase tracking-[0.08em] text-neutral-600">

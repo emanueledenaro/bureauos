@@ -82,6 +82,13 @@ type ProviderStatus = ProviderConnection & {
   reason?: string;
 };
 
+interface ProviderModelList {
+  provider: ProviderType;
+  source: "connector" | "connection";
+  defaultModel: string;
+  models: Array<{ id: string; name: string }>;
+}
+
 const PROVIDER_TYPES: ReadonlySet<ProviderType> = new Set([
   "openai-codex",
   "openai",
@@ -211,6 +218,46 @@ async function providerStatuses(
   });
 }
 
+async function providerModels(
+  provider: ProviderType,
+  workspaceRoot: string,
+  config: ProviderCatalogConfig,
+): Promise<ProviderModelList> {
+  const connector = listProviderConnectors(config).find((item) => item.id === provider);
+  if (!connector) throw new Error(`unknown provider connector: ${provider}`);
+
+  const fallbackModels = connector.models.map((model) => ({ ...model }));
+  const fallback = {
+    provider,
+    source: "connector" as const,
+    defaultModel: connector.defaultModel,
+    models: fallbackModels,
+  };
+
+  const { router, connections } = await buildConfiguredProviderRouter(
+    workspaceRoot,
+    process.env,
+    config,
+  );
+  const connection = connections.find((item) => item.provider === provider);
+  if (!connection) return fallback;
+
+  const adapter = router.get(connection.id);
+  if (!adapter) return fallback;
+
+  const ids = await adapter.listModels();
+  const models = ids.map((id) => {
+    const configured = fallbackModels.find((model) => model.id === id);
+    return { id, name: configured?.name ?? id };
+  });
+  return {
+    provider,
+    source: "connection",
+    defaultModel: connection.default_model || adapter.defaultModel || connector.defaultModel,
+    models: models.length > 0 ? models : fallbackModels,
+  };
+}
+
 const ROUTES: Record<string, RouteHandler> = {
   "GET /health": ({ res }) => ok(res, { ok: true }),
 
@@ -265,6 +312,15 @@ const ROUTES: Record<string, RouteHandler> = {
 
   "GET /provider/connectors": ({ res, options }) => {
     ok(res, listProviderConnectors(options.config));
+  },
+
+  "GET /provider/models": async ({ res, options, url }) => {
+    const provider = parseProvider(url.searchParams.get("provider"));
+    if (!provider) {
+      ok(res, { error: "provider required" }, 400);
+      return;
+    }
+    ok(res, await providerModels(provider, options.workspaceRoot, options.config));
   },
 
   "GET /provider/auth": ({ res, options }) => {

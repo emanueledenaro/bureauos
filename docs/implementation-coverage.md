@@ -124,9 +124,9 @@ Every major capability described in the docs must become one of:
 | Google provider | Gemini REST adapter with `generateText`/SSE `stream` | implemented |
 | OpenRouter provider | OpenAI-compatible adapter with model listing, `generateText`, and SSE `stream` | implemented |
 | Local provider | OpenAI-compatible local/Ollama adapter with model listing, `generateText`, and SSE `stream` | implemented |
-| Provider connector catalog | `listProviderConnectors`, OpenCode-style `provider` config overrides, `enabled_providers`/`disabled_providers`, `/provider/connectors`, catalog-backed auth methods, model defaults, and env mappings | implemented |
+| Provider connector catalog | `listProviderConnectors`, OpenCode-style `provider` config overrides, `enabled_providers`/`disabled_providers`, `/provider/connectors`, `/provider/models`, catalog-backed auth methods, model defaults/lists, and env mappings | implemented |
 | Provider auth/connect | `ProviderAuthStore`, auth modes, OpenCode-style `/provider/auth` and OAuth authorize/callback endpoints, `.bureauos/auth/providers.json` | implemented |
-| Electron provider settings | Settings mode, connector catalog selector, browser OAuth for `openai-codex`, explicit API-key/local endpoint connect for API providers | implemented |
+| Electron provider settings | Settings mode, connector catalog selector, model picker, browser OAuth for `openai-codex`, explicit API-key/local endpoint connect for API providers | implemented |
 | Gmail/Slack/Drive/Calendar | not implemented | designed |
 | Supabase/Stripe/Vercel | not implemented | designed |
 | Ads platforms | draft-only policy, no adapter | designed |

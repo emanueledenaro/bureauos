@@ -12,7 +12,7 @@ Layout matches [docs/ui-reference/operating-room.md](../../docs/ui-reference/ope
 - Project Manager dispatch from project cards
 - Pending Approvals panel with approve/reject
 - Revenue Pulse KPI strip
-- Settings mode with provider auth connect/disconnect and OpenCode-style connector metadata
+- Settings mode with provider auth connect/disconnect, model picker, and OpenCode-style connector metadata
 - Agent Layer footer
 - Agents view with capability assignments, enabled actions, risk, and approval gates
 
@@ -45,4 +45,4 @@ pnpm --filter @bureauos/interface run dist
 
 ## Status
 
-The dashboard reads live kernel state and supports coordinator intake, project dispatch, approval resolution, report generation, provider auth settings with connector catalog/default model visibility, capability inspection, GitHub issue draft generation, and policy-gated GitHub issue creation when a repository and token are configured. Remaining work is tracked under Phase 4 in the [BACKLOG](../../BACKLOG.md).
+The dashboard reads live kernel state and supports coordinator intake, project dispatch, approval resolution, report generation, provider auth settings with connector catalog/default model/model-list visibility, capability inspection, GitHub issue draft generation, and policy-gated GitHub issue creation when a repository and token are configured. Remaining work is tracked under Phase 4 in the [BACKLOG](../../BACKLOG.md).

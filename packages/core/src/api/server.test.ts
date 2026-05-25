@@ -481,6 +481,63 @@ describe("API server", () => {
     expect(body.find((item) => item.id === "openrouter")).toBeUndefined();
   });
 
+  it("exposes model choices for a provider from connector config", async () => {
+    const config = defaultConfig("agency");
+    config.provider.openai = {
+      name: "OpenAI Enterprise",
+      options: { defaultModel: "gpt-5-enterprise" },
+      models: {
+        "gpt-5-enterprise": { name: "GPT-5 Enterprise" },
+      },
+    };
+    server = await startApiServer({ workspaceRoot: dir, config });
+
+    const response = await fetch(`${server.url}/provider/models?provider=openai`);
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      provider: string;
+      source: string;
+      defaultModel: string;
+      models: Array<{ id: string; name: string }>;
+    };
+    expect(body).toMatchObject({
+      provider: "openai",
+      source: "connector",
+      defaultModel: "gpt-5-enterprise",
+    });
+    expect(body.models).toEqual(
+      expect.arrayContaining([{ id: "gpt-5-enterprise", name: "GPT-5 Enterprise" }]),
+    );
+  });
+
+  it("exposes model choices from a connected provider when available", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    await fetch(`${server.url}/providers/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        provider: "openai",
+        apiKey: "sk-test-provider-secret",
+        defaultModel: "gpt-4o",
+      }),
+    });
+    const response = await fetch(`${server.url}/provider/models?provider=openai`);
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      source: string;
+      defaultModel: string;
+      models: Array<{ id: string }>;
+    };
+    expect(body.source).toBe("connection");
+    expect(body.defaultModel).toBe("gpt-4o");
+    expect(body.models.map((model) => model.id)).toEqual(
+      expect.arrayContaining(["gpt-5", "gpt-4o"]),
+    );
+  });
+
   it("exposes configured capability boundaries", async () => {
     const config = defaultConfig("agency");
     config.capabilities.codex = {

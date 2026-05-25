@@ -85,13 +85,14 @@ The local API exposes provider auth for the desktop interface:
 
 - `GET /providers`
 - `GET /provider/connectors`
+- `GET /provider/models?provider=openai`
 - `GET /provider/auth`
 - `POST /provider/openai-codex/oauth/authorize`
 - `POST /provider/openai-codex/oauth/callback`
 - `POST /providers/auth/login`
 - `POST /providers/auth/logout`
 
-The singular `/provider/...` endpoints follow OpenCode's provider auth pattern: the UI asks which connectors exist, which auth methods each provider supports, starts OAuth authorization when needed, then completes the callback. `GET /provider/connectors` applies `provider`, `enabled_providers`, and `disabled_providers` from `bureauos.yaml`; `GET /providers` only returns real stored or environment-backed connections. ElectronJS Settings uses browser OAuth for `openai-codex`; API-key providers still use explicit API-key login. Raw secrets are never returned in renderer responses.
+The singular `/provider/...` endpoints follow OpenCode's provider auth pattern: the UI asks which connectors exist, which models each provider supports, which auth methods each provider supports, starts OAuth authorization when needed, then completes the callback. `GET /provider/connectors` applies `provider`, `enabled_providers`, and `disabled_providers` from `bureauos.yaml`; `GET /provider/models` returns connector model choices before auth and connected-provider model choices after auth; `GET /providers` only returns real stored or environment-backed connections. ElectronJS Settings uses browser OAuth for `openai-codex`; API-key providers still use explicit API-key login. Raw secrets are never returned in renderer responses.
 
 ## Current Runtime State
 
