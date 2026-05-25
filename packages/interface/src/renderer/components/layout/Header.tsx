@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bell, Moon } from "lucide-react";
+import { Bell, MessageSquare, Menu, Moon } from "lucide-react";
 import { Avatar, AvatarFallback } from "../ui/avatar";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
@@ -18,10 +18,14 @@ export function Header({
   state,
   mode,
   onModeChange,
+  onOpenSidebar,
+  onOpenCoordinator,
 }: {
   state: DashboardState;
   mode: AdaptiveMode;
   onModeChange: (mode: AdaptiveMode) => void;
+  onOpenSidebar: () => void;
+  onOpenCoordinator: () => void;
 }) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -43,7 +47,17 @@ export function Header({
   const autonomyLabel = state.error ? "Offline" : state.loading ? "Connecting" : "Active";
 
   return (
-    <header className="flex h-16 items-center justify-between gap-4 border-b border-border/60 bg-surface px-5">
+    <header className="flex h-16 items-center gap-3 border-b border-border/60 bg-surface px-3 sm:px-5">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="lg:hidden"
+        onClick={onOpenSidebar}
+        aria-label="Open navigation"
+      >
+        <Menu className="h-4 w-4" />
+      </Button>
+
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-3">
           <h1 className="text-[15px] font-semibold text-foreground">Company Pulse</h1>
@@ -70,20 +84,37 @@ export function Header({
         </div>
       </div>
 
-      <div className="flex items-center gap-2.5">
-        <div className="hidden items-center gap-2 xl:flex">
-          <TopMetric tone={autonomyTone} label="Autonomous Mode" value={autonomyLabel} />
-          <TopMetric tone={riskTone} label="Risk Level" value={riskLabel} />
+      <div className="flex items-center gap-2">
+        <div className="hidden md:flex items-center gap-2">
+          <TopMetric tone={autonomyTone} label="Autonomous" value={autonomyLabel} />
+          <TopMetric tone={riskTone} label="Risk" value={riskLabel} className="hidden lg:flex" />
           <TopMetric
             tone={pipeline > 0 ? "success" : "warning"}
-            label="Revenue Health"
+            label="Revenue"
             value={pipeline > 0 ? formatMoney(pipeline) : "No pipeline"}
+            className="hidden xl:flex"
           />
         </div>
 
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label="Theme">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="xl:hidden relative"
+              onClick={onOpenCoordinator}
+              aria-label="Open coordinator chat"
+            >
+              <MessageSquare className="h-4 w-4" />
+              <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-success animate-pulse-soft" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Supreme Coordinator</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon" className="hidden sm:inline-flex" aria-label="Theme">
               <Moon className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
@@ -102,7 +133,7 @@ export function Header({
           <TooltipContent>{state.approvals.length} pending approvals</TooltipContent>
         </Tooltip>
 
-        <div className="hidden flex-col text-right text-[10px] leading-tight text-muted-foreground sm:flex">
+        <div className="hidden flex-col text-right text-[10px] leading-tight text-muted-foreground xl:flex">
           <span className="text-foreground/80">{formatDate(now)}</span>
           <span>{formatTime(now)}</span>
         </div>
@@ -115,9 +146,24 @@ export function Header({
   );
 }
 
-function TopMetric({ tone, label, value }: { tone: Tone; label: string; value: string }) {
+function TopMetric({
+  tone,
+  label,
+  value,
+  className,
+}: {
+  tone: Tone;
+  label: string;
+  value: string;
+  className?: string;
+}) {
   return (
-    <div className="flex h-9 items-center gap-2.5 rounded-md border border-border/70 bg-surface-subtle px-3">
+    <div
+      className={cn(
+        "flex h-9 items-center gap-2.5 rounded-md border border-border/70 bg-surface-subtle px-3",
+        className,
+      )}
+    >
       <span className={cn("h-1.5 w-1.5 rounded-full", toneIndicatorClass[tone])} />
       <div className="leading-tight">
         <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>

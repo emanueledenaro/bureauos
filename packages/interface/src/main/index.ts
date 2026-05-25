@@ -37,7 +37,7 @@ function createWindow(): BrowserWindow {
     show: false,
     autoHideMenuBar: true,
     title: "BureauOS - Operating Room",
-    backgroundColor: "#fafaf9",
+    backgroundColor: "#09090b",
     webPreferences: {
       preload: join(__dirname, "../preload/index.mjs"),
       contextIsolation: true,

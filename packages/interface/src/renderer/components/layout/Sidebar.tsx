@@ -19,6 +19,7 @@ import {
 import { cn } from "../../lib/utils";
 import type { AdaptiveMode, DashboardState } from "../../lib/types";
 import { Badge } from "../ui/badge";
+import { Sheet, SheetContent, SheetTitle } from "../ui/sheet";
 
 interface NavItem {
   id: AdaptiveMode;
@@ -56,16 +57,8 @@ const SECONDARY: NavItem[] = [
   { id: "settings", label: "Settings", icon: SettingsIcon },
 ];
 
-export function Sidebar({
-  state,
-  mode,
-  onModeChange,
-}: {
-  state: DashboardState;
-  mode: AdaptiveMode;
-  onModeChange: (mode: AdaptiveMode) => void;
-}) {
-  const badges: BadgeData = {
+function computeBadges(state: DashboardState): BadgeData {
+  return {
     projects: state.projects.length,
     opportunities: state.opportunities.length,
     clients: state.clients.length,
@@ -77,11 +70,22 @@ export function Sidebar({
     runs: state.runs.length,
     approvals: state.approvals.length,
   };
+}
 
+function SidebarContent({
+  state,
+  mode,
+  onModeChange,
+}: {
+  state: DashboardState;
+  mode: AdaptiveMode;
+  onModeChange: (mode: AdaptiveMode) => void;
+}) {
+  const badges = computeBadges(state);
   const systemHealthy = !state.error && !state.loading;
 
   return (
-    <aside className="hidden h-full w-[208px] shrink-0 flex-col border-r border-border/60 bg-surface lg:flex">
+    <div className="flex h-full flex-col">
       <div className="flex h-16 items-center gap-3 border-b border-border/60 px-5">
         <div className="grid h-9 w-9 place-items-center rounded-lg bg-foreground text-background shadow-[inset_0_-2px_0_0_rgba(0,0,0,0.2)]">
           <Box className="h-4 w-4" strokeWidth={2.5} />
@@ -146,7 +150,53 @@ export function Sidebar({
           {state.agents.length} agents · {state.runs.length} runs
         </div>
       </div>
+    </div>
+  );
+}
+
+export function Sidebar({
+  state,
+  mode,
+  onModeChange,
+}: {
+  state: DashboardState;
+  mode: AdaptiveMode;
+  onModeChange: (mode: AdaptiveMode) => void;
+}) {
+  return (
+    <aside className="hidden h-full w-[208px] shrink-0 border-r border-border/60 bg-surface lg:flex lg:flex-col">
+      <SidebarContent state={state} mode={mode} onModeChange={onModeChange} />
     </aside>
+  );
+}
+
+export function SidebarDrawer({
+  state,
+  mode,
+  open,
+  onOpenChange,
+  onModeChange,
+}: {
+  state: DashboardState;
+  mode: AdaptiveMode;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onModeChange: (mode: AdaptiveMode) => void;
+}) {
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="left" className="w-[260px] p-0" hideClose>
+        <SheetTitle className="sr-only">Navigation</SheetTitle>
+        <SidebarContent
+          state={state}
+          mode={mode}
+          onModeChange={(next) => {
+            onModeChange(next);
+            onOpenChange(false);
+          }}
+        />
+      </SheetContent>
+    </Sheet>
   );
 }
 

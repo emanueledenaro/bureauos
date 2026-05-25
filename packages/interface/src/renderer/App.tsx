@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Sidebar } from "./components/layout/Sidebar";
+import { Sidebar, SidebarDrawer } from "./components/layout/Sidebar";
 import { Header } from "./components/layout/Header";
 import { AgentLayer } from "./components/layout/AgentLayer";
 import { CoordinatorPanel } from "./components/coordinator/CoordinatorPanel";
+import { Sheet, SheetContent, SheetTitle } from "./components/ui/sheet";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { PortfolioView } from "./views/PortfolioView";
 import { TodayView } from "./views/TodayView";
@@ -36,6 +37,8 @@ export function App() {
   const { state, refresh } = useDashboard();
   const [mode, setMode] = useState<AdaptiveMode>("portfolio");
   const [modeTouched, setModeTouched] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [coordinatorOpen, setCoordinatorOpen] = useState(false);
 
   useEffect(() => {
     if (!modeTouched && !state.loading) {
@@ -109,8 +112,21 @@ export function App() {
     <TooltipProvider delayDuration={120}>
       <div className="flex h-screen overflow-hidden bg-background text-foreground">
         <Sidebar state={state} mode={mode} onModeChange={onModeChange} />
+        <SidebarDrawer
+          state={state}
+          mode={mode}
+          open={sidebarOpen}
+          onOpenChange={setSidebarOpen}
+          onModeChange={onModeChange}
+        />
         <div className="flex min-w-0 flex-1 flex-col">
-          <Header state={state} mode={mode} onModeChange={onModeChange} />
+          <Header
+            state={state}
+            mode={mode}
+            onModeChange={onModeChange}
+            onOpenSidebar={() => setSidebarOpen(true)}
+            onOpenCoordinator={() => setCoordinatorOpen(true)}
+          />
           <main className="flex-1 overflow-y-auto bg-background">
             <DashboardLayout
               mode={mode}
@@ -133,6 +149,12 @@ export function App() {
             </div>
           ) : null}
         </div>
+        <Sheet open={coordinatorOpen} onOpenChange={setCoordinatorOpen}>
+          <SheetContent side="right" className="w-[92vw] max-w-[420px] p-3">
+            <SheetTitle className="sr-only">Supreme Coordinator</SheetTitle>
+            <CoordinatorPanel onMessage={onCoordinatorMessage} />
+          </SheetContent>
+        </Sheet>
       </div>
     </TooltipProvider>
   );
@@ -188,12 +210,12 @@ function DashboardLayout({
 
   return (
     <div className="mx-auto flex max-w-[1640px] flex-col gap-4 p-4 lg:p-5">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
         <div className="flex min-w-0 flex-col gap-4">
           {mainView}
           <TimelineView events={state.audit} artifacts={state.artifacts} />
         </div>
-        <div className="flex min-w-0 flex-col gap-4">
+        <div className="hidden min-w-0 flex-col gap-4 xl:flex">
           <CoordinatorPanel onMessage={onCoordinatorMessage} />
           <PendingApprovalsView
             approvals={state.approvals}
