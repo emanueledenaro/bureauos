@@ -247,6 +247,25 @@ export class RunEngine {
     return updated;
   }
 
+  async patch(id: string, patch: FrontMatter): Promise<RunRecord> {
+    const path = this.file(id);
+    if (!(await fileExists(path))) throw new Error(`run not found: ${id}`);
+    const doc = await readDoc<RunRecord>(path);
+    const updated = {
+      ...doc.front,
+      ...patch,
+      updated: new Date().toISOString(),
+    } as RunRecord;
+    await writeDoc(path, updated, doc.body);
+    await this.deps.audit.append({
+      actor: updated.created_by,
+      action: "run.metadata_updated",
+      target: id,
+      result: "ok",
+    });
+    return updated;
+  }
+
   private async transition(record: RunRecord, status: RunStatus): Promise<RunRecord> {
     const updated: RunRecord = { ...record, status, updated: new Date().toISOString() };
     await this.persist(

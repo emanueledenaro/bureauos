@@ -28,6 +28,7 @@ export type ArtifactType =
   | "business-operating-report"
   | "project-health-report"
   | "repository-verification-report"
+  | "autonomy-retry-report"
   | "growth-review"
   | "brand-brief"
   | "offer-brief"

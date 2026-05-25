@@ -4,6 +4,7 @@ import {
   ApprovalRegistry,
   ArtifactStore,
   AuditLog,
+  AutonomousRetryService,
   BusinessReportService,
   CapabilityUseService,
   ClientAccountPlanService,
@@ -89,6 +90,7 @@ Registries:
 Runs and audit:
   run new --type <t> --scope <s> [--client slug] [--project slug]
   run list
+  autonomy retry-scan [--max-attempts n]    Retry failed/blocked runs within policy limits
   audit tail [-n N]
   audit search <q>
 
@@ -1082,6 +1084,49 @@ const handleAuditTail: Handler = async (args) => {
   }
 };
 
+const handleAutonomyRetryScan: Handler = async (args) => {
+  const flags = parseFlags(args, {
+    "max-attempts": { type: "number" },
+  });
+  if (typeof flags === "string") return err(`autonomy retry-scan: ${flags}`);
+  if (typeof flags["max-attempts"] === "number" && !Number.isFinite(flags["max-attempts"])) {
+    return err("autonomy retry-scan: --max-attempts must be a number");
+  }
+
+  const config = await loadWorkspaceConfig(process.cwd());
+  const approvals = new ApprovalRegistry(process.cwd());
+  const audit = new AuditLog(workspacePaths(process.cwd()).auditLog);
+  const artifacts = new ArtifactStore(process.cwd());
+  const policy = new PolicyEngine(config, approvals);
+  const runs = new RunEngine(process.cwd(), { audit, artifacts, policy });
+  const result = await new AutonomousRetryService(process.cwd(), {
+    runs,
+    audit,
+    artifacts,
+    policy,
+    coordinator: { audit, artifacts, policy },
+  }).scan({
+    maxAttempts:
+      typeof flags["max-attempts"] === "number"
+        ? flags["max-attempts"]
+        : config.limits.max_retries_per_task,
+  });
+
+  process.stdout.write(
+    `bureau: retry scan started ${result.triggered.length} retry run(s), escalated ${result.escalated.length}, skipped ${result.skipped.length}\n`,
+  );
+  if (result.report) process.stdout.write(`report: ${result.report.id}\n`);
+  for (const item of result.triggered) {
+    process.stdout.write(
+      `retry: ${item.originalRun.id} -> ${item.retryRun.id} attempt=${item.attempt}\n`,
+    );
+  }
+  for (const item of result.escalated) {
+    process.stdout.write(`escalated: ${item.run.id} attempts=${item.attempts}\n`);
+  }
+  return 0;
+};
+
 const handlePolicyExplain: Handler = async (args) => {
   const action = args[0];
   if (!action) return err("policy explain: missing <action>");
@@ -1512,6 +1557,7 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
   opportunity: { create: handleOpportunityCreate, list: handleOpportunityList },
   growth: { memory: handleGrowthMemory, review: handleGrowthReview },
   run: { new: handleRunNew, list: handleRunList },
+  autonomy: { "retry-scan": handleAutonomyRetryScan },
   report: { generate: handleReportGenerate },
   audit: {
     tail: handleAuditTail,

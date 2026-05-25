@@ -43,6 +43,7 @@ import { GrowthMemoryService } from "../growth/memory.js";
 import { GrowthReviewService } from "../growth/review.js";
 import { ProjectHealthReviewService } from "../autonomy/project-health.js";
 import { ProjectRepositoryVerificationService } from "../autonomy/repository-verification.js";
+import { AutonomousRetryService } from "../autonomy/retry.js";
 import { GitHubWebhookIngestionService } from "../github/webhook-ingestion.js";
 import { GitHubSignalTriggerService } from "../github/signal-triggers.js";
 import type { GitHubSignalClient } from "../github/signal-sync.js";
@@ -489,6 +490,31 @@ const ROUTES: Record<string, RouteHandler> = {
       ...(projectId ? { projectId } : {}),
       ...(typeof body.runId === "string" ? { runId: body.runId } : {}),
       ...(typeof body.staleDays === "number" ? { staleDays: body.staleDays } : {}),
+    });
+    ok(res, result, 201);
+  },
+  "GET /autonomy/retry-reports": async ({ res, options }) =>
+    ok(res, await deps(options).artifacts.list({ type: "autonomy-retry-report" })),
+  "POST /autonomy/retries/scan": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as {
+      maxAttempts?: number;
+    };
+    const d = deps(options);
+    const result = await new AutonomousRetryService(options.workspaceRoot, {
+      runs: d.runs,
+      artifacts: d.artifacts,
+      audit: d.audit,
+      policy: d.policy,
+      coordinator: {
+        artifacts: d.artifacts,
+        audit: d.audit,
+        policy: d.policy,
+      },
+    }).scan({
+      maxAttempts:
+        typeof body.maxAttempts === "number"
+          ? body.maxAttempts
+          : options.config.limits.max_retries_per_task,
     });
     ok(res, result, 201);
   },

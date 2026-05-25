@@ -10,6 +10,7 @@ import { GrowthReviewService } from "../growth/review.js";
 import type { GitHubSignalClient } from "../github/signal-sync.js";
 import { GitHubSignalTriggerService } from "../github/signal-triggers.js";
 import { OperationalSignalTriggerService } from "../autonomy/operational-triggers.js";
+import { AutonomousRetryService } from "../autonomy/retry.js";
 import { parseGitHubRepository } from "../github/repository-utils.js";
 
 /**
@@ -70,6 +71,12 @@ const TICKS: Array<Omit<TickJob, "last">> = [
     everyMs: 30 * 60 * 1000,
   },
   {
+    name: "autonomous_retry_scan",
+    type: "health_check",
+    scope: "retry failed or blocked autonomous runs within policy limits",
+    everyMs: 30 * 60 * 1000,
+  },
+  {
     name: "github_project_signal_sync",
     type: "health_check",
     scope: "sync GitHub signals for linked project repositories",
@@ -111,6 +118,10 @@ export class Scheduler {
         }
         if (job.name === "operational_signal_scan") {
           await this.scanOperationalSignals();
+          continue;
+        }
+        if (job.name === "autonomous_retry_scan") {
+          await this.scanAutonomousRetries();
           continue;
         }
         const run = await this.options.runs.start({
@@ -281,6 +292,26 @@ export class Scheduler {
     });
     this.log(
       `scheduler: operational_signal_scan triggered ${result.triggered.length} runs, skipped ${result.skipped.length}`,
+    );
+  }
+
+  private async scanAutonomousRetries(): Promise<void> {
+    if (!this.options.workspaceRoot || !this.options.coordinator) {
+      this.log("scheduler: autonomous_retry_scan skipped (coordinator not configured)");
+      return;
+    }
+
+    const result = await new AutonomousRetryService(this.options.workspaceRoot, {
+      runs: this.options.runs,
+      audit: this.options.coordinator.audit,
+      artifacts: this.options.coordinator.artifacts,
+      policy: this.options.coordinator.policy,
+      coordinator: this.options.coordinator,
+    }).scan({
+      maxAttempts: this.options.config.limits.max_retries_per_task,
+    });
+    this.log(
+      `scheduler: autonomous_retry_scan retried ${result.triggered.length} runs, escalated ${result.escalated.length}, skipped ${result.skipped.length}`,
     );
   }
 

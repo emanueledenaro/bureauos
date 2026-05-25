@@ -329,3 +329,5 @@ If BureauOS cannot proceed:
 - stop before unsafe action
 
 No autonomous run should silently fail.
+
+The runtime retry loop uses `limits.max_retries_per_task` as a hard boundary. Failed or blocked runs can be retried through `bureau autonomy retry-scan`, `POST /autonomy/retries/scan`, or the daemon retry scan. After the limit, BureauOS writes an `autonomy-retry-report` and escalates instead of looping.

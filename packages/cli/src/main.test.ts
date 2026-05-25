@@ -171,6 +171,45 @@ describe("bureau cli", () => {
     });
   });
 
+  it("runs the bounded autonomy retry scan from CLI", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+    await main([
+      "node",
+      "bureau",
+      "run",
+      "new",
+      "--type",
+      "bug",
+      "--scope",
+      "Fix booking regression",
+    ]);
+    const runsDir = join(dir, ".bureauos", "memory", "runs");
+    const runFile = (await readdir(runsDir)).find((file) => file.endsWith(".md"));
+    expect(runFile).toBeDefined();
+    const runPath = join(runsDir, runFile!);
+    const runDoc = await readFile(runPath, "utf8");
+    await writeFile(
+      runPath,
+      runDoc.replace("status: completed", "status: failed").replace(/completed: .*/, "completed: "),
+      "utf8",
+    );
+
+    const code = await main(["node", "bureau", "autonomy", "retry-scan", "--max-attempts", "2"]);
+
+    expect(code).toBe(0);
+    const artifactsDir = join(dir, ".bureauos", "memory", "artifacts");
+    const bodies = await Promise.all(
+      (await readdir(artifactsDir)).map((artifact) =>
+        readFile(join(artifactsDir, artifact), "utf8"),
+      ),
+    );
+    expect(bodies.some((body) => body.includes("# Autonomous Retry Report"))).toBe(true);
+    const patchedRun = await readFile(runPath, "utf8");
+    expect(patchedRun).toContain("retry_attempts: 1");
+    const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
+    expect(audit).toContain("autonomy.retry.started");
+  });
+
   it("prints client intelligence from real registries", async () => {
     await main(["node", "bureau", "init", "--name", "BOS"]);
     await main([

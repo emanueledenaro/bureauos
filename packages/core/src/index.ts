@@ -220,6 +220,16 @@ export type {
   SkippedOperationalSignal,
   TriggeredOperationalRun,
 } from "./autonomy/operational-triggers.js";
+export { AutonomousRetryService } from "./autonomy/retry.js";
+export type {
+  AutonomousRetryDeps,
+  AutonomousRetryInput,
+  AutonomousRetryResult,
+  AutonomousRetryStatus,
+  EscalatedAutonomousRetry,
+  SkippedAutonomousRetry,
+  TriggeredAutonomousRetry,
+} from "./autonomy/retry.js";
 export { ProjectHealthReviewService } from "./autonomy/project-health.js";
 export type {
   ProjectHealthItem,
