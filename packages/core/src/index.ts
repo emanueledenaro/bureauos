@@ -170,7 +170,20 @@ export type {
   BusinessMetrics,
   BusinessReportDeps,
   BusinessReportResult,
+  ProjectPortfolioItem,
+  ProjectPortfolioRisk,
 } from "./reports/business.js";
+
+// Growth and revenue memory
+export { GrowthMemoryService } from "./growth/memory.js";
+export type {
+  GrowthMemoryDeps,
+  GrowthMemorySection,
+  GrowthMemorySectionId,
+  GrowthMemoryStatus,
+  GrowthMemorySummary,
+  GrowthMemoryUpdateInput,
+} from "./growth/memory.js";
 
 // Always-on operational signals
 export { OperationalSignalTriggerService } from "./autonomy/operational-triggers.js";

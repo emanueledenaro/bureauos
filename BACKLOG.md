@@ -292,7 +292,7 @@ Goal: real multi-project support with isolated project memory and project-manage
 
 Goal: brand, offers, content, leads, pricing, proposals, conversion, client success — all with draft-first defaults.
 
-- [ ] Wire brand memory, offer memory, channels memory.
+- [x] Wire brand memory, offer memory, channels memory.
 - [ ] Implement the content pipeline (draft only).
 - [ ] Implement the lead and opportunity pipeline.
 - [ ] Implement campaign briefs and conversion audits as artifacts.
@@ -300,7 +300,7 @@ Goal: brand, offers, content, leads, pricing, proposals, conversion, client succ
 - [ ] Implement compliance reviews and approval records for any external commitment.
 - [ ] Implement client account plans and client success status reports.
 - [x] Generate executive and business operating reports from real registries.
-- [ ] Wire all of this into the Growth and Revenue tab of the interface.
+- [ ] Wire all of this into the Growth and Revenue tab of the interface. (brand/offers/channels memory is wired)
 
 ## Phase 7 — Always-On Daemon (v0.7)
 

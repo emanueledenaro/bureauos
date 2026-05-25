@@ -85,8 +85,9 @@ Every major capability described in the docs must become one of:
 
 | Documented capability | Runtime surface | Status |
 | --- | --- | --- |
-| Brand memory | memory files | designed |
-| Offer memory | memory files | designed |
+| Brand memory | `GrowthMemoryService`, `BRAND.md`, `/growth/memory`, `bureau growth memory`, Electron Growth tab | implemented |
+| Offer memory | `GrowthMemoryService`, `OFFERS.md`, `/growth/memory`, `bureau growth memory`, Electron Growth tab | implemented |
+| Channel memory | `GrowthMemoryService`, `CHANNELS.md`, `/growth/memory`, `bureau growth memory`, Electron Growth tab | implemented |
 | Content drafts | artifacts | partial |
 | Social drafts | `social-post-brief` artifact | partial |
 | Ad campaign drafts | `ad-campaign-brief` artifact | partial |

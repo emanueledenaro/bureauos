@@ -198,6 +198,15 @@ Recommended memory files:
   CONVERSION_NOTES.md
 ```
 
+Implemented runtime path:
+
+- `GrowthMemoryService` reads and updates `BRAND.md`, `OFFERS.md`, and `CHANNELS.md`
+- `GET /growth/memory` exposes the current growth memory summary to Electron
+- `POST /growth/memory` updates brand, offer, and channel memory with audit
+- `bureau growth memory` shows readiness and section previews
+- `bureau growth memory set --brand ... --offers ... --channels ...` writes the first operating memory
+- every write emits `growth.memory.updated`
+
 ## Public Action Policy
 
 Growth agents may prepare public-facing work, but publication should be policy controlled.

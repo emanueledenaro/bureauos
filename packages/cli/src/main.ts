@@ -11,6 +11,7 @@ import {
   GitHubIssuePublishService,
   GitHubSignalTriggerService,
   GitHubSignalSyncService,
+  GrowthMemoryService,
   InitError,
   OpportunityRegistry,
   PolicyEngine,
@@ -66,6 +67,8 @@ Registries:
   project list
   opportunity create --title <t> --source <s> --client <slug> [--value v] [--margin m]
   opportunity list
+  growth memory                            Show brand, offer, and channel memory
+  growth memory set [--brand t] [--offers t] [--channels t]
 
 Runs and audit:
   run new --type <t> --scope <s> [--client slug] [--project slug]
@@ -645,6 +648,50 @@ const handleReportGenerate: Handler = async () => {
   return 0;
 };
 
+const handleGrowthMemory: Handler = async (args) => {
+  const subcommand = args[0] ?? "show";
+  const service = new GrowthMemoryService(process.cwd());
+  if (subcommand === "show") {
+    const memory = await service.get();
+    process.stdout.write(`growth memory: ${memory.ready ? "ready" : "incomplete"}\n`);
+    for (const section of memory.sections) {
+      process.stdout.write(
+        `${section.id.padEnd(9)}  ${section.status.padEnd(10)}  ${section.path}  ${section.preview || "(empty)"}\n`,
+      );
+    }
+    return 0;
+  }
+
+  if (subcommand === "set") {
+    const flags = parseFlags(args.slice(1), {
+      brand: { type: "string" },
+      offers: { type: "string" },
+      channels: { type: "string" },
+    });
+    if (typeof flags === "string") return err(`growth memory set: ${flags}`);
+    if (
+      typeof flags.brand !== "string" &&
+      typeof flags.offers !== "string" &&
+      typeof flags.channels !== "string"
+    ) {
+      return err("growth memory set: provide --brand, --offers, or --channels");
+    }
+    const memory = await service.update({
+      ...(typeof flags.brand === "string" ? { brand: flags.brand } : {}),
+      ...(typeof flags.offers === "string" ? { offers: flags.offers } : {}),
+      ...(typeof flags.channels === "string" ? { channels: flags.channels } : {}),
+      actor: "cli",
+    });
+    process.stdout.write(`growth memory: ${memory.ready ? "ready" : "incomplete"}\n`);
+    if (memory.missing_sections.length > 0) {
+      process.stdout.write(`missing: ${memory.missing_sections.join(", ")}\n`);
+    }
+    return 0;
+  }
+
+  return err(`growth memory: unknown subcommand "${subcommand}"`);
+};
+
 const handleGitHubDraftIssues: Handler = async (args) => {
   const flags = parseFlags(args, {
     project: { type: "string", alias: "p" },
@@ -972,6 +1019,7 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
     list: handleProjectList,
   },
   opportunity: { create: handleOpportunityCreate, list: handleOpportunityList },
+  growth: { memory: handleGrowthMemory },
   run: { new: handleRunNew, list: handleRunList },
   report: { generate: handleReportGenerate },
   audit: {

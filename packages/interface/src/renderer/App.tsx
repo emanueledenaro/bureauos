@@ -12,6 +12,7 @@ import {
   type CompanyPulse,
   type CoordinatorChatResult,
   type CoordinatorMessageRecord,
+  type GrowthMemorySummary,
   type OpportunityRecord,
   type ProviderAuthAuthorization,
   type ProviderConnection,
@@ -77,6 +78,7 @@ interface DashboardState {
   projects: ProjectRecord[];
   projectOwnership: ProjectOwnershipRecord[];
   opportunities: OpportunityRecord[];
+  growthMemory?: GrowthMemorySummary;
   approvals: ApprovalRecord[];
   resolvedApprovals: ApprovalRecord[];
   runs: RunRecord[];
@@ -175,6 +177,7 @@ function useDashboard(): { state: DashboardState; refresh: () => Promise<void> }
         projects,
         projectOwnership,
         opportunities,
+        growthMemory,
         approvals,
         resolvedApprovals,
         runs,
@@ -191,6 +194,7 @@ function useDashboard(): { state: DashboardState; refresh: () => Promise<void> }
         Api.projects(),
         Api.projectOwnership(),
         Api.opportunities(),
+        Api.growthMemory(),
         Api.approvals(),
         Api.approvalsResolved(),
         Api.runs(),
@@ -208,6 +212,7 @@ function useDashboard(): { state: DashboardState; refresh: () => Promise<void> }
         projects,
         projectOwnership,
         opportunities,
+        growthMemory,
         approvals,
         resolvedApprovals,
         runs,
@@ -1788,6 +1793,9 @@ function GrowthWorkspace({ state }: { state: DashboardState }) {
       artifact.type,
     ),
   );
+  const growthMemory = state.growthMemory;
+  const configuredMemory =
+    growthMemory?.sections.filter((section) => section.status === "configured").length ?? 0;
   return (
     <SectionShell
       title="Growth"
@@ -1809,6 +1817,39 @@ function GrowthWorkspace({ state }: { state: DashboardState }) {
           value={String(state.approvals.length)}
           detail="External action gates"
         />
+      </div>
+      <div className="mt-5 grid grid-cols-3 gap-3">
+        {(growthMemory?.sections ?? []).map((section) => (
+          <div key={section.id} className="rounded-md border border-neutral-800 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[11px] font-semibold text-neutral-50">{section.title}</div>
+              <span
+                className={classes(
+                  "rounded-full border px-2 py-0.5 text-[10px]",
+                  section.status === "configured"
+                    ? "border-emerald-900 bg-emerald-950 text-emerald-400"
+                    : "border-neutral-800 bg-neutral-900 text-neutral-500",
+                )}
+              >
+                {formatLabel(section.status)}
+              </span>
+            </div>
+            <div className="mt-2 text-[10px] text-neutral-500">{section.path}</div>
+            <p className="mt-3 min-h-10 text-[10px] leading-relaxed text-neutral-400">
+              {section.preview || "No memory configured yet."}
+            </p>
+          </div>
+        ))}
+        {!growthMemory ? (
+          <EmptyState
+            title="Growth memory unavailable"
+            description="The Operating Room is waiting for the local API growth memory endpoint."
+          />
+        ) : null}
+      </div>
+      <div className="mt-3 text-[10px] text-neutral-500">
+        Growth memory {growthMemory?.ready ? "ready" : "incomplete"} · {configuredMemory}/3 sections
+        configured
       </div>
       <div className="mt-5 grid grid-cols-3 gap-3">
         {growthArtifacts.slice(0, 6).map((artifact) => (

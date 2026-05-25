@@ -142,6 +142,21 @@ export interface OpportunityRecord {
   created?: string;
   updated?: string;
 }
+export interface GrowthMemorySection {
+  id: "brand" | "offers" | "channels";
+  title: string;
+  path: string;
+  status: "empty" | "configured";
+  updated: string;
+  body: string;
+  preview: string;
+}
+export interface GrowthMemorySummary {
+  generated_at: string;
+  ready: boolean;
+  missing_sections: string[];
+  sections: GrowthMemorySection[];
+}
 export interface ApprovalRecord {
   id: string;
   action: string;
@@ -421,6 +436,12 @@ export const Api = {
   projects: () => api<ProjectRecord[]>("/projects"),
   projectOwnership: () => api<ProjectOwnershipRecord[]>("/project-ownership"),
   opportunities: () => api<OpportunityRecord[]>("/opportunities"),
+  growthMemory: () => api<GrowthMemorySummary>("/growth/memory"),
+  updateGrowthMemory: (input: { brand?: string; offers?: string; channels?: string }) =>
+    api<GrowthMemorySummary>("/growth/memory", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   approvals: () => api<ApprovalRecord[]>("/approvals"),
   approvalsResolved: () => api<ApprovalRecord[]>("/approvals/resolved"),
   runs: () => api<RunRecord[]>("/runs"),

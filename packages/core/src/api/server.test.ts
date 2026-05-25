@@ -165,6 +165,37 @@ describe("API server", () => {
     expect(JSON.stringify(body)).not.toContain("must-not-leak");
   });
 
+  it("reads and updates growth memory for the ElectronJS growth page", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const empty = await fetch(`${server.url}/growth/memory`);
+    expect(empty.status).toBe(200);
+    const emptyBody = (await empty.json()) as {
+      ready: boolean;
+      missing_sections: string[];
+      sections: Array<{ path: string }>;
+    };
+    expect(emptyBody.ready).toBe(false);
+    expect(emptyBody.missing_sections).toEqual(expect.arrayContaining(["brand", "offers"]));
+    expect(JSON.stringify(emptyBody)).not.toContain(dir);
+
+    const update = await fetch(`${server.url}/growth/memory`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        brand: "BureauOS helps owner-led companies run delivery and growth.",
+        offers: "AAAS setup and operating room implementation.",
+        channels: "GitHub, X, LinkedIn.",
+      }),
+    });
+    expect(update.status).toBe(201);
+    const updated = (await update.json()) as { ready: boolean };
+    expect(updated.ready).toBe(true);
+
+    const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(audit).toContain("growth.memory.updated");
+  });
+
   it("persists coordinator message history for the ElectronJS chat", async () => {
     server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
 

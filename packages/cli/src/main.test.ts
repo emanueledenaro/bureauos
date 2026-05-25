@@ -126,6 +126,33 @@ describe("bureau cli", () => {
     expect(bodies.some((body) => body.includes("Cross-Project Executive Report"))).toBe(true);
   });
 
+  it("reads and updates growth memory from CLI", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+
+    expect(await main(["node", "bureau", "growth", "memory"])).toBe(0);
+    const code = await main([
+      "node",
+      "bureau",
+      "growth",
+      "memory",
+      "set",
+      "--brand",
+      "BureauOS is the AI operating system for owner-led software companies.",
+      "--offers",
+      "AAAS setup and autonomous delivery operations.",
+      "--channels",
+      "GitHub, X, LinkedIn.",
+    ]);
+
+    expect(code).toBe(0);
+    const brand = await readFile(join(dir, ".bureauos", "memory", "BRAND.md"), "utf8");
+    expect(brand).toContain("status: configured");
+    expect(brand).toContain("owner-led software companies");
+
+    const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
+    expect(audit).toContain("growth.memory.updated");
+  });
+
   it("generates GitHub issue drafts from CLI", async () => {
     await main(["node", "bureau", "init", "--name", "BOS"]);
     await main([

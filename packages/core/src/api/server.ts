@@ -28,6 +28,7 @@ import {
   type GitHubIssuePublishClient,
 } from "../github/issue-publisher.js";
 import { BusinessReportService } from "../reports/business.js";
+import { GrowthMemoryService } from "../growth/memory.js";
 import { GitHubWebhookIngestionService } from "../github/webhook-ingestion.js";
 import { GitHubSignalTriggerService } from "../github/signal-triggers.js";
 import {
@@ -435,6 +436,36 @@ const ROUTES: Record<string, RouteHandler> = {
 
   "GET /providers": async ({ res, options }) => {
     ok(res, await providerStatuses(options.workspaceRoot, options.config));
+  },
+
+  "GET /growth/memory": async ({ res, options }) => {
+    ok(res, await new GrowthMemoryService(options.workspaceRoot).get());
+  },
+
+  "POST /growth/memory": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as {
+      brand?: string;
+      offers?: string;
+      channels?: string;
+    };
+    if (
+      typeof body.brand !== "string" &&
+      typeof body.offers !== "string" &&
+      typeof body.channels !== "string"
+    ) {
+      ok(res, { error: "brand, offers, or channels required" }, 400);
+      return;
+    }
+    ok(
+      res,
+      await new GrowthMemoryService(options.workspaceRoot).update({
+        ...(typeof body.brand === "string" ? { brand: body.brand } : {}),
+        ...(typeof body.offers === "string" ? { offers: body.offers } : {}),
+        ...(typeof body.channels === "string" ? { channels: body.channels } : {}),
+        actor: "owner",
+      }),
+      201,
+    );
   },
 
   "GET /provider/connectors": ({ res, options }) => {
