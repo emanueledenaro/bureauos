@@ -286,6 +286,16 @@ export interface ArtifactRecord {
   type: string;
   status: string;
   created?: string;
+  project_count?: number;
+  missing_count?: number;
+  unsupported_count?: number;
+  unverified_count?: number;
+  verified_count?: number;
+  attention_count?: number;
+  candidate_count?: number;
+  max_attempts?: number;
+  retry_count?: number;
+  escalation_count?: number;
   repository?: string;
   github_event?: string;
   github_action?: string;
@@ -408,6 +418,50 @@ export interface GitHubIssuePublishResult {
   approval?: ApprovalRecord;
   created: GitHubCreatedIssue[];
   source_artifacts: string[];
+  report?: ArtifactRecord;
+}
+export interface RepositoryVerificationItem {
+  project: ProjectRecord;
+  client?: ClientRecord;
+  repository: string;
+  parsed_repository: string;
+  status: "missing" | "unsupported" | "unverified" | "verified" | "attention";
+  reasons: string[];
+  issues_count: number;
+  pull_requests_count: number;
+  checks_count: number;
+  failing_checks_count: number;
+  stale_issues_count: number;
+  stale_pull_requests_count: number;
+  signal_report_id: string;
+}
+export interface ProjectRepositoryVerificationResult {
+  generated_at: string;
+  report: ArtifactRecord;
+  projects: RepositoryVerificationItem[];
+}
+export interface AutonomousRetryResult {
+  triggered: Array<{
+    originalRun: RunRecord;
+    retryRun: RunRecord;
+    attempt: number;
+    triggerSource: string;
+  }>;
+  escalated: Array<{
+    run: RunRecord;
+    attempts: number;
+    reason: "max_attempts_reached";
+  }>;
+  skipped: Array<{
+    run: RunRecord;
+    reason:
+      | "duplicate"
+      | "policy_blocked"
+      | "already_escalated"
+      | "already_recovered"
+      | "retry_child";
+    triggerSource?: string;
+  }>;
   report?: ArtifactRecord;
 }
 export interface AgentHandoff {
@@ -569,6 +623,16 @@ export const Api = {
     }),
   githubCreateIssues: (input: { projectSlug: string; owner: string; repo: string }) =>
     api<GitHubIssuePublishResult>("/github/create-issues", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  verifyProjectRepositories: (input: { projectSlug?: string; staleDays?: number } = {}) =>
+    api<ProjectRepositoryVerificationResult>("/project-repositories/verify", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  autonomyRetryScan: (input: { maxAttempts?: number } = {}) =>
+    api<AutonomousRetryResult>("/autonomy/retries/scan", {
       method: "POST",
       body: JSON.stringify(input),
     }),
