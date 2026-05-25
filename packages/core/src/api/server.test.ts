@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createHmac } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -328,6 +328,74 @@ describe("API server", () => {
 
     const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(audit).toContain("client.account_plan.generated");
+  });
+
+  it("generates client success reports and scans memory follow-ups through the local API", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    await fetch(`${server.url}/coordinator/intake`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        clientName: "Pizzeria Aurora",
+        message: "Ho parlato con una pizzeria: vuole sito con prenotazioni.",
+        expectedValue: 4500,
+        expectedMargin: 40,
+      }),
+    });
+    const clientPath = join(
+      workspacePaths(dir).clientsDir,
+      "pizzeria-aurora",
+      "CLIENT.md",
+    );
+    const clientDoc = await readFile(clientPath, "utf8");
+    await writeFile(
+      clientPath,
+      clientDoc.replace(/^next_follow_up_at:.*$/m, "next_follow_up_at: 2026-05-24T09:00:00.000Z"),
+      "utf8",
+    );
+
+    const generated = await fetch(`${server.url}/client-success-status/generate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ clientSlug: "pizzeria-aurora" }),
+    });
+
+    expect(generated.status).toBe(201);
+    const result = (await generated.json()) as {
+      reports: Array<{ type: string; client_name: string; follow_up_due: boolean }>;
+    };
+    expect(result.reports).toEqual([
+      expect.objectContaining({
+        type: "client-success-status-report",
+        client_name: "Pizzeria Aurora",
+        follow_up_due: true,
+      }),
+    ]);
+
+    const scan = await fetch(`${server.url}/autonomy/memory-triggers/scan`, {
+      method: "POST",
+    });
+    expect(scan.status).toBe(201);
+    const scanResult = (await scan.json()) as {
+      triggered: Array<{ kind: string; artifactIds: string[] }>;
+    };
+    expect(scanResult.triggered).toHaveLength(1);
+    expect(scanResult.triggered[0]).toMatchObject({ kind: "client_follow_up_due" });
+    expect(scanResult.triggered[0]!.artifactIds.length).toBeGreaterThan(0);
+
+    const listed = await fetch(`${server.url}/client-success-status-reports`);
+    expect(listed.status).toBe(200);
+    const reports = (await listed.json()) as Array<{ type: string }>;
+    expect(reports).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "client-success-status-report" }),
+      ]),
+    );
+
+    const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(audit).toContain("client.success_status.generated");
+    expect(audit).toContain("memory.trigger.run_started");
   });
 
   it("generates project health and growth reviews for the ElectronJS operating room", async () => {

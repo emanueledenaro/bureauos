@@ -306,7 +306,7 @@ Goal: brand, offers, content, leads, pricing, proposals, conversion, client succ
 - [x] Implement the pricing brief and proposal brief flows.
 - [ ] Implement compliance reviews and approval records for any external commitment.
 - [x] Implement client account plans.
-- [ ] Implement client success status reports.
+- [x] Implement client success status reports.
 - [x] Generate executive and business operating reports from real registries.
 - [ ] Wire all of this into the Growth and Revenue tab of the interface. (brand/offers/channels memory, content pipeline action, and revenue pipeline action are wired)
 
@@ -323,7 +323,7 @@ Goal: scheduler and event watchers so BureauOS works while the owner is offline.
   - [x] Blocked project/run threshold.
   - [x] Unanswered client message threshold.
   - [x] Empty content pipeline threshold.
-- [ ] Implement memory triggers (follow-ups due).
+- [x] Implement memory triggers (follow-ups due).
 - [x] Implement event ingestion from the GitHub adapter.
 - [x] Implement signal classification for GitHub issue, PR, and check-run events.
 - [ ] Implement bounded retries with policy escalation.

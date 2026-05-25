@@ -10,6 +10,7 @@ import { GrowthReviewService } from "../growth/review.js";
 import type { GitHubSignalClient } from "../github/signal-sync.js";
 import { GitHubSignalTriggerService } from "../github/signal-triggers.js";
 import { OperationalSignalTriggerService } from "../autonomy/operational-triggers.js";
+import { MemoryTriggerService } from "../autonomy/memory-triggers.js";
 import { AutonomousRetryService } from "../autonomy/retry.js";
 import { parseGitHubRepository } from "../github/repository-utils.js";
 
@@ -71,6 +72,12 @@ const TICKS: Array<Omit<TickJob, "last">> = [
     everyMs: 30 * 60 * 1000,
   },
   {
+    name: "memory_trigger_scan",
+    type: "client_success",
+    scope: "scan durable memory for due follow-ups",
+    everyMs: 30 * 60 * 1000,
+  },
+  {
     name: "autonomous_retry_scan",
     type: "health_check",
     scope: "retry failed or blocked autonomous runs within policy limits",
@@ -118,6 +125,10 @@ export class Scheduler {
         }
         if (job.name === "operational_signal_scan") {
           await this.scanOperationalSignals();
+          continue;
+        }
+        if (job.name === "memory_trigger_scan") {
+          await this.scanMemoryTriggers(now);
           continue;
         }
         if (job.name === "autonomous_retry_scan") {
@@ -312,6 +323,24 @@ export class Scheduler {
     });
     this.log(
       `scheduler: autonomous_retry_scan retried ${result.triggered.length} runs, escalated ${result.escalated.length}, skipped ${result.skipped.length}`,
+    );
+  }
+
+  private async scanMemoryTriggers(now: number): Promise<void> {
+    if (!this.options.workspaceRoot || !this.options.coordinator) {
+      this.log("scheduler: memory_trigger_scan skipped (coordinator not configured)");
+      return;
+    }
+
+    const result = await new MemoryTriggerService(this.options.workspaceRoot, {
+      runs: this.options.runs,
+      audit: this.options.coordinator.audit,
+      artifacts: this.options.coordinator.artifacts,
+      policy: this.options.coordinator.policy,
+      coordinator: this.options.coordinator,
+    }).scan({ now: new Date(now) });
+    this.log(
+      `scheduler: memory_trigger_scan triggered ${result.triggered.length} runs, skipped ${result.skipped.length}`,
     );
   }
 

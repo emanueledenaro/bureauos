@@ -10,6 +10,7 @@ import {
   ClientAccountPlanService,
   ClientIntelligenceService,
   ClientRegistry,
+  ClientSuccessStatusService,
   ConfigError,
   CoordinatorIntakeService,
   DaemonStateStore,
@@ -23,6 +24,7 @@ import {
   GrowthMemoryService,
   GrowthReviewService,
   InitError,
+  MemoryTriggerService,
   OpportunityRegistry,
   PolicyEngine,
   ProjectDispatchService,
@@ -77,6 +79,7 @@ Registries:
   client list
   client intelligence                       Show value, delivery, and relationship memory per client
   client account-plan [--client slug]       Generate client account plan artifacts from intelligence
+  client success-status [--client slug]     Generate client-success status reports and draft follow-ups
   project create --name <n> --client <slug> [--status s] [--repo url] [--stack s] [--manager-agent id]
   project dispatch --project <slug> [--type feature] [--scope s]
   project health [--project slug]           Generate project health review artifacts
@@ -96,6 +99,7 @@ Registries:
 Runs and audit:
   run new --type <t> --scope <s> [--client slug] [--project slug]
   run list
+  autonomy memory-scan                      Start due follow-up runs from durable memory
   autonomy retry-scan [--max-attempts n]    Retry failed/blocked runs within policy limits
   audit tail [-n N]
   audit search <q>
@@ -477,6 +481,33 @@ const handleClientAccountPlan: Handler = async (args) => {
       `${plan.id}  ${String(plan.client_name ?? plan.client_id).padEnd(24)}  score=${String(
         plan.value_score ?? "unknown",
       ).padEnd(7)}  risk=${String(plan.risk ?? "unknown")}\n`,
+    );
+  }
+  return 0;
+};
+
+const handleClientSuccessStatus: Handler = async (args) => {
+  const flags = parseFlags(args, {
+    client: { type: "string", alias: "c" },
+    run: { type: "string" },
+  });
+  if (typeof flags === "string") return err(`client success-status: ${flags}`);
+  let clientId: string | undefined;
+  if (typeof flags.client === "string") {
+    const client = await new ClientRegistry(process.cwd()).get(flags.client);
+    if (!client) return err(`client success-status: client "${flags.client}" not found`);
+    clientId = client.id;
+  }
+  const result = await new ClientSuccessStatusService(process.cwd()).generate({
+    ...(clientId ? { clientId } : {}),
+    ...(typeof flags.run === "string" ? { runId: flags.run } : {}),
+  });
+  process.stdout.write(`bureau: generated ${result.reports.length} client success report(s)\n`);
+  for (const report of result.reports) {
+    process.stdout.write(
+      `${report.id}  ${String(report.client_name ?? report.client_id).padEnd(24)}  risk=${String(
+        report.risk ?? "unknown",
+      ).padEnd(14)}  follow_up_due=${String(report.follow_up_due ?? "unknown")}\n`,
     );
   }
   return 0;
@@ -1208,6 +1239,35 @@ const handleAutonomyRetryScan: Handler = async (args) => {
   return 0;
 };
 
+const handleAutonomyMemoryScan: Handler = async () => {
+  const config = await loadWorkspaceConfig(process.cwd());
+  const approvals = new ApprovalRegistry(process.cwd());
+  const audit = new AuditLog(workspacePaths(process.cwd()).auditLog);
+  const artifacts = new ArtifactStore(process.cwd());
+  const policy = new PolicyEngine(config, approvals);
+  const runs = new RunEngine(process.cwd(), { audit, artifacts, policy });
+  const result = await new MemoryTriggerService(process.cwd(), {
+    runs,
+    audit,
+    artifacts,
+    policy,
+    coordinator: { audit, artifacts, policy },
+  }).scan();
+
+  process.stdout.write(
+    `bureau: memory scan started ${result.triggered.length} run(s), skipped ${result.skipped.length}\n`,
+  );
+  for (const item of result.triggered) {
+    process.stdout.write(
+      `memory: ${item.kind} -> ${item.run.id} artifacts=${item.artifactIds.length}\n`,
+    );
+  }
+  for (const item of result.skipped) {
+    process.stdout.write(`skipped: ${item.kind} ${item.reason}\n`);
+  }
+  return 0;
+};
+
 const handlePolicyExplain: Handler = async (args) => {
   const action = args[0];
   if (!action) return err("policy explain: missing <action>");
@@ -1627,6 +1687,7 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
     list: handleClientList,
     intelligence: handleClientIntelligence,
     "account-plan": handleClientAccountPlan,
+    "success-status": handleClientSuccessStatus,
   },
   project: {
     create: handleProjectCreate,
@@ -1639,7 +1700,7 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
   revenue: { pipeline: handleRevenuePipeline },
   growth: { memory: handleGrowthMemory, content: handleGrowthContent, review: handleGrowthReview },
   run: { new: handleRunNew, list: handleRunList },
-  autonomy: { "retry-scan": handleAutonomyRetryScan },
+  autonomy: { "memory-scan": handleAutonomyMemoryScan, "retry-scan": handleAutonomyRetryScan },
   report: { generate: handleReportGenerate },
   audit: {
     tail: handleAuditTail,

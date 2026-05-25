@@ -219,6 +219,50 @@ describe("Scheduler", () => {
     expect(accountReviewRun).toBeDefined();
   });
 
+  it("starts memory-due follow-up runs during daemon ticks", async () => {
+    const config = defaultConfig("freelancer");
+    const approvals = new ApprovalRegistry(dir);
+    const policy = new PolicyEngine(config, approvals);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const runs = new RunEngine(dir, { audit, artifacts, policy });
+    const client = await new ClientRegistry(dir).create({
+      name: "Miraglia Pizza",
+      status: "active",
+      industry: "food_and_beverage",
+    });
+    const clientPath = join(workspacePaths(dir).clientsDir, client.slug, "CLIENT.md");
+    const clientDoc = await readDoc<ClientRecord>(clientPath);
+    await writeDoc(
+      clientPath,
+      { ...clientDoc.front, next_follow_up_at: "2026-05-24T09:00:00.000Z" },
+      clientDoc.body,
+    );
+    const lines: string[] = [];
+    const scheduler = new Scheduler({
+      config,
+      runs,
+      workspaceRoot: dir,
+      coordinator: { audit, artifacts, policy },
+      logger: (message) => lines.push(message),
+    });
+
+    await scheduler.tick(new Date("2026-05-25T10:00:00.000Z").getTime());
+
+    const memoryRuns = (await runs.list()).filter((run) => run.trigger_type === "memory_due");
+    expect(memoryRuns).toHaveLength(1);
+    expect(memoryRuns[0]).toMatchObject({
+      type: "client_success",
+      client_id: client.id,
+    });
+    const statusReports = await artifacts.list({ type: "client-success-status-report" });
+    expect(statusReports.filter((report) => report.client_id === client.id)).toHaveLength(1);
+    expect(lines.some((line) => line.includes("memory_trigger_scan triggered 1"))).toBe(true);
+
+    const log = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(log).toContain("memory.trigger.run_started");
+  });
+
   it("syncs GitHub signals for linked project repositories during daemon ticks", async () => {
     const config = defaultConfig("freelancer");
     const approvals = new ApprovalRegistry(dir);

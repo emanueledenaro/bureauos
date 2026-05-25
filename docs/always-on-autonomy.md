@@ -275,6 +275,12 @@ Examples:
 - re-check a bug after deployment
 - prepare release notes on Friday
 
+Implemented memory-due scans:
+
+- `client_follow_up_due`
+
+The scheduler and `bureau autonomy memory-scan` read durable client memory, find due `next_follow_up_at` values, and start idempotent `memory_due` client-success runs. Each run creates a `client-success-status-report` with account context and a draft follow-up. Sending the message remains approval-gated.
+
 ## Autonomy Classes
 
 ### Safe Autonomous Work

@@ -80,6 +80,12 @@ export type {
   ClientAccountPlanInput,
   ClientAccountPlanResult,
 } from "./clients/account-plans.js";
+export { ClientSuccessStatusService } from "./clients/success-status.js";
+export type {
+  ClientSuccessStatusDeps,
+  ClientSuccessStatusInput,
+  ClientSuccessStatusResult,
+} from "./clients/success-status.js";
 
 // Memory helpers
 export { appendDailyNote } from "./memory/daily.js";
@@ -237,6 +243,15 @@ export type {
   SkippedOperationalSignal,
   TriggeredOperationalRun,
 } from "./autonomy/operational-triggers.js";
+export { MemoryTriggerService } from "./autonomy/memory-triggers.js";
+export type {
+  MemoryTriggerDeps,
+  MemoryTriggerInput,
+  MemoryTriggerKind,
+  MemoryTriggerResult,
+  SkippedMemoryTrigger,
+  TriggeredMemoryRun,
+} from "./autonomy/memory-triggers.js";
 export { AutonomousRetryService } from "./autonomy/retry.js";
 export type {
   AutonomousRetryDeps,

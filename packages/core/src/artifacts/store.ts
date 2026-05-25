@@ -48,6 +48,7 @@ export type ArtifactType =
   | "repository-provisioning-report"
   | "capability-audit"
   | "client-account-plan"
+  | "client-success-status-report"
   | "github-issue-draft"
   | "github-issue-publish-report"
   | "github-pr-publish-report"

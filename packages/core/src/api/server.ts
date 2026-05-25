@@ -39,6 +39,7 @@ import {
 import { BusinessReportService } from "../reports/business.js";
 import { ClientIntelligenceService } from "../clients/intelligence.js";
 import { ClientAccountPlanService } from "../clients/account-plans.js";
+import { ClientSuccessStatusService } from "../clients/success-status.js";
 import { GrowthMemoryService } from "../growth/memory.js";
 import { GrowthReviewService } from "../growth/review.js";
 import { GrowthContentPipelineService } from "../growth/content-pipeline.js";
@@ -46,6 +47,7 @@ import { RevenuePipelineService } from "../revenue/pipeline.js";
 import { ProjectHealthReviewService } from "../autonomy/project-health.js";
 import { ProjectRepositoryVerificationService } from "../autonomy/repository-verification.js";
 import { AutonomousRetryService } from "../autonomy/retry.js";
+import { MemoryTriggerService } from "../autonomy/memory-triggers.js";
 import { GitHubWebhookIngestionService } from "../github/webhook-ingestion.js";
 import { GitHubSignalTriggerService } from "../github/signal-triggers.js";
 import type { GitHubSignalClient } from "../github/signal-sync.js";
@@ -433,6 +435,29 @@ const ROUTES: Record<string, RouteHandler> = {
     });
     ok(res, result, 201);
   },
+  "GET /client-success-status-reports": async ({ res, options }) =>
+    ok(res, await deps(options).artifacts.list({ type: "client-success-status-report" })),
+  "POST /client-success-status/generate": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as {
+      clientId?: string;
+      clientSlug?: string;
+      runId?: string;
+    };
+    let clientId = typeof body.clientId === "string" ? body.clientId : undefined;
+    if (!clientId && typeof body.clientSlug === "string") {
+      const client = await deps(options).clients.get(body.clientSlug);
+      if (!client) {
+        ok(res, { error: "client not found" }, 404);
+        return;
+      }
+      clientId = client.id;
+    }
+    const result = await new ClientSuccessStatusService(options.workspaceRoot).generate({
+      ...(clientId ? { clientId } : {}),
+      ...(typeof body.runId === "string" ? { runId: body.runId } : {}),
+    });
+    ok(res, result, 201);
+  },
   "GET /projects": async ({ res, options }) => ok(res, await deps(options).projects.list()),
   "GET /project-ownership": async ({ res, options }) =>
     ok(res, await deps(options).projects.listOwnership()),
@@ -497,6 +522,21 @@ const ROUTES: Record<string, RouteHandler> = {
   },
   "GET /autonomy/retry-reports": async ({ res, options }) =>
     ok(res, await deps(options).artifacts.list({ type: "autonomy-retry-report" })),
+  "POST /autonomy/memory-triggers/scan": async ({ res, options }) => {
+    const d = deps(options);
+    const result = await new MemoryTriggerService(options.workspaceRoot, {
+      runs: d.runs,
+      artifacts: d.artifacts,
+      audit: d.audit,
+      policy: d.policy,
+      coordinator: {
+        artifacts: d.artifacts,
+        audit: d.audit,
+        policy: d.policy,
+      },
+    }).scan();
+    ok(res, result, 201);
+  },
   "POST /autonomy/retries/scan": async ({ res, options, req }) => {
     const body = (await readJson(req)) as {
       maxAttempts?: number;
@@ -823,6 +863,7 @@ const ROUTES: Record<string, RouteHandler> = {
           artifact.type === "cross-project-executive-report" ||
           artifact.type === "business-operating-report" ||
           artifact.type === "client-account-plan" ||
+          artifact.type === "client-success-status-report" ||
           artifact.type === "revenue-pipeline-report"
         );
       }),

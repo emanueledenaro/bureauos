@@ -99,6 +99,7 @@ Every major capability described in the docs must become one of:
 | Pricing drafts | `pricing-brief` artifact from intake and revenue pipeline | partial |
 | Conversion audits | `conversion-audit` artifact from revenue pipeline when qualification is missing or pipeline is empty | partial |
 | Client account plans | `ClientAccountPlanService`, `client-account-plan` artifact from real client intelligence, `bureau client account-plan`, `/client-account-plans/generate` | implemented |
+| Client success status reports | `ClientSuccessStatusService`, `client-success-status-report` artifact with approval-gated draft follow-up, `bureau client success-status`, `/client-success-status/generate` | implemented |
 | Paid ads launch | policy-gated, not automated | blocked |
 | Public posting | policy-gated, not automated | blocked |
 
@@ -113,6 +114,7 @@ Every major capability described in the docs must become one of:
 | Growth review | `GrowthReviewService`, `growth-review` artifact, scheduler attachment, `bureau growth review`, `/growth/review/generate` | partial |
 | Client account review | scheduler creates account review runs and real client-account-plan artifacts from client intelligence | partial |
 | Threshold triggers | `GitHubSignalTriggerService` and `OperationalSignalTriggerService` start idempotent runs from failing/stale GitHub work, blocked internal work, unanswered client messages, and empty content pipeline signals; internal signals now attach `project-health-report`, `client-account-plan`, or `content-pipeline-report` artifacts before specialist dispatch | implemented |
+| Memory triggers | `MemoryTriggerService`, `memory_due` client-success runs from due `next_follow_up_at` client memory, `client-success-status-report` artifacts, `bureau autonomy memory-scan`, `/autonomy/memory-triggers/scan`, scheduler memory scan | implemented |
 | Bounded retry system | `AutonomousRetryService`, `autonomy-retry-report`, `bureau autonomy retry-scan`, `/autonomy/retries/scan`, scheduler retry scan, max attempts from `limits.max_retries_per_task` | partial |
 | Failing check detection | `GitHubSignalSyncService`, `GitHubWebhookIngestionService`, `github sync`, `/github/webhook`, `github-signal-report` | partial |
 | Stale PR/issue detection | `GitHubSignalSyncService`, `github sync --stale-days` | partial |

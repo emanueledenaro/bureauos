@@ -93,6 +93,19 @@ Contains:
 - capability/action that the coordinator used
 - generated threshold runs
 
+### Client Success Status Report
+
+Client relationship and follow-up artifact.
+
+Contains:
+
+- client risk and value score
+- relationship timestamps
+- open pipeline and delivery context
+- due follow-up state
+- draft follow-up text
+- approval boundary before any client send
+
 ### Technical Plan
 
 Implementation plan.
