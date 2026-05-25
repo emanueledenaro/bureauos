@@ -143,10 +143,22 @@ const CONNECTORS: readonly ProviderConnector[] = [
         budgetTier: "premium",
       },
       {
+        id: "gpt-5.5-pro",
+        name: "GPT-5.5 Pro",
+        capabilities: ["chat", "reasoning", "coding", "vision", "streaming", "tool-use"],
+        budgetTier: "premium",
+      },
+      {
         id: "gpt-5.4",
         name: "GPT-5.4",
         capabilities: ["chat", "reasoning", "coding", "vision", "streaming", "tool-use"],
         budgetTier: "high",
+      },
+      {
+        id: "gpt-5.4-pro",
+        name: "GPT-5.4 Pro",
+        capabilities: ["chat", "reasoning", "coding", "vision", "streaming", "tool-use"],
+        budgetTier: "premium",
       },
       {
         id: "gpt-5.4-mini",
@@ -161,8 +173,8 @@ const CONNECTORS: readonly ProviderConnector[] = [
         budgetTier: "low",
       },
       {
-        id: "gpt-5.3-chat-latest",
-        name: "GPT-5.3 Chat",
+        id: "chat-latest",
+        name: "Chat Latest",
         capabilities: ["chat", "vision", "streaming", "tool-use"],
         budgetTier: "high",
       },
@@ -278,10 +290,22 @@ const CONNECTORS: readonly ProviderConnector[] = [
         budgetTier: "premium",
       },
       {
+        id: "openai/gpt-5.5-pro",
+        name: "OpenAI GPT-5.5 Pro",
+        capabilities: ["chat", "reasoning", "coding", "vision", "streaming"],
+        budgetTier: "premium",
+      },
+      {
         id: "openai/gpt-5.4",
         name: "OpenAI GPT-5.4",
         capabilities: ["chat", "reasoning", "coding", "vision", "streaming"],
         budgetTier: "high",
+      },
+      {
+        id: "openai/gpt-5.4-pro",
+        name: "OpenAI GPT-5.4 Pro",
+        capabilities: ["chat", "reasoning", "coding", "vision", "streaming"],
+        budgetTier: "premium",
       },
       {
         id: "openai/gpt-5.4-mini",
