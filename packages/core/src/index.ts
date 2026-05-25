@@ -220,6 +220,22 @@ export type {
   SkippedOperationalSignal,
   TriggeredOperationalRun,
 } from "./autonomy/operational-triggers.js";
+export { ProjectHealthReviewService } from "./autonomy/project-health.js";
+export type {
+  ProjectHealthItem,
+  ProjectHealthReviewDeps,
+  ProjectHealthReviewInput,
+  ProjectHealthReviewResult,
+  ProjectHealthRisk,
+} from "./autonomy/project-health.js";
+
+// Growth reviews
+export { GrowthReviewService } from "./growth/review.js";
+export type {
+  GrowthReviewDeps,
+  GrowthReviewInput,
+  GrowthReviewResult,
+} from "./growth/review.js";
 
 // Provider auth
 export {

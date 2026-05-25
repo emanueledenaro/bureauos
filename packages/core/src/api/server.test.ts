@@ -274,6 +274,60 @@ describe("API server", () => {
     expect(audit).toContain("client.account_plan.generated");
   });
 
+  it("generates project health and growth reviews for the ElectronJS operating room", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    await fetch(`${server.url}/coordinator/intake`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        clientName: "Pizzeria Aurora",
+        message: "Ho parlato con una pizzeria: vuole sito con prenotazioni.",
+        expectedValue: 4500,
+        expectedMargin: 40,
+      }),
+    });
+
+    const health = await fetch(`${server.url}/project-health/generate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectSlug: "pizzeria-aurora-booking-website" }),
+    });
+    expect(health.status).toBe(201);
+    const healthBody = (await health.json()) as {
+      report: { type: string };
+      projects: Array<{ risk: string }>;
+    };
+    expect(healthBody.report.type).toBe("project-health-report");
+    expect(healthBody.projects).toHaveLength(1);
+
+    const growth = await fetch(`${server.url}/growth/review/generate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ recentDays: 14 }),
+    });
+    expect(growth.status).toBe(201);
+    const growthBody = (await growth.json()) as {
+      report: { type: string };
+      pipeline_value: number;
+    };
+    expect(growthBody.report.type).toBe("growth-review");
+    expect(growthBody.pipeline_value).toBe(4500);
+
+    const reports = (await (await fetch(`${server.url}/project-health-reports`)).json()) as Array<{
+      type: string;
+    }>;
+    expect(reports).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: "project-health-report" })]),
+    );
+    const reviews = (await (await fetch(`${server.url}/growth/reviews`)).json()) as Array<{
+      type: string;
+    }>;
+    expect(reviews).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: "growth-review" })]),
+    );
+  });
+
   it("persists coordinator message history for the ElectronJS chat", async () => {
     server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
 

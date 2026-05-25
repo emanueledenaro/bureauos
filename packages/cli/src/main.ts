@@ -16,10 +16,12 @@ import {
   GitHubSignalTriggerService,
   GitHubSignalSyncService,
   GrowthMemoryService,
+  GrowthReviewService,
   InitError,
   OpportunityRegistry,
   PolicyEngine,
   ProjectDispatchService,
+  ProjectHealthReviewService,
   ProjectRegistry,
   RunEngine,
   Scheduler,
@@ -70,11 +72,13 @@ Registries:
   client account-plan [--client slug]       Generate client account plan artifacts from intelligence
   project create --name <n> --client <slug> [--status s] [--repo url] [--stack s] [--manager-agent id]
   project dispatch --project <slug> [--type feature] [--scope s]
+  project health [--project slug]           Generate project health review artifacts
   project list
   opportunity create --title <t> --source <s> --client <slug> [--value v] [--margin m]
   opportunity list
   growth memory                            Show brand, offer, and channel memory
   growth memory set [--brand t] [--offers t] [--channels t]
+  growth review [--recent-days n]           Generate growth review artifact
 
 Runs and audit:
   run new --type <t> --scope <s> [--client slug] [--project slug]
@@ -573,6 +577,45 @@ const handleProjectDispatch: Handler = async (args) => {
   return 0;
 };
 
+const handleProjectHealth: Handler = async (args) => {
+  const flags = parseFlags(args, {
+    project: { type: "string", alias: "p" },
+    run: { type: "string" },
+  });
+  if (typeof flags === "string") return err(`project health: ${flags}`);
+  let projectId: string | undefined;
+  if (typeof flags.project === "string") {
+    const project = await new ProjectRegistry(process.cwd()).get(flags.project);
+    if (!project) return err(`project health: project "${flags.project}" not found`);
+    projectId = project.id;
+  }
+  const config = await loadWorkspaceConfig(process.cwd());
+  const approvals = new ApprovalRegistry(process.cwd());
+  const audit = new AuditLog(workspacePaths(process.cwd()).auditLog);
+  const artifacts = new ArtifactStore(process.cwd());
+  const policy = new PolicyEngine(config, approvals);
+  const runs = new RunEngine(process.cwd(), { audit, artifacts, policy });
+  const result = await new ProjectHealthReviewService(process.cwd(), {
+    audit,
+    artifacts,
+    runs,
+  }).generate({
+    ...(projectId ? { projectId } : {}),
+    ...(typeof flags.run === "string" ? { runId: flags.run } : {}),
+  });
+  process.stdout.write(
+    `bureau: generated project health review ${result.report.id} for ${result.projects.length} project(s)\n`,
+  );
+  for (const item of result.projects) {
+    process.stdout.write(
+      `${item.project.slug.padEnd(28)}  ${item.risk.padEnd(12)}  score=${String(
+        item.score,
+      ).padEnd(4)}  next=${item.next_action}\n`,
+    );
+  }
+  return 0;
+};
+
 const handleOpportunityCreate: Handler = async (args) => {
   const flags = parseFlags(args, {
     title: { type: "string", alias: "t" },
@@ -744,6 +787,27 @@ const handleGrowthMemory: Handler = async (args) => {
   }
 
   return err(`growth memory: unknown subcommand "${subcommand}"`);
+};
+
+const handleGrowthReview: Handler = async (args) => {
+  const flags = parseFlags(args, {
+    "recent-days": { type: "number" },
+    run: { type: "string" },
+  });
+  if (typeof flags === "string") return err(`growth review: ${flags}`);
+  await loadWorkspaceConfig(process.cwd());
+  const result = await new GrowthReviewService(process.cwd()).generate({
+    ...(typeof flags["recent-days"] === "number" ? { recentDays: flags["recent-days"] } : {}),
+    ...(typeof flags.run === "string" ? { runId: flags.run } : {}),
+  });
+  process.stdout.write(`bureau: generated growth review ${result.report.id}\n`);
+  process.stdout.write(
+    `pipeline: ${result.pipeline_value} | recent content: ${result.recent_content_count} | follow-ups due: ${result.follow_ups_due}\n`,
+  );
+  for (const recommendation of result.recommendations) {
+    process.stdout.write(`next: ${recommendation}\n`);
+  }
+  return 0;
 };
 
 const handleGitHubDraftIssues: Handler = async (args) => {
@@ -1227,10 +1291,11 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
   project: {
     create: handleProjectCreate,
     dispatch: handleProjectDispatch,
+    health: handleProjectHealth,
     list: handleProjectList,
   },
   opportunity: { create: handleOpportunityCreate, list: handleOpportunityList },
-  growth: { memory: handleGrowthMemory },
+  growth: { memory: handleGrowthMemory, review: handleGrowthReview },
   run: { new: handleRunNew, list: handleRunList },
   report: { generate: handleReportGenerate },
   audit: {

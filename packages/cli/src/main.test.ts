@@ -332,6 +332,53 @@ describe("bureau cli", () => {
     expect(runs).toContain("Pipeline: product, ux, development, qa, security, reviewer");
   });
 
+  it("generates project health reviews from CLI", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+    await main([
+      "node",
+      "bureau",
+      "intake",
+      "--client",
+      "Pizzeria Aurora",
+      "--message",
+      "Ho parlato con una pizzeria: vuole sito con prenotazioni.",
+    ]);
+
+    const code = await main([
+      "node",
+      "bureau",
+      "project",
+      "health",
+      "--project",
+      "pizzeria-aurora-booking-website",
+    ]);
+
+    expect(code).toBe(0);
+    const artifactsDir = join(dir, ".bureauos", "memory", "artifacts");
+    const artifacts = await readdir(artifactsDir);
+    const bodies = await Promise.all(
+      artifacts.map((artifact) => readFile(join(artifactsDir, artifact), "utf8")),
+    );
+    expect(bodies.some((body) => body.includes("# Project Health Review"))).toBe(true);
+    const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
+    expect(audit).toContain("project.health_review.generated");
+  });
+
+  it("generates growth reviews from CLI", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+    const code = await main(["node", "bureau", "growth", "review", "--recent-days", "14"]);
+
+    expect(code).toBe(0);
+    const artifactsDir = join(dir, ".bureauos", "memory", "artifacts");
+    const artifacts = await readdir(artifactsDir);
+    const bodies = await Promise.all(
+      artifacts.map((artifact) => readFile(join(artifactsDir, artifact), "utf8")),
+    );
+    expect(bodies.some((body) => body.includes("# Growth Review"))).toBe(true);
+    const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
+    expect(audit).toContain("growth.review.generated");
+  });
+
   it("stores provider auth locally and uses it when listing providers", async () => {
     await main(["node", "bureau", "init", "--name", "BOS"]);
     const code = await main([

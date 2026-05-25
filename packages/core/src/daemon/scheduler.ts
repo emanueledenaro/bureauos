@@ -4,6 +4,8 @@ import { dispatchRun, type CoordinatorDeps } from "../runs/coordinator.js";
 import { BusinessReportService } from "../reports/business.js";
 import { ProjectRegistry } from "../registries/project.js";
 import { ClientAccountPlanService } from "../clients/account-plans.js";
+import { ProjectHealthReviewService } from "../autonomy/project-health.js";
+import { GrowthReviewService } from "../growth/review.js";
 import { GitHubSignalSyncService, type GitHubSignalClient } from "../github/signal-sync.js";
 import { GitHubSignalTriggerService } from "../github/signal-triggers.js";
 import { OperationalSignalTriggerService } from "../autonomy/operational-triggers.js";
@@ -152,6 +154,25 @@ export class Scheduler {
             this.log(
               `scheduler: generated reports ${report.executive_report.id}, ${report.business_operating_report.id}`,
             );
+          }
+          if (job.name === "project_health_check") {
+            const health = await new ProjectHealthReviewService(this.options.workspaceRoot, {
+              artifacts: this.options.coordinator.artifacts,
+              audit: this.options.coordinator.audit,
+              runs: this.options.runs,
+            }).generate({ runId: run.id, now: new Date(now) });
+            await this.options.runs.attachArtifacts(run.id, [health.report.id]);
+            this.log(
+              `scheduler: generated project health review ${health.report.id} for ${health.projects.length} project(s)`,
+            );
+          }
+          if (job.name === "growth_review") {
+            const growth = await new GrowthReviewService(this.options.workspaceRoot, {
+              artifacts: this.options.coordinator.artifacts,
+              audit: this.options.coordinator.audit,
+            }).generate({ runId: run.id, now: new Date(now) });
+            await this.options.runs.attachArtifacts(run.id, [growth.report.id]);
+            this.log(`scheduler: generated growth review ${growth.report.id}`);
           }
           if (job.name === "client_account_review") {
             const accountPlans = await new ClientAccountPlanService(this.options.workspaceRoot, {

@@ -107,8 +107,8 @@ Every major capability described in the docs must become one of:
 | --- | --- | --- |
 | Scheduler | `Scheduler`, `bureau daemon run`, `bureau daemon start`, `bureau daemon stop`, `bureau daemon status`, workspace-local daemon status JSON | partial |
 | Daily executive report | scheduler + `BusinessReportService` | partial |
-| Project health checks | scheduler/run stubs | partial |
-| Growth review | scheduler/run stubs | partial |
+| Project health checks | `ProjectHealthReviewService`, `project-health-report` artifact, scheduler attachment, `bureau project health`, `/project-health/generate` | partial |
+| Growth review | `GrowthReviewService`, `growth-review` artifact, scheduler attachment, `bureau growth review`, `/growth/review/generate` | partial |
 | Client account review | scheduler creates account review runs and real client-account-plan artifacts from client intelligence | partial |
 | Threshold triggers | `GitHubSignalTriggerService` and `OperationalSignalTriggerService` start idempotent runs from failing/stale GitHub work, blocked internal work, unanswered client messages, and empty content pipeline signals | partial |
 | Failing check detection | `GitHubSignalSyncService`, `GitHubWebhookIngestionService`, `github sync`, `/github/webhook`, `github-signal-report` | partial |
@@ -151,7 +151,7 @@ Every major capability described in the docs must become one of:
 ## Current Priority Order
 
 1. Add ElectronJS pages for clients, projects, approvals, reports, memory, settings.
-2. Expand always-on scheduler execution beyond run stubs into deeper verification/retry loops.
+2. Expand always-on scheduler execution from review artifacts into retry loops and repository verification.
 3. Add connector adapters behind draft-first policy gates.
 4. Wire Codex runtime execution for development/reviewer/QA under policy.
 5. Add OS notifications/tray/autostart for long-running daemon mode.

@@ -26,6 +26,8 @@ export type ArtifactType =
   | "executive-report"
   | "cross-project-executive-report"
   | "business-operating-report"
+  | "project-health-report"
+  | "growth-review"
   | "brand-brief"
   | "offer-brief"
   | "campaign-brief"

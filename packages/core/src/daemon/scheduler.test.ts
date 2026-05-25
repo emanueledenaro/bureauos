@@ -142,6 +142,44 @@ describe("Scheduler", () => {
     );
   });
 
+  it("generates project health and growth reviews during scheduled daemon jobs", async () => {
+    const config = defaultConfig("freelancer");
+    const approvals = new ApprovalRegistry(dir);
+    const policy = new PolicyEngine(config, approvals);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const runs = new RunEngine(dir, { audit, artifacts, policy });
+    const client = await new ClientRegistry(dir).create({
+      name: "Miraglia Pizza",
+      status: "active",
+      industry: "food_and_beverage",
+    });
+    await new ProjectRegistry(dir).create({
+      name: "Miraglia Booking Website",
+      clientId: client.id,
+      status: "blocked",
+    });
+    const scheduler = new Scheduler({
+      config,
+      runs,
+      workspaceRoot: dir,
+      coordinator: { audit, artifacts, policy },
+      logger: () => {},
+    });
+
+    await scheduler.tick(new Date("2026-05-25T10:00:00.000Z").getTime());
+
+    const generated = await artifacts.list();
+    expect(generated.map((artifact) => artifact.type)).toEqual(
+      expect.arrayContaining(["project-health-report", "growth-review"]),
+    );
+    const scheduledRuns = await runs.list();
+    const healthRun = scheduledRuns.find((run) => run.trigger_source === "project_health_check");
+    const growthRun = scheduledRuns.find((run) => run.trigger_source === "growth_review");
+    expect(healthRun?.artifacts.length).toBeGreaterThan(0);
+    expect(growthRun?.artifacts.length).toBeGreaterThan(0);
+  });
+
   it("generates real client account plans during the client account review job", async () => {
     const config = defaultConfig("freelancer");
     const approvals = new ApprovalRegistry(dir);

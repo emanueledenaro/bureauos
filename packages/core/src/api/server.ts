@@ -31,6 +31,8 @@ import { BusinessReportService } from "../reports/business.js";
 import { ClientIntelligenceService } from "../clients/intelligence.js";
 import { ClientAccountPlanService } from "../clients/account-plans.js";
 import { GrowthMemoryService } from "../growth/memory.js";
+import { GrowthReviewService } from "../growth/review.js";
+import { ProjectHealthReviewService } from "../autonomy/project-health.js";
 import { GitHubWebhookIngestionService } from "../github/webhook-ingestion.js";
 import { GitHubSignalTriggerService } from "../github/signal-triggers.js";
 import {
@@ -405,6 +407,34 @@ const ROUTES: Record<string, RouteHandler> = {
   "GET /projects": async ({ res, options }) => ok(res, await deps(options).projects.list()),
   "GET /project-ownership": async ({ res, options }) =>
     ok(res, await deps(options).projects.listOwnership()),
+  "GET /project-health-reports": async ({ res, options }) =>
+    ok(res, await deps(options).artifacts.list({ type: "project-health-report" })),
+  "POST /project-health/generate": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as {
+      projectId?: string;
+      projectSlug?: string;
+      runId?: string;
+    };
+    let projectId = typeof body.projectId === "string" ? body.projectId : undefined;
+    if (!projectId && typeof body.projectSlug === "string") {
+      const project = await deps(options).projects.get(body.projectSlug);
+      if (!project) {
+        ok(res, { error: "project not found" }, 404);
+        return;
+      }
+      projectId = project.id;
+    }
+    const d = deps(options);
+    const result = await new ProjectHealthReviewService(options.workspaceRoot, {
+      artifacts: d.artifacts,
+      audit: d.audit,
+      runs: d.runs,
+    }).generate({
+      ...(projectId ? { projectId } : {}),
+      ...(typeof body.runId === "string" ? { runId: body.runId } : {}),
+    });
+    ok(res, result, 201);
+  },
   "GET /opportunities": async ({ res, options }) =>
     ok(res, await deps(options).opportunities.list()),
   "GET /approvals": async ({ res, options }) =>
@@ -473,6 +503,18 @@ const ROUTES: Record<string, RouteHandler> = {
 
   "GET /growth/memory": async ({ res, options }) => {
     ok(res, await new GrowthMemoryService(options.workspaceRoot).get());
+  },
+
+  "GET /growth/reviews": async ({ res, options }) =>
+    ok(res, await deps(options).artifacts.list({ type: "growth-review" })),
+
+  "POST /growth/review/generate": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as { runId?: string; recentDays?: number };
+    const result = await new GrowthReviewService(options.workspaceRoot).generate({
+      ...(typeof body.runId === "string" ? { runId: body.runId } : {}),
+      ...(typeof body.recentDays === "number" ? { recentDays: body.recentDays } : {}),
+    });
+    ok(res, result, 201);
   },
 
   "POST /growth/memory": async ({ res, options, req }) => {
