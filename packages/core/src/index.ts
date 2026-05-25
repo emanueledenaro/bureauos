@@ -265,6 +265,14 @@ export type {
   GitHubIssuePublishInput,
   GitHubIssuePublishResult,
 } from "./github/issue-publisher.js";
+export { GitHubPullRequestPublishService } from "./github/pr-publisher.js";
+export type {
+  GitHubPullRequestPublishClient,
+  GitHubPullRequestPublishClientPr,
+  GitHubPullRequestPublishDeps,
+  GitHubPullRequestPublishInput,
+  GitHubPullRequestPublishResult,
+} from "./github/pr-publisher.js";
 export { GitHubSignalSyncService } from "./github/signal-sync.js";
 export type {
   GitHubSignalCheckConclusion,

@@ -121,7 +121,7 @@ export class OctokitGitHubClient implements GitHubClient {
   async createPullRequest(
     owner: string,
     repo: string,
-    input: { title: string; body: string; head: string; base: string },
+    input: { title: string; body: string; head: string; base: string; draft?: boolean },
   ): Promise<GitHubPullRequestRef> {
     const r = await this.octokit.pulls.create({ owner, repo, ...input });
     return mapPullRequest(owner, repo, r.data as unknown as RawPull);

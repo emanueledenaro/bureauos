@@ -95,7 +95,7 @@ export interface GitHubClient {
   createPullRequest(
     owner: string,
     repo: string,
-    input: { title: string; body: string; head: string; base: string },
+    input: { title: string; body: string; head: string; base: string; draft?: boolean },
   ): Promise<GitHubPullRequestRef>;
 }
 

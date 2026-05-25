@@ -15,6 +15,13 @@ import type { OpenAICodexOAuthFetch } from "@bureauos/providers";
 
 class TestGitHubClient implements GitHubIssuePublishClient {
   created: GitHubIssuePublishClientIssue[] = [];
+  createdPullRequests: Array<{
+    number: number;
+    title: string;
+    url: string;
+    head: string;
+    base: string;
+  }> = [];
 
   async createIssue(
     owner: string,
@@ -32,6 +39,27 @@ class TestGitHubClient implements GitHubIssuePublishClient {
     };
     this.created.push(issue);
     return issue;
+  }
+
+  async createPullRequest(
+    owner: string,
+    repo: string,
+    input: { title: string; body: string; head: string; base: string },
+  ) {
+    const pullRequest = {
+      owner,
+      repo,
+      number: this.createdPullRequests.length + 1,
+      title: input.title,
+      url: `https://github.com/${owner}/${repo}/pull/${this.createdPullRequests.length + 1}`,
+      head: input.head,
+      headSha: "abc123",
+      base: input.base,
+      state: "open" as const,
+      updatedAt: "2026-05-25T10:00:00.000Z",
+    };
+    this.createdPullRequests.push(pullRequest);
+    return pullRequest;
   }
 }
 
@@ -627,6 +655,57 @@ describe("API server", () => {
 
     const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(audit).toContain("github.issue_publish.created");
+  });
+
+  it("creates GitHub pull requests through the configured API GitHub client", async () => {
+    const githubClient = new TestGitHubClient();
+    server = await startApiServer({
+      workspaceRoot: dir,
+      config: defaultConfig("agency"),
+      githubClient,
+    });
+
+    await fetch(`${server.url}/coordinator/intake`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        clientName: "Pizzeria Aurora",
+        message: "Ho parlato con una pizzeria: vuole sito con prenotazioni.",
+      }),
+    });
+
+    const response = await fetch(`${server.url}/github/create-pr`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        projectSlug: "pizzeria-aurora-booking-website",
+        owner: "emanueledenaro",
+        repo: "pizzeria-aurora",
+        title: "Implement booking website",
+        head: "feature/booking-website",
+        base: "main",
+        draft: true,
+        linkedIssueNumbers: [12],
+        testEvidence: ["npm test -- booking passed"],
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    const result = (await response.json()) as {
+      status: string;
+      pull_request: { number: number; title: string; url: string };
+      report: { type: string };
+    };
+    expect(result.status).toBe("created");
+    expect(result.pull_request).toMatchObject({
+      number: 1,
+      title: "Implement booking website",
+    });
+    expect(result.report.type).toBe("github-pr-publish-report");
+    expect(githubClient.createdPullRequests).toHaveLength(1);
+
+    const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(audit).toContain("github.pr_publish.created");
   });
 
   it("ingests signed GitHub webhooks into signal memory", async () => {

@@ -13,6 +13,7 @@ import {
   DaemonStateStore,
   GitHubIssueDraftService,
   GitHubIssuePublishService,
+  GitHubPullRequestPublishService,
   GitHubSignalTriggerService,
   GitHubSignalSyncService,
   GrowthMemoryService,
@@ -122,6 +123,8 @@ GitHub:
   github draft-issues --project slug         Generate GitHub-ready issue drafts from project artifacts
   github create-issues --project slug --owner O --repo R
                                             Create GitHub issues from approved drafts under policy
+  github create-pr --project slug --owner O --repo R --head H --title T
+                                            Open a policy-gated GitHub pull request
   github ensure-labels --owner O --repo R   Apply the BureauOS label taxonomy
   github sync --owner O --repo R [--state]  Pull issues, PRs, and check signals into memory
 
@@ -880,6 +883,62 @@ const handleGitHubCreateIssues: Handler = async (args) => {
   return 0;
 };
 
+const handleGitHubCreatePr: Handler = async (args) => {
+  const flags = parseFlags(args, {
+    project: { type: "string", alias: "p" },
+    owner: { type: "string" },
+    repo: { type: "string" },
+    token: { type: "string" },
+    title: { type: "string", alias: "t" },
+    body: { type: "string", alias: "b" },
+    head: { type: "string" },
+    base: { type: "string" },
+    draft: { type: "boolean" },
+    issue: { type: "number" },
+    test: { type: "string" },
+  });
+  if (typeof flags === "string") return err(`github create-pr: ${flags}`);
+  if (typeof flags.project !== "string") return err("github create-pr: --project <slug> is required");
+  if (typeof flags.owner !== "string") return err("github create-pr: --owner required");
+  if (typeof flags.repo !== "string") return err("github create-pr: --repo required");
+  if (typeof flags.title !== "string") return err("github create-pr: --title required");
+  if (typeof flags.head !== "string") return err("github create-pr: --head required");
+
+  const token = typeof flags.token === "string" ? flags.token : process.env["GITHUB_TOKEN"];
+  if (!token) return err("github create-pr: provide --token or set GITHUB_TOKEN");
+
+  const config = await loadWorkspaceConfig(process.cwd());
+  const result = await new GitHubPullRequestPublishService(process.cwd(), {
+    config,
+    githubClient: new OctokitGitHubClient({ token }),
+  }).publish({
+    projectSlug: flags.project,
+    owner: flags.owner,
+    repo: flags.repo,
+    title: flags.title,
+    head: flags.head,
+    ...(typeof flags.body === "string" ? { body: flags.body } : {}),
+    ...(typeof flags.base === "string" ? { base: flags.base } : {}),
+    ...(flags.draft === true ? { draft: true } : {}),
+    ...(typeof flags.issue === "number" ? { linkedIssueNumbers: [flags.issue] } : {}),
+    ...(typeof flags.test === "string" ? { testEvidence: [flags.test] } : {}),
+  });
+
+  if (result.status === "blocked") {
+    process.stdout.write(
+      `bureau: PR creation blocked by policy; approval ${result.approval?.id ?? "required"} requested\n`,
+    );
+    process.stdout.write(`policy: ${result.policy.reason}\n`);
+    return 0;
+  }
+
+  process.stdout.write(
+    `bureau: created PR #${result.pull_request?.number} ${result.pull_request?.title}: ${result.pull_request?.url}\n`,
+  );
+  if (result.report) process.stdout.write(`report: ${result.report.id}\n`);
+  return 0;
+};
+
 const handleAuditTail: Handler = async (args) => {
   const flags = parseFlags(args, { limit: { type: "number", alias: "n" } });
   if (typeof flags === "string") return err(`audit tail: ${flags}`);
@@ -1403,6 +1462,7 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
   github: {
     "draft-issues": handleGitHubDraftIssues,
     "create-issues": handleGitHubCreateIssues,
+    "create-pr": handleGitHubCreatePr,
     "ensure-labels": async (args: readonly string[]) => {
       const flags = parseFlags(args, {
         owner: { type: "string" },

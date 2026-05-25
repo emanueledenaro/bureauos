@@ -45,6 +45,7 @@ export type ArtifactType =
   | "client-account-plan"
   | "github-issue-draft"
   | "github-issue-publish-report"
+  | "github-pr-publish-report"
   | "github-signal-report"
   | "operational-signal-report"
   | "client-profile"

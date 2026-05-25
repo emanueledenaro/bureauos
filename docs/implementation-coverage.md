@@ -122,7 +122,7 @@ Every major capability described in the docs must become one of:
 | GitHub issue/PR/check sync | `github sync`, `/github/webhook`, daemon project-repo polling, `github-signal-report` artifacts, audit signals, threshold-triggered runs, Electron timeline signal cards | partial |
 | GitHub issue draft generation | `github draft-issues`, `/github/issue-drafts`, Electron project cards | implemented |
 | GitHub issue creation from drafts | `github create-issues`, `/github/create-issues`, Electron project cards | implemented |
-| GitHub PR creation | not implemented | designed |
+| GitHub PR creation | `GitHubPullRequestPublishService`, `github create-pr`, `/github/create-pr`, `github-pr-publish-report`, policy gates for linked issue and test evidence | partial |
 | OpenAI Codex OAuth provider | separate `openai-codex` provider, browser PKCE OAuth, ChatGPT Codex backend `generateText`/SSE `stream`, persisted token refresh, Codex-compatible `instructions`/`store=false` request body, no API fallback | implemented |
 | OpenAI API provider | separate `openai` provider, SDK-backed API-key adapter with `generateText`/`stream` | implemented |
 | Anthropic provider | SDK-backed API-key adapter with `generateText`/`stream` | implemented |

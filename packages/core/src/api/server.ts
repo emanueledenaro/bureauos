@@ -27,6 +27,10 @@ import {
   GitHubIssuePublishService,
   type GitHubIssuePublishClient,
 } from "../github/issue-publisher.js";
+import {
+  GitHubPullRequestPublishService,
+  type GitHubPullRequestPublishClient,
+} from "../github/pr-publisher.js";
 import { BusinessReportService } from "../reports/business.js";
 import { ClientIntelligenceService } from "../clients/intelligence.js";
 import { ClientAccountPlanService } from "../clients/account-plans.js";
@@ -64,7 +68,7 @@ export interface ApiServerOptions {
   config: BureauConfig;
   port?: number;
   token?: string;
-  githubClient?: GitHubIssuePublishClient;
+  githubClient?: GitHubIssuePublishClient & Partial<GitHubPullRequestPublishClient>;
   githubWebhookSecret?: string;
   openaiCodexOAuthFetch?: OpenAICodexOAuthFetch;
   openaiCodexOAuthCallbackPort?: number;
@@ -723,6 +727,47 @@ const ROUTES: Record<string, RouteHandler> = {
       repo: body.repo,
       ...(Array.isArray(body.draftArtifactIds) ? { draftArtifactIds: body.draftArtifactIds } : {}),
       ...(typeof body.ensureLabels === "boolean" ? { ensureLabels: body.ensureLabels } : {}),
+    });
+    ok(res, result, result.status === "created" ? 201 : 202);
+  },
+
+  "POST /github/create-pr": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as {
+      projectSlug?: string;
+      owner?: string;
+      repo?: string;
+      title?: string;
+      body?: string;
+      head?: string;
+      base?: string;
+      draft?: boolean;
+      linkedIssueNumbers?: number[];
+      testEvidence?: string[];
+    };
+    if (!body.projectSlug || !body.owner || !body.repo || !body.title || !body.head) {
+      ok(res, { error: "projectSlug, owner, repo, title, and head required" }, 400);
+      return;
+    }
+    if (!options.githubClient?.createPullRequest) {
+      ok(res, { error: "GitHub PR client not configured" }, 400);
+      return;
+    }
+    const result = await new GitHubPullRequestPublishService(options.workspaceRoot, {
+      config: options.config,
+      githubClient: options.githubClient as GitHubPullRequestPublishClient,
+    }).publish({
+      projectSlug: body.projectSlug,
+      owner: body.owner,
+      repo: body.repo,
+      title: body.title,
+      head: body.head,
+      ...(typeof body.body === "string" ? { body: body.body } : {}),
+      ...(typeof body.base === "string" ? { base: body.base } : {}),
+      ...(typeof body.draft === "boolean" ? { draft: body.draft } : {}),
+      ...(Array.isArray(body.linkedIssueNumbers)
+        ? { linkedIssueNumbers: body.linkedIssueNumbers }
+        : {}),
+      ...(Array.isArray(body.testEvidence) ? { testEvidence: body.testEvidence } : {}),
     });
     ok(res, result, result.status === "created" ? 201 : 202);
   },
