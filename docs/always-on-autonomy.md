@@ -254,7 +254,15 @@ Implemented internal threshold scans:
 - `unanswered_client_message_age`
 - `empty_content_pipeline`
 
-These produce an `operational-signal-report`, then start policy-gated threshold runs through the Supreme Coordinator. Client messages and public growth actions remain draft-only unless policy explicitly allows sending/publishing.
+These produce an `operational-signal-report`, then start policy-gated threshold runs through the Supreme Coordinator.
+
+Each internal threshold also creates a concrete first artifact before specialist dispatch:
+
+- blocked project/run -> `project-health-report`
+- unanswered client message -> `client-account-plan`
+- empty content pipeline -> `content-pipeline-report`
+
+Client messages and public growth actions remain draft-only unless policy explicitly allows sending/publishing.
 
 ### Memory Triggers
 

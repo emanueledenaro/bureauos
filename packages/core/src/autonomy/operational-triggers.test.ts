@@ -122,15 +122,34 @@ describe("OperationalSignalTriggerService", () => {
       "health_check",
     ]);
     expect(thresholdRuns.every((run) => run.artifacts.includes(result.report!.id))).toBe(true);
+    const thresholdRunsById = new Map(thresholdRuns.map((run) => [run.id, run]));
+    for (const item of result.triggered) {
+      expect(item.artifactIds.length).toBeGreaterThan(0);
+      const storedRun = thresholdRunsById.get(item.run.id);
+      expect(storedRun).toBeDefined();
+      expect(item.artifactIds.every((artifactId) => storedRun!.artifacts.includes(artifactId))).toBe(
+        true,
+      );
+    }
 
     const reports = await artifacts.list({ type: "operational-signal-report" });
     expect(reports).toHaveLength(1);
     const report = await artifacts.read(reports[0]!.id);
     expect(report?.body).toContain("Pizzeria Aurora Booking Website");
     expect(report?.body).toContain("empty_content_pipeline");
+    const contentReports = await artifacts.list({ type: "content-pipeline-report" });
+    const accountPlans = await artifacts.list({ type: "client-account-plan" });
+    const healthReports = await artifacts.list({ type: "project-health-report" });
+    expect(contentReports.length).toBeGreaterThanOrEqual(1);
+    expect(accountPlans.length).toBeGreaterThanOrEqual(1);
+    expect(healthReports.length).toBeGreaterThanOrEqual(2);
 
     const log = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(log).toContain("operational.signal_trigger.run_started");
+    expect(log).toContain("operational.signal_trigger.fulfilled");
+    expect(log).toContain("growth.content_pipeline.blocked");
+    expect(log).toContain("client.account_plan.generated");
+    expect(log).toContain("project.health_review.generated");
     expect(log).toContain("coordinator.step_completed");
   });
 

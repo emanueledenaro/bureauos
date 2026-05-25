@@ -1,8 +1,11 @@
 import { ArtifactStore, type ArtifactRecord, type ArtifactType } from "../artifacts/store.js";
 import { AuditLog } from "../audit/log.js";
+import { ClientAccountPlanService } from "../clients/account-plans.js";
+import { GrowthContentPipelineService } from "../growth/content-pipeline.js";
 import type { PolicyDecision, PolicyEngine } from "../policy/engine.js";
 import { ClientRegistry, type ClientRecord } from "../registries/client.js";
 import { ProjectRegistry, type ProjectRecord } from "../registries/project.js";
+import { ProjectHealthReviewService } from "./project-health.js";
 import { dispatchRun, type CoordinatorDeps } from "../runs/coordinator.js";
 import { RunEngine, type RunRecord, type RunType } from "../runs/engine.js";
 
@@ -28,6 +31,7 @@ export interface TriggeredOperationalRun {
   kind: OperationalSignalTriggerKind;
   triggerSource: string;
   run: RunRecord;
+  artifactIds: string[];
 }
 
 export interface SkippedOperationalSignal {
@@ -237,6 +241,10 @@ ${candidates
 `;
 }
 
+function uniqueIds(ids: readonly string[]): string[] {
+  return Array.from(new Set(ids.filter(Boolean)));
+}
+
 export class OperationalSignalTriggerService {
   private readonly artifacts: ArtifactStore;
   private readonly clients: ClientRegistry;
@@ -364,7 +372,38 @@ export class OperationalSignalTriggerService {
       });
       if (report) await this.deps.runs.attachArtifacts(run.id, [report.id]);
       knownSources.add(candidate.triggerSource);
-      triggered.push({ kind: candidate.kind, triggerSource: candidate.triggerSource, run });
+
+      let fulfillmentArtifactIds: string[] = [];
+      try {
+        fulfillmentArtifactIds = await this.fulfillCandidate(candidate, run, now);
+        if (fulfillmentArtifactIds.length > 0) {
+          await this.deps.runs.attachArtifacts(run.id, fulfillmentArtifactIds);
+          await this.deps.audit.append({
+            actor: "supreme_coordinator",
+            action: "operational.signal_trigger.fulfilled",
+            target: run.id,
+            capability: candidate.capability,
+            artifact_id: fulfillmentArtifactIds[0],
+            result: "ok",
+          });
+        }
+      } catch (error) {
+        await this.deps.audit.append({
+          actor: "supreme_coordinator",
+          action: "operational.signal_trigger.fulfillment_failed",
+          target: run.id,
+          capability: candidate.capability,
+          error: error instanceof Error ? error.message : String(error),
+          result: "error",
+        });
+      }
+
+      triggered.push({
+        kind: candidate.kind,
+        triggerSource: candidate.triggerSource,
+        run,
+        artifactIds: fulfillmentArtifactIds,
+      });
       await this.deps.audit.append({
         actor: "supreme_coordinator",
         action: "operational.signal_trigger.run_started",
@@ -375,16 +414,67 @@ export class OperationalSignalTriggerService {
       });
 
       if (this.deps.coordinator && run.status !== "needs_human") {
+        const contextArtifactIds = uniqueIds([
+          ...(report ? [report.id] : []),
+          ...fulfillmentArtifactIds,
+        ]);
         await dispatchRun(this.deps.coordinator, {
           workspaceRoot: this.workspaceRoot,
           run,
           scope: candidate.scope,
           briefing: candidate.briefing,
-          ...(report ? { contextArtifactIds: [report.id] } : {}),
+          ...(contextArtifactIds.length > 0 ? { contextArtifactIds } : {}),
         });
       }
     }
 
     return { triggered, skipped, ...(report ? { report } : {}) };
+  }
+
+  private async fulfillCandidate(
+    candidate: Candidate,
+    run: RunRecord,
+    now: Date,
+  ): Promise<string[]> {
+    switch (candidate.kind) {
+      case "empty_content_pipeline": {
+        const result = await new GrowthContentPipelineService(this.workspaceRoot, {
+          artifacts: this.artifacts,
+          audit: this.deps.audit,
+        }).generate({
+          runId: run.id,
+          now,
+          maxDrafts: 4,
+          focus: "Autonomous empty content pipeline recovery",
+        });
+        return [result.report.id, ...result.drafts.map((draft) => draft.artifact.id)];
+      }
+      case "unanswered_client_message_age": {
+        if (!candidate.clientId) return [];
+        const result = await new ClientAccountPlanService(this.workspaceRoot, {
+          artifacts: this.artifacts,
+          audit: this.deps.audit,
+        }).generate({
+          runId: run.id,
+          clientId: candidate.clientId,
+          now,
+        });
+        return result.plans.map((plan) => plan.id);
+      }
+      case "blocked_project_age":
+      case "blocked_run_age": {
+        if (!candidate.projectId) return [];
+        const result = await new ProjectHealthReviewService(this.workspaceRoot, {
+          artifacts: this.artifacts,
+          audit: this.deps.audit,
+          runs: this.deps.runs,
+        }).generate({
+          runId: run.id,
+          projectId: candidate.projectId,
+          now,
+        });
+        return [result.report.id];
+      }
+    }
   }
 }

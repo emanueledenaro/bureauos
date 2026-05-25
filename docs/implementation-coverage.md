@@ -91,7 +91,7 @@ Every major capability described in the docs must become one of:
 | Brand memory | `GrowthMemoryService`, `BRAND.md`, `/growth/memory`, `bureau growth memory`, Electron Growth tab | implemented |
 | Offer memory | `GrowthMemoryService`, `OFFERS.md`, `/growth/memory`, `bureau growth memory`, Electron Growth tab | implemented |
 | Channel memory | `GrowthMemoryService`, `CHANNELS.md`, `/growth/memory`, `bureau growth memory`, Electron Growth tab | implemented |
-| Content drafts | `GrowthContentPipelineService`, `content-pipeline-report`, `bureau growth content`, `/growth/content-pipeline/generate`, Electron Growth action | partial |
+| Content drafts | `GrowthContentPipelineService`, `content-pipeline-report`, `bureau growth content`, `/growth/content-pipeline/generate`, Electron Growth action | implemented |
 | Social drafts | `social-post-brief` artifact from intake and content pipeline | implemented |
 | Ad campaign drafts | `ad-campaign-brief` artifact from intake and content pipeline | partial |
 | Lead and opportunity pipeline | `RevenuePipelineService`, `revenue-pipeline-report`, `lead-qualification-report`, `bureau revenue pipeline`, `/revenue/pipeline/generate`, Electron Revenue action | partial |
@@ -112,7 +112,7 @@ Every major capability described in the docs must become one of:
 | Project repository verification | `ProjectRepositoryVerificationService`, `repository-verification-report`, `bureau project verify-repositories`, `/project-repositories/verify`, scheduler linked-repository verification | partial |
 | Growth review | `GrowthReviewService`, `growth-review` artifact, scheduler attachment, `bureau growth review`, `/growth/review/generate` | partial |
 | Client account review | scheduler creates account review runs and real client-account-plan artifacts from client intelligence | partial |
-| Threshold triggers | `GitHubSignalTriggerService` and `OperationalSignalTriggerService` start idempotent runs from failing/stale GitHub work, blocked internal work, unanswered client messages, and empty content pipeline signals | partial |
+| Threshold triggers | `GitHubSignalTriggerService` and `OperationalSignalTriggerService` start idempotent runs from failing/stale GitHub work, blocked internal work, unanswered client messages, and empty content pipeline signals; internal signals now attach `project-health-report`, `client-account-plan`, or `content-pipeline-report` artifacts before specialist dispatch | implemented |
 | Bounded retry system | `AutonomousRetryService`, `autonomy-retry-report`, `bureau autonomy retry-scan`, `/autonomy/retries/scan`, scheduler retry scan, max attempts from `limits.max_retries_per_task` | partial |
 | Failing check detection | `GitHubSignalSyncService`, `GitHubWebhookIngestionService`, `github sync`, `/github/webhook`, `github-signal-report` | partial |
 | Stale PR/issue detection | `GitHubSignalSyncService`, `github sync --stale-days` | partial |

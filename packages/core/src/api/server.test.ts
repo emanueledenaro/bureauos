@@ -576,6 +576,43 @@ describe("API server", () => {
     expect(audit).toContain("memory.global.search");
   });
 
+  it("does not answer low-context coordinator chat from historical client context", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    await fetch(`${server.url}/coordinator/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        message: "Ho parlato con Pizzeria Aurora: vuole un sito con prenotazioni.",
+      }),
+    });
+
+    const response = await fetch(`${server.url}/coordinator/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: "Ciao" }),
+    });
+
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as {
+      mode: string;
+      coordinatorMessage: { text: string };
+      provider: { status: string; reason?: string };
+    };
+    expect(body.mode).toBe("answer");
+    expect(body.provider).toMatchObject({
+      status: "unavailable",
+      reason: "low_context_current_message",
+    });
+    expect(body.coordinatorMessage.text.toLowerCase()).not.toContain("pizzeria");
+    expect(body.coordinatorMessage.text.toLowerCase()).not.toContain("prenotazioni");
+
+    const clients = (await (await fetch(`${server.url}/clients`)).json()) as Array<{
+      slug: string;
+    }>;
+    expect(clients.map((client) => client.slug)).toEqual(["pizzeria-aurora"]);
+  });
+
   it("exposes audited global coordinator memory without leaking absolute paths", async () => {
     server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
 

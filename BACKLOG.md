@@ -302,10 +302,11 @@ Goal: brand, offers, content, leads, pricing, proposals, conversion, client succ
 - [x] Wire brand memory, offer memory, channels memory.
 - [x] Implement the content pipeline (draft only).
 - [x] Implement the lead and opportunity pipeline.
-- [ ] Implement campaign briefs and conversion audits as artifacts.
-- [ ] Implement the pricing brief and proposal brief flows.
+- [x] Implement campaign briefs and conversion audits as artifacts.
+- [x] Implement the pricing brief and proposal brief flows.
 - [ ] Implement compliance reviews and approval records for any external commitment.
-- [ ] Implement client account plans and client success status reports.
+- [x] Implement client account plans.
+- [ ] Implement client success status reports.
 - [x] Generate executive and business operating reports from real registries.
 - [ ] Wire all of this into the Growth and Revenue tab of the interface. (brand/offers/channels memory, content pipeline action, and revenue pipeline action are wired)
 
@@ -316,18 +317,18 @@ Goal: scheduler and event watchers so BureauOS works while the owner is offline.
 - [x] Implement a scheduler service that runs alongside the local API.
 - [x] Implement scheduled triggers for project health, daily executive report, growth review, and client account review.
 - [x] Generate executive and business operating reports during the daily executive report job.
-- [ ] Implement threshold triggers (stale PR, blocked issue, unanswered client message, empty content pipeline).
+- [x] Implement threshold triggers (stale PR, blocked issue, unanswered client message, empty content pipeline).
   - [x] GitHub failing check -> bug triage run.
   - [x] GitHub stale PR/issue -> health-check run.
-  - [ ] Blocked issue threshold.
-  - [ ] Unanswered client message threshold.
-  - [ ] Empty content pipeline threshold.
+  - [x] Blocked project/run threshold.
+  - [x] Unanswered client message threshold.
+  - [x] Empty content pipeline threshold.
 - [ ] Implement memory triggers (follow-ups due).
 - [x] Implement event ingestion from the GitHub adapter.
 - [x] Implement signal classification for GitHub issue, PR, and check-run events.
 - [ ] Implement bounded retries with policy escalation.
 - [x] Add a `bureau daemon` CLI subcommand (start, stop, status).
-- [ ] Add tests for each trigger type.
+- [x] Add tests for each trigger type.
 
 ## Phase 8 — PR Execution (v0.8)
 
