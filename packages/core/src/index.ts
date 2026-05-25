@@ -208,6 +208,14 @@ export type {
   GrowthMemorySummary,
   GrowthMemoryUpdateInput,
 } from "./growth/memory.js";
+export { GrowthContentPipelineService } from "./growth/content-pipeline.js";
+export type {
+  GrowthContentDraftKind,
+  GrowthContentPipelineDeps,
+  GrowthContentPipelineDraft,
+  GrowthContentPipelineInput,
+  GrowthContentPipelineResult,
+} from "./growth/content-pipeline.js";
 
 // Always-on operational signals
 export { OperationalSignalTriggerService } from "./autonomy/operational-triggers.js";

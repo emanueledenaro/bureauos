@@ -19,6 +19,7 @@ import {
   GitHubRepositoryProvisionService,
   GitHubSignalTriggerService,
   GitHubSignalSyncService,
+  GrowthContentPipelineService,
   GrowthMemoryService,
   GrowthReviewService,
   InitError,
@@ -85,6 +86,8 @@ Registries:
   opportunity list
   growth memory                            Show brand, offer, and channel memory
   growth memory set [--brand t] [--offers t] [--channels t]
+  growth content [--max-drafts n] [--focus t]
+                                            Generate draft-only social/campaign/creative/ads content
   growth review [--recent-days n]           Generate growth review artifact
 
 Runs and audit:
@@ -879,6 +882,40 @@ const handleGrowthReview: Handler = async (args) => {
   return 0;
 };
 
+const handleGrowthContent: Handler = async (args) => {
+  const flags = parseFlags(args, {
+    "max-drafts": { type: "number" },
+    focus: { type: "string" },
+    run: { type: "string" },
+  });
+  if (typeof flags === "string") return err(`growth content: ${flags}`);
+  if (typeof flags["max-drafts"] === "number" && !Number.isFinite(flags["max-drafts"])) {
+    return err("growth content: --max-drafts must be a number");
+  }
+  await loadWorkspaceConfig(process.cwd());
+  const result = await new GrowthContentPipelineService(process.cwd()).generate({
+    ...(typeof flags["max-drafts"] === "number" ? { maxDrafts: flags["max-drafts"] } : {}),
+    ...(typeof flags.focus === "string" ? { focus: flags.focus } : {}),
+    ...(typeof flags.run === "string" ? { runId: flags.run } : {}),
+  });
+  process.stdout.write(`bureau: generated content pipeline report ${result.report.id}\n`);
+  process.stdout.write(
+    `memory: ${result.memory_ready ? "ready" : "incomplete"} | drafts: ${result.drafts.length} | pipeline: ${result.pipeline_value}\n`,
+  );
+  if (result.missing_sections.length > 0) {
+    process.stdout.write(`missing: ${result.missing_sections.join(", ")}\n`);
+  }
+  for (const draft of result.drafts) {
+    process.stdout.write(
+      `draft: ${draft.kind.padEnd(8)} ${draft.artifact.id} ${draft.channel} ${draft.title}\n`,
+    );
+  }
+  for (const action of result.next_actions) {
+    process.stdout.write(`next: ${action}\n`);
+  }
+  return 0;
+};
+
 const handleGitHubDraftIssues: Handler = async (args) => {
   const flags = parseFlags(args, {
     project: { type: "string", alias: "p" },
@@ -1555,7 +1592,7 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
     list: handleProjectList,
   },
   opportunity: { create: handleOpportunityCreate, list: handleOpportunityList },
-  growth: { memory: handleGrowthMemory, review: handleGrowthReview },
+  growth: { memory: handleGrowthMemory, content: handleGrowthContent, review: handleGrowthReview },
   run: { new: handleRunNew, list: handleRunList },
   autonomy: { "retry-scan": handleAutonomyRetryScan },
   report: { generate: handleReportGenerate },

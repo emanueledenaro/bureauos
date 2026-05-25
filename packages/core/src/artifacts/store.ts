@@ -30,6 +30,7 @@ export type ArtifactType =
   | "repository-verification-report"
   | "autonomy-retry-report"
   | "growth-review"
+  | "content-pipeline-report"
   | "brand-brief"
   | "offer-brief"
   | "campaign-brief"

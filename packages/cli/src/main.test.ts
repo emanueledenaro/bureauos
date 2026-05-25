@@ -294,6 +294,64 @@ describe("bureau cli", () => {
     expect(audit).toContain("growth.memory.updated");
   });
 
+  it("generates draft-only growth content from CLI", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+    await main([
+      "node",
+      "bureau",
+      "growth",
+      "memory",
+      "set",
+      "--brand",
+      "BureauOS is the AI operating room for owner-led software companies.",
+      "--offers",
+      "AAAS setup and autonomous delivery operations.",
+      "--channels",
+      "X, LinkedIn, GitHub.",
+    ]);
+    await main(["node", "bureau", "client", "create", "--name", "Nebula Studios"]);
+    await main([
+      "node",
+      "bureau",
+      "opportunity",
+      "create",
+      "--title",
+      "AAAS Launch Package",
+      "--source",
+      "owner_pipeline",
+      "--client",
+      "nebula-studios",
+      "--value",
+      "12000",
+    ]);
+
+    const code = await main([
+      "node",
+      "bureau",
+      "growth",
+      "content",
+      "--max-drafts",
+      "3",
+      "--focus",
+      "AAAS launch",
+    ]);
+
+    expect(code).toBe(0);
+    const artifactsDir = join(dir, ".bureauos", "memory", "artifacts");
+    const artifacts = await readdir(artifactsDir);
+    const bodies = await Promise.all(
+      artifacts.map((artifact) => readFile(join(artifactsDir, artifact), "utf8")),
+    );
+    expect(bodies.some((body) => body.includes("# Content Pipeline Report"))).toBe(true);
+    expect(bodies.some((body) => body.includes("# Social Post Brief"))).toBe(true);
+    expect(bodies.some((body) => body.includes("# Campaign Brief"))).toBe(true);
+    expect(bodies.some((body) => body.includes("# Creative Brief"))).toBe(true);
+    expect(bodies.join("\n")).toContain("Do not name the client");
+
+    const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
+    expect(audit).toContain("growth.content_pipeline.generated");
+  });
+
   it("generates GitHub issue drafts from CLI", async () => {
     await main(["node", "bureau", "init", "--name", "BOS"]);
     await main([

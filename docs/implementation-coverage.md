@@ -91,9 +91,9 @@ Every major capability described in the docs must become one of:
 | Brand memory | `GrowthMemoryService`, `BRAND.md`, `/growth/memory`, `bureau growth memory`, Electron Growth tab | implemented |
 | Offer memory | `GrowthMemoryService`, `OFFERS.md`, `/growth/memory`, `bureau growth memory`, Electron Growth tab | implemented |
 | Channel memory | `GrowthMemoryService`, `CHANNELS.md`, `/growth/memory`, `bureau growth memory`, Electron Growth tab | implemented |
-| Content drafts | artifacts | partial |
-| Social drafts | `social-post-brief` artifact | partial |
-| Ad campaign drafts | `ad-campaign-brief` artifact | partial |
+| Content drafts | `GrowthContentPipelineService`, `content-pipeline-report`, `bureau growth content`, `/growth/content-pipeline/generate`, Electron Growth action | partial |
+| Social drafts | `social-post-brief` artifact from intake and content pipeline | implemented |
+| Ad campaign drafts | `ad-campaign-brief` artifact from intake and content pipeline | partial |
 | Proposal drafts | `proposal-brief` artifact | partial |
 | Pricing drafts | `pricing-brief` artifact | partial |
 | Conversion audits | artifact type exists | designed |

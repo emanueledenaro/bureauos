@@ -41,6 +41,7 @@ import { ClientIntelligenceService } from "../clients/intelligence.js";
 import { ClientAccountPlanService } from "../clients/account-plans.js";
 import { GrowthMemoryService } from "../growth/memory.js";
 import { GrowthReviewService } from "../growth/review.js";
+import { GrowthContentPipelineService } from "../growth/content-pipeline.js";
 import { ProjectHealthReviewService } from "../autonomy/project-health.js";
 import { ProjectRepositoryVerificationService } from "../autonomy/repository-verification.js";
 import { AutonomousRetryService } from "../autonomy/retry.js";
@@ -622,6 +623,23 @@ const ROUTES: Record<string, RouteHandler> = {
 
   "GET /growth/reviews": async ({ res, options }) =>
     ok(res, await deps(options).artifacts.list({ type: "growth-review" })),
+
+  "GET /growth/content-pipeline": async ({ res, options }) =>
+    ok(res, await deps(options).artifacts.list({ type: "content-pipeline-report" })),
+
+  "POST /growth/content-pipeline/generate": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as {
+      runId?: string;
+      focus?: string;
+      maxDrafts?: number;
+    };
+    const result = await new GrowthContentPipelineService(options.workspaceRoot).generate({
+      ...(typeof body.runId === "string" ? { runId: body.runId } : {}),
+      ...(typeof body.focus === "string" ? { focus: body.focus } : {}),
+      ...(typeof body.maxDrafts === "number" ? { maxDrafts: body.maxDrafts } : {}),
+    });
+    ok(res, result, 201);
+  },
 
   "POST /growth/review/generate": async ({ res, options, req }) => {
     const body = (await readJson(req)) as { runId?: string; recentDays?: number };

@@ -1,12 +1,24 @@
-import { Megaphone, ShieldCheck, Sparkles } from "lucide-react";
+import { useState } from "react";
+import { Loader2, Megaphone, ShieldCheck, Sparkles, WandSparkles } from "lucide-react";
 import { SectionShell } from "../components/dashboard/SectionShell";
 import { MetricTile } from "../components/dashboard/MetricTile";
 import { EmptyState } from "../components/dashboard/EmptyState";
 import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
 import { formatLabel, timeAgo } from "../lib/format";
+import type { GrowthContentPipelineResult } from "../lib/api";
 import type { DashboardState } from "../lib/types";
 
-export function GrowthView({ state }: { state: DashboardState }) {
+export function GrowthView({
+  state,
+  onGenerateContent,
+}: {
+  state: DashboardState;
+  onGenerateContent: () => Promise<GrowthContentPipelineResult>;
+}) {
+  const [generating, setGenerating] = useState(false);
+  const [lastResult, setLastResult] = useState<GrowthContentPipelineResult | undefined>();
+  const [error, setError] = useState<string | undefined>();
   const growthArtifacts = state.artifacts.filter((artifact) =>
     ["social-post-brief", "ad-campaign-brief", "creative-brief", "campaign-brief"].includes(
       artifact.type,
@@ -21,6 +33,37 @@ export function GrowthView({ state }: { state: DashboardState }) {
       title="Growth"
       description="Draft-first marketing, content, social, and ads assets."
     >
+      <div className="mb-4 flex flex-col gap-3 rounded-lg border border-border/70 bg-surface-subtle/50 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="text-[12px] font-semibold text-foreground">Content Pipeline</div>
+          <div className="mt-1 text-[10px] text-muted-foreground">
+            {lastResult
+              ? `${lastResult.drafts.length} drafts generated · report ${lastResult.report.id}`
+              : "Generates local drafts only. Publishing, spend, client contact, and claims stay approval-gated."}
+          </div>
+          {error ? <div className="mt-1 text-[10px] text-danger">{error}</div> : null}
+        </div>
+        <Button
+          size="sm"
+          onClick={() => {
+            setGenerating(true);
+            setError(undefined);
+            onGenerateContent()
+              .then(setLastResult)
+              .catch((e) => setError((e as Error).message))
+              .finally(() => setGenerating(false));
+          }}
+          disabled={generating}
+        >
+          {generating ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <WandSparkles className="h-3.5 w-3.5" />
+          )}
+          {generating ? "Generating" : "Generate Drafts"}
+        </Button>
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-3">
         <MetricTile
           label="Growth artifacts"

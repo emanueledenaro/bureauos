@@ -305,6 +305,18 @@ export interface ArtifactRecord {
   failing_checks_count?: number;
   stale_issues_count?: number;
   stale_pull_requests_count?: number;
+  generated_at?: string;
+  memory_ready?: boolean;
+  missing_sections?: string[];
+  pipeline_value?: number;
+  open_opportunities?: number;
+  draft_count?: number;
+  draft_artifacts?: string[];
+  kind?: string;
+  channel?: string;
+  title?: string;
+  approval_required?: boolean;
+  opportunity_id?: string;
 }
 export interface CoordinatorAttachmentInput {
   name: string;
@@ -383,6 +395,25 @@ export interface BusinessReportResult {
     pipeline_value: number;
     approvals_pending: number;
   };
+  next_actions: string[];
+}
+export interface GrowthContentPipelineDraft {
+  kind: "social" | "campaign" | "creative" | "ads";
+  channel: string;
+  title: string;
+  artifact: ArtifactRecord;
+  client_id: string;
+  opportunity_id: string;
+  approval_required: boolean;
+}
+export interface GrowthContentPipelineResult {
+  generated_at: string;
+  memory_ready: boolean;
+  missing_sections: string[];
+  pipeline_value: number;
+  open_opportunities: number;
+  drafts: GrowthContentPipelineDraft[];
+  report: ArtifactRecord;
   next_actions: string[];
 }
 export interface GitHubIssueDraft {
@@ -574,6 +605,11 @@ export const Api = {
   growthMemory: () => api<GrowthMemorySummary>("/growth/memory"),
   updateGrowthMemory: (input: { brand?: string; offers?: string; channels?: string }) =>
     api<GrowthMemorySummary>("/growth/memory", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  generateGrowthContent: (input: { maxDrafts?: number; focus?: string } = {}) =>
+    api<GrowthContentPipelineResult>("/growth/content-pipeline/generate", {
       method: "POST",
       body: JSON.stringify(input),
     }),

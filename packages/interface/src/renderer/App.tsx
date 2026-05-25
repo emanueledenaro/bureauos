@@ -29,6 +29,7 @@ import {
   type BusinessReportResult,
   type CoordinatorAttachmentInput,
   type CoordinatorChatResult,
+  type GrowthContentPipelineResult,
   type ProjectRepositoryVerificationResult,
 } from "./lib/api";
 import type { AdaptiveMode, DashboardState } from "./lib/types";
@@ -70,6 +71,12 @@ export function App() {
 
   const onGenerateReport = async (): Promise<BusinessReportResult> => {
     const result = await Api.generateReports();
+    await refresh();
+    return result;
+  };
+
+  const onGenerateGrowthContent = async (): Promise<GrowthContentPipelineResult> => {
+    const result = await Api.generateGrowthContent({ maxDrafts: 4 });
     await refresh();
     return result;
   };
@@ -139,6 +146,7 @@ export function App() {
                 onProviderLogout={onProviderLogout}
                 onVerifyRepositories={onVerifyRepositories}
                 onRetryScan={onRetryScan}
+                onGenerateGrowthContent={onGenerateGrowthContent}
                 onRefresh={refresh}
               />
             </main>
@@ -193,6 +201,7 @@ function DashboardLayout({
   onProviderLogout,
   onVerifyRepositories,
   onRetryScan,
+  onGenerateGrowthContent,
   onRefresh,
 }: {
   mode: AdaptiveMode;
@@ -212,6 +221,7 @@ function DashboardLayout({
   onProviderLogout: (provider: string, id: string) => Promise<void>;
   onVerifyRepositories: (projectSlug?: string) => Promise<ProjectRepositoryVerificationResult>;
   onRetryScan: () => Promise<AutonomousRetryResult>;
+  onGenerateGrowthContent: () => Promise<GrowthContentPipelineResult>;
   onRefresh: () => Promise<void>;
 }) {
   const mainView = renderMainView({
@@ -223,6 +233,7 @@ function DashboardLayout({
     onProviderLogout,
     onVerifyRepositories,
     onRetryScan,
+    onGenerateGrowthContent,
     onRefresh,
   });
 
@@ -249,6 +260,7 @@ function renderMainView({
   onProviderLogout,
   onVerifyRepositories,
   onRetryScan,
+  onGenerateGrowthContent,
   onRefresh,
 }: {
   mode: AdaptiveMode;
@@ -267,6 +279,7 @@ function renderMainView({
   onProviderLogout: (provider: string, id: string) => Promise<void>;
   onVerifyRepositories: (projectSlug?: string) => Promise<ProjectRepositoryVerificationResult>;
   onRetryScan: () => Promise<AutonomousRetryResult>;
+  onGenerateGrowthContent: () => Promise<GrowthContentPipelineResult>;
   onRefresh: () => Promise<void>;
 }) {
   switch (mode) {
@@ -281,7 +294,7 @@ function renderMainView({
     case "delivery":
       return <DeliveryView state={state} onVerifyRepositories={onVerifyRepositories} />;
     case "growth":
-      return <GrowthView state={state} />;
+      return <GrowthView state={state} onGenerateContent={onGenerateGrowthContent} />;
     case "clients":
       return <ClientsView state={state} />;
     case "risk":

@@ -384,6 +384,63 @@ describe("API server", () => {
     );
   });
 
+  it("generates draft-only growth content through the local API", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const memory = await fetch(`${server.url}/growth/memory`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        brand: "BureauOS is the AI operating room for owner-led software companies.",
+        offers: "AAAS setup and autonomous delivery operations.",
+        channels: "X, LinkedIn, GitHub.",
+      }),
+    });
+    expect(memory.status).toBe(201);
+
+    await fetch(`${server.url}/coordinator/intake`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        clientName: "Nebula Studios",
+        expectedValue: 12000,
+        message: "Nebula Studios wants a BureauOS AAAS launch package.",
+      }),
+    });
+
+    const response = await fetch(`${server.url}/growth/content-pipeline/generate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ maxDrafts: 2, focus: "AAAS launch" }),
+    });
+
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as {
+      memory_ready: boolean;
+      drafts: Array<{ kind: string; artifact: { type: string } }>;
+      report: { type: string; draft_count: number };
+    };
+    expect(body.memory_ready).toBe(true);
+    expect(body.report).toMatchObject({
+      type: "content-pipeline-report",
+      draft_count: 2,
+    });
+    expect(body.drafts.map((draft) => draft.kind)).toEqual(["social", "campaign"]);
+
+    const reports = (await (await fetch(`${server.url}/growth/content-pipeline`)).json()) as Array<{
+      type: string;
+      draft_count: number;
+    }>;
+    expect(reports).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "content-pipeline-report", draft_count: 2 }),
+      ]),
+    );
+
+    const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(audit).toContain("growth.content_pipeline.generated");
+  });
+
   it("persists coordinator message history for the ElectronJS chat", async () => {
     server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
 
