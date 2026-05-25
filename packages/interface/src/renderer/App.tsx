@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Sidebar, SidebarDrawer } from "./components/layout/Sidebar";
 import { Header } from "./components/layout/Header";
 import { AgentLayer } from "./components/layout/AgentLayer";
-import { CoordinatorPanel } from "./components/coordinator/CoordinatorPanel";
-import { Sheet, SheetContent, SheetTitle } from "./components/ui/sheet";
+import { QuickChatPopover } from "./components/coordinator/QuickChatPopover";
 import { TooltipProvider } from "./components/ui/tooltip";
+import { CoordinatorView } from "./views/CoordinatorView";
 import { PortfolioView } from "./views/PortfolioView";
 import { TodayView } from "./views/TodayView";
 import { GoalsView } from "./views/GoalsView";
@@ -42,13 +42,31 @@ export function App() {
   const [mode, setMode] = useState<AdaptiveMode>("portfolio");
   const [modeTouched, setModeTouched] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [coordinatorOpen, setCoordinatorOpen] = useState(false);
+  const [quickChatOpen, setQuickChatOpen] = useState(false);
 
   useEffect(() => {
     if (!modeTouched && !state.loading) {
       setMode(adaptiveDefaultMode(state));
     }
   }, [modeTouched, state]);
+
+  // ⌘K / Ctrl+K apre il quick-chat coordinator da qualsiasi vista.
+  useEffect(() => {
+    const handler = (event: KeyboardEvent): void => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setQuickChatOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
+  const openCoordinatorPage = useCallback((): void => {
+    setQuickChatOpen(false);
+    setModeTouched(true);
+    setMode("coordinator");
+  }, []);
 
   const onModeChange = (nextMode: AdaptiveMode): void => {
     setModeTouched(true);
@@ -153,63 +171,40 @@ export function App() {
             mode={mode}
             onModeChange={onModeChange}
             onOpenSidebar={() => setSidebarOpen(true)}
-            onOpenCoordinator={() => setCoordinatorOpen(true)}
+            onOpenQuickChat={() => setQuickChatOpen(true)}
           />
-          <div className="flex min-h-0 flex-1 overflow-hidden">
-            <main className="min-w-0 flex-1 overflow-y-auto bg-background">
-              <DashboardLayout
-                mode={mode}
-                state={state}
-                onModeChange={onModeChange}
-                onResolve={onResolve}
-                onGenerateReport={onGenerateReport}
-                onProviderLogin={onProviderLogin}
-                onProviderLogout={onProviderLogout}
-                onVerifyRepositories={onVerifyRepositories}
-                onRetryScan={onRetryScan}
-                onGenerateClientSuccessStatus={onGenerateClientSuccessStatus}
-                onMemoryTriggerScan={onMemoryTriggerScan}
-                onGenerateGrowthContent={onGenerateGrowthContent}
-                onGenerateRevenuePipeline={onGenerateRevenuePipeline}
-                onRefresh={refresh}
-              />
-            </main>
-            <aside className="hidden h-full w-[360px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-border/60 bg-surface/60 p-4 xl:flex 2xl:w-[400px]">
-              <div className="flex min-h-[420px] flex-1 flex-col">
-                <CoordinatorPanel onMessage={onCoordinatorMessage} />
-              </div>
-              <PendingApprovalsView
-                approvals={state.approvals}
-                onResolve={onResolve}
-                onOpen={() => onModeChange("approvals")}
-              />
-            </aside>
-          </div>
+          <main className="min-w-0 flex-1 overflow-y-auto bg-background">
+            <DashboardLayout
+              mode={mode}
+              state={state}
+              onModeChange={onModeChange}
+              onResolve={onResolve}
+              onCoordinatorMessage={onCoordinatorMessage}
+              onGenerateReport={onGenerateReport}
+              onProviderLogin={onProviderLogin}
+              onProviderLogout={onProviderLogout}
+              onVerifyRepositories={onVerifyRepositories}
+              onRetryScan={onRetryScan}
+              onGenerateClientSuccessStatus={onGenerateClientSuccessStatus}
+              onMemoryTriggerScan={onMemoryTriggerScan}
+              onGenerateGrowthContent={onGenerateGrowthContent}
+              onGenerateRevenuePipeline={onGenerateRevenuePipeline}
+              onRefresh={refresh}
+            />
+          </main>
           <AgentLayer agents={state.agents} />
           {state.error ? (
-            <div className="border-t border-danger/40 bg-danger-subtle/40 px-5 py-2 text-[11px] text-danger">
+            <div className="border-t border-danger/40 bg-danger-subtle/40 px-5 py-2 text-meta text-danger">
               API server unreachable: {state.error}
             </div>
           ) : null}
         </div>
-        <Sheet open={coordinatorOpen} onOpenChange={setCoordinatorOpen}>
-          <SheetContent side="right" className="w-full max-w-md p-0" hideClose>
-            <SheetTitle className="sr-only">Supreme Coordinator</SheetTitle>
-            <div className="flex h-full flex-col gap-3 overflow-y-auto p-3">
-              <div className="flex min-h-[420px] flex-1 flex-col">
-                <CoordinatorPanel onMessage={onCoordinatorMessage} />
-              </div>
-              <PendingApprovalsView
-                approvals={state.approvals}
-                onResolve={onResolve}
-                onOpen={() => {
-                  setCoordinatorOpen(false);
-                  onModeChange("approvals");
-                }}
-              />
-            </div>
-          </SheetContent>
-        </Sheet>
+        <QuickChatPopover
+          open={quickChatOpen}
+          onOpenChange={setQuickChatOpen}
+          onSubmit={onCoordinatorMessage}
+          onOpenFullCoordinator={openCoordinatorPage}
+        />
       </div>
     </TooltipProvider>
   );
@@ -220,6 +215,7 @@ function DashboardLayout({
   state,
   onModeChange,
   onResolve,
+  onCoordinatorMessage,
   onGenerateReport,
   onProviderLogin,
   onProviderLogout,
@@ -235,6 +231,10 @@ function DashboardLayout({
   state: DashboardState;
   onModeChange: (mode: AdaptiveMode) => void;
   onResolve: (id: string, status: "approved" | "rejected") => Promise<void>;
+  onCoordinatorMessage: (
+    message: string,
+    attachments?: CoordinatorAttachmentInput[],
+  ) => Promise<CoordinatorChatResult>;
   onGenerateReport: () => Promise<BusinessReportResult>;
   onProviderLogin: (input: {
     provider: string;
@@ -254,6 +254,20 @@ function DashboardLayout({
   onGenerateRevenuePipeline: () => Promise<RevenuePipelineResult>;
   onRefresh: () => Promise<void>;
 }) {
+  // La pagina coordinator richiede tutta l'altezza utile e non ha le righe
+  // dashboard sotto (Timeline/RevenuePulse). Layout dedicato.
+  if (mode === "coordinator") {
+    return (
+      <div className="mx-auto flex h-full w-full max-w-[1800px] flex-col p-3 sm:p-4 lg:p-5">
+        <CoordinatorView
+          state={state}
+          onMessage={onCoordinatorMessage}
+          onModeChange={onModeChange}
+        />
+      </div>
+    );
+  }
+
   const mainView = renderMainView({
     mode,
     state,
@@ -271,7 +285,7 @@ function DashboardLayout({
   });
 
   return (
-    <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-4 p-3 sm:p-4 lg:p-5">
+    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 p-3 sm:p-4 lg:p-5">
       {mainView}
       <TimelineView events={state.audit} artifacts={state.artifacts} />
       <RevenuePulseView
@@ -322,6 +336,9 @@ function renderMainView({
   onRefresh: () => Promise<void>;
 }) {
   switch (mode) {
+    case "coordinator":
+      // Handled by DashboardLayout's early branch.
+      return null;
     case "portfolio":
       return <PortfolioView state={state} />;
     case "today":

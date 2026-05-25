@@ -1,10 +1,12 @@
-import { useState } from "react";
 import { AlertTriangle, Briefcase, DollarSign, FileText, RefreshCw, Users } from "lucide-react";
 import { SectionShell } from "../components/dashboard/SectionShell";
 import { MetricTile } from "../components/dashboard/MetricTile";
 import { ClientAccountCard } from "../components/dashboard/ClientAccountCard";
 import { EmptyState } from "../components/dashboard/EmptyState";
-import { Button } from "../components/ui/button";
+import { ActionBanner } from "../components/dashboard/ActionBanner";
+import { KpiBar } from "../components/dashboard/KpiBar";
+import { ViewToolbar } from "../components/dashboard/ViewToolbar";
+import { useAsyncAction } from "../hooks/useAsyncAction";
 import { formatMoney } from "../lib/format";
 import type { ClientSuccessStatusResult, MemoryTriggerResult } from "../lib/api";
 import type { DashboardState } from "../lib/types";
@@ -20,69 +22,75 @@ export function ClientsView({
 }) {
   const intelligence = state.clientIntelligence;
   const clients = intelligence?.clients ?? [];
-  const [busy, setBusy] = useState<"status" | "scan" | undefined>();
-  const [lastAction, setLastAction] = useState<string | undefined>();
-
-  const generateSuccessStatus = async (): Promise<void> => {
-    setBusy("status");
-    try {
-      const result = await onGenerateSuccessStatus();
-      setLastAction(`${result.reports.length} client success report(s) generated`);
-    } catch (error) {
-      setLastAction(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(undefined);
-    }
-  };
-
-  const scanMemoryTriggers = async (): Promise<void> => {
-    setBusy("scan");
-    try {
-      const result = await onMemoryTriggerScan();
-      setLastAction(
-        `${result.triggered.length} follow-up run(s), ${result.skipped.length} skipped`,
-      );
-    } catch (error) {
-      setLastAction(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(undefined);
-    }
-  };
+  const status = useAsyncAction(onGenerateSuccessStatus);
+  const scan = useAsyncAction(onMemoryTriggerScan);
+  const noClients = clients.length === 0;
 
   return (
     <SectionShell
       title="Clients"
       description="Client memory, project history, and commercial value."
       action={
-        <>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void generateSuccessStatus()}
-            disabled={Boolean(busy) || clients.length === 0}
-          >
-            <FileText className="h-3 w-3" />
-            {busy === "status" ? "Generating" : "Status reports"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void scanMemoryTriggers()}
-            disabled={Boolean(busy) || clients.length === 0}
-          >
-            <RefreshCw className="h-3 w-3" />
-            {busy === "scan" ? "Scanning" : "Scan due"}
-          </Button>
-        </>
+        <ViewToolbar
+          primary={{
+            label: "Generate status reports",
+            icon: FileText,
+            onClick: () => void status.run(),
+            busy: status.busy,
+            busyLabel: "Generating",
+            disabled: noClients,
+          }}
+          secondary={[
+            {
+              label: "Run follow-up scan",
+              icon: RefreshCw,
+              onClick: () => void scan.run(),
+              busy: scan.busy,
+              busyLabel: "Scanning",
+              disabled: noClients,
+            },
+          ]}
+        />
       }
     >
-      {lastAction ? (
-        <div className="mb-3 rounded-md border border-border/60 bg-surface-subtle px-3 py-2 text-[11px] text-muted-foreground">
-          {lastAction}
-        </div>
+      {status.error ? (
+        <ActionBanner
+          tone="danger"
+          title="Status report failed"
+          detail={status.error}
+          onDismiss={status.reset}
+          className="mb-3"
+        />
+      ) : null}
+      {status.result ? (
+        <ActionBanner
+          tone="success"
+          title="Status reports generated"
+          detail={`${status.result.reports.length} report(s) created`}
+          onDismiss={status.reset}
+          className="mb-3"
+        />
+      ) : null}
+      {scan.error ? (
+        <ActionBanner
+          tone="danger"
+          title="Follow-up scan failed"
+          detail={scan.error}
+          onDismiss={scan.reset}
+          className="mb-3"
+        />
+      ) : null}
+      {scan.result ? (
+        <ActionBanner
+          tone="success"
+          title="Follow-up scan complete"
+          detail={`${scan.result.triggered.length} run(s) triggered · ${scan.result.skipped.length} skipped`}
+          onDismiss={scan.reset}
+          className="mb-3"
+        />
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <KpiBar>
         <MetricTile
           label="Clients"
           value={String(intelligence?.totals.clients ?? state.clients.length)}
@@ -104,37 +112,39 @@ export function ClientsView({
           icon={DollarSign}
           tone="success"
         />
+      </KpiBar>
+
+      <div className="mt-3">
+        <KpiBar>
+          <MetricTile
+            label="Active projects"
+            value={String(intelligence?.totals.active_projects ?? 0)}
+            detail="Across all clients"
+            icon={Briefcase}
+            tone="info"
+          />
+          <MetricTile
+            label="Blocked projects"
+            value={String(intelligence?.totals.blocked_projects ?? 0)}
+            detail="Client delivery risk"
+            icon={AlertTriangle}
+            tone={intelligence?.totals.blocked_projects ? "danger" : "success"}
+          />
+          <MetricTile
+            label="Follow-ups due"
+            value={String(intelligence?.totals.follow_ups_due ?? 0)}
+            detail="Relationship memory"
+            icon={Users}
+            tone={intelligence?.totals.follow_ups_due ? "warning" : "success"}
+          />
+        </KpiBar>
       </div>
 
-      <div className="mt-3 grid gap-3 sm:grid-cols-3">
-        <MetricTile
-          label="Active projects"
-          value={String(intelligence?.totals.active_projects ?? 0)}
-          detail="Across all clients"
-          icon={Briefcase}
-          tone="info"
-        />
-        <MetricTile
-          label="Blocked projects"
-          value={String(intelligence?.totals.blocked_projects ?? 0)}
-          detail="Client delivery risk"
-          icon={AlertTriangle}
-          tone={intelligence?.totals.blocked_projects ? "danger" : "success"}
-        />
-        <MetricTile
-          label="Follow-ups due"
-          value={String(intelligence?.totals.follow_ups_due ?? 0)}
-          detail="Relationship memory"
-          icon={Users}
-          tone={intelligence?.totals.follow_ups_due ? "warning" : "success"}
-        />
-      </div>
-
-      <div className="mt-5 grid gap-3 xl:grid-cols-2">
+      <div className="mt-section grid gap-3 xl:grid-cols-2">
         {clients.map((item) => (
           <ClientAccountCard key={item.client.id} item={item} />
         ))}
-        {clients.length === 0 ? (
+        {noClients ? (
           <div className="xl:col-span-2">
             <EmptyState
               title="No clients yet"

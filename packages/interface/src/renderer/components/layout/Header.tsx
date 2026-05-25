@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bell, MessageSquare, Menu, Moon } from "lucide-react";
+import { Bell, Command, Menu, MessageSquare, Moon } from "lucide-react";
 import { Avatar, AvatarFallback } from "../ui/avatar";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
@@ -19,13 +19,13 @@ export function Header({
   mode,
   onModeChange,
   onOpenSidebar,
-  onOpenCoordinator,
+  onOpenQuickChat,
 }: {
   state: DashboardState;
   mode: AdaptiveMode;
   onModeChange: (mode: AdaptiveMode) => void;
   onOpenSidebar: () => void;
-  onOpenCoordinator: () => void;
+  onOpenQuickChat: () => void;
 }) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -99,17 +99,34 @@ export function Header({
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
+              variant="outline"
+              size="sm"
+              onClick={onOpenQuickChat}
+              className="hidden md:inline-flex"
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+              Quick chat
+              <span className="ml-1 inline-flex items-center gap-0.5 rounded border border-border/70 bg-surface-raised px-1 py-0.5 text-[9px] text-muted-foreground">
+                <Command className="h-2.5 w-2.5" />K
+              </span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Quick chat with coordinator (⌘K)</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
               variant="ghost"
               size="icon"
-              className="xl:hidden relative"
-              onClick={onOpenCoordinator}
-              aria-label="Open coordinator chat"
+              className="md:hidden relative"
+              onClick={onOpenQuickChat}
+              aria-label="Quick chat with coordinator"
             >
               <MessageSquare className="h-4 w-4" />
               <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-success animate-pulse-soft" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Supreme Coordinator</TooltipContent>
+          <TooltipContent>Quick chat</TooltipContent>
         </Tooltip>
 
         <Tooltip>

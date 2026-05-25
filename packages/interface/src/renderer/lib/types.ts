@@ -19,6 +19,7 @@ import type {
 import type { Tone } from "./tone";
 
 export type AdaptiveMode =
+  | "coordinator"
   | "portfolio"
   | "today"
   | "goals"

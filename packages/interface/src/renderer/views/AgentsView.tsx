@@ -2,7 +2,9 @@ import { Bot, ShieldCheck, Wrench } from "lucide-react";
 import { SectionShell } from "../components/dashboard/SectionShell";
 import { MetricTile } from "../components/dashboard/MetricTile";
 import { StatusPill } from "../components/dashboard/StatusPill";
+import { KpiBar } from "../components/dashboard/KpiBar";
 import { ResponsiveTable } from "../components/dashboard/ResponsiveTable";
+import { BaseCard, BaseCardHeader } from "../components/dashboard/BaseCard";
 import { Badge } from "../components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../components/ui/tooltip";
 import { agentAbbr } from "../lib/tone";
@@ -29,7 +31,7 @@ export function AgentsView({ state }: { state: DashboardState }) {
 
   return (
     <SectionShell title="Agents" description="The autonomous organization and role boundaries.">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <KpiBar>
         <MetricTile
           label="Agents"
           value={String(state.agents.length)}
@@ -51,28 +53,21 @@ export function AgentsView({ state }: { state: DashboardState }) {
           icon={ShieldCheck}
           tone={highRisk > 0 ? "warning" : "success"}
         />
-      </div>
+      </KpiBar>
 
-      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-section grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {state.agents.map((agent) => (
-          <div
-            key={agent.id}
-            className="flex flex-col gap-3 rounded-lg border border-border/70 bg-surface-subtle/60 p-4"
-          >
+          <BaseCard key={agent.id} className="gap-3">
             <div className="flex items-center gap-3">
-              <span className="grid h-9 w-9 place-items-center rounded-lg bg-surface-raised border border-border/60 text-[11px] font-semibold text-foreground">
+              <span className="grid h-9 w-9 place-items-center rounded-lg border border-border/60 bg-surface-raised text-card-title">
                 {agentAbbr(agent.role)}
               </span>
               <div className="min-w-0">
-                <div className="truncate text-[12px] font-semibold text-foreground">
-                  {formatLabel(agent.role)}
-                </div>
-                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                  {agent.category}
-                </div>
+                <div className="text-card-title truncate">{formatLabel(agent.role)}</div>
+                <div className="text-eyebrow">{agent.category}</div>
               </div>
             </div>
-            <p className="line-clamp-3 text-[11px] leading-relaxed text-muted-foreground">
+            <p className="text-body-secondary line-clamp-3 leading-relaxed text-muted-foreground">
               {agent.description}
             </p>
             <div className="mt-auto flex flex-wrap gap-1.5">
@@ -81,23 +76,23 @@ export function AgentsView({ state }: { state: DashboardState }) {
                 .map((capability) => (
                   <Tooltip key={capability.id}>
                     <TooltipTrigger asChild>
-                      <Badge variant="outline" className="cursor-default px-2 py-1 text-[9px]">
+                      <Badge variant="outline" className="cursor-default px-2 py-1 text-micro">
                         {capability.id}
                       </Badge>
                     </TooltipTrigger>
                     <TooltipContent>
                       <div className="font-medium">{capability.name}</div>
-                      <div className="mt-0.5 text-muted-foreground">
+                      <div className="text-meta mt-0.5">
                         {enabledActions(capability).join(", ") || "no enabled actions"}
                       </div>
                     </TooltipContent>
                   </Tooltip>
                 ))}
               {assignedTo(agent.id).length === 0 ? (
-                <span className="text-[10px] text-muted-foreground">No capability assigned</span>
+                <span className="text-meta">No capability assigned</span>
               ) : null}
             </div>
-          </div>
+          </BaseCard>
         ))}
       </div>
 

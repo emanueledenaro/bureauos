@@ -10,6 +10,14 @@ export default {
       padding: "1.5rem",
       screens: { "2xl": "1440px" },
     },
+    screens: {
+      sm: "640px",
+      md: "768px",
+      lg: "1024px",
+      xl: "1280px",
+      "2xl": "1536px",
+      "3xl": "1800px",
+    },
     extend: {
       fontFamily: {
         sans: [
@@ -91,7 +99,24 @@ export default {
         sm: "calc(var(--radius) - 4px)",
       },
       fontSize: {
-        "2xs": ["0.6875rem", { lineHeight: "1rem" }],
+        // Scala formale a 8 step. Usare classi semantiche
+        // (text-display/text-kpi/text-view-title/text-section-title/
+        //  text-card-title/text-body/text-body-secondary/text-meta/text-micro/text-eyebrow)
+        // dove possibile. Questi token sono il fallback per casi puntuali.
+        micro: ["10px", { lineHeight: "14px" }],
+        meta: ["11px", { lineHeight: "16px" }],
+        body: ["12px", { lineHeight: "18px" }],
+        "body-lg": ["13px", { lineHeight: "20px" }],
+        "section-title": ["14px", { lineHeight: "20px" }],
+        "view-title": ["16px", { lineHeight: "22px" }],
+        kpi: ["20px", { lineHeight: "26px" }],
+        display: ["28px", { lineHeight: "34px" }],
+      },
+      spacing: {
+        tight: "0.5rem", // 8
+        comfortable: "0.75rem", // 12
+        roomy: "1rem", // 16
+        section: "1.5rem", // 24
       },
       keyframes: {
         "accordion-down": {

@@ -1,4 +1,5 @@
 import { ArrowRight, Briefcase, TrendingUp } from "lucide-react";
+import { BaseCard, BaseCardHeader } from "./BaseCard";
 import { Button } from "../ui/button";
 import { MiniStat } from "./MetricTile";
 import { StatusPill } from "./StatusPill";
@@ -16,32 +17,25 @@ export function ClientAccountCard({ item }: { item: ClientIntelligenceItem }) {
     item.memory_paths.risks,
   ];
 
+  const subtitle = (
+    <span className="flex flex-wrap gap-x-2 gap-y-1">
+      <span>{item.client.industry}</span>
+      <span aria-hidden>·</span>
+      <span className="font-mono">{item.client.slug}</span>
+      <span aria-hidden>·</span>
+      <span>
+        {item.latest_activity_at
+          ? `Updated ${timeAgo(item.latest_activity_at)}`
+          : "No activity"}
+      </span>
+    </span>
+  );
+
   return (
-    <div className="flex flex-col gap-4 rounded-lg border border-border/70 bg-surface-subtle/60 p-4">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="truncate text-[14px] font-semibold text-foreground">
-            {item.client.name}
-          </div>
-          <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
-            <span>{item.client.industry}</span>
-            <span aria-hidden>·</span>
-            <span className="font-mono">{item.client.slug}</span>
-            {item.latest_activity_at ? (
-              <>
-                <span aria-hidden>·</span>
-                <span>Updated {timeAgo(item.latest_activity_at)}</span>
-              </>
-            ) : (
-              <>
-                <span aria-hidden>·</span>
-                <span>No activity</span>
-              </>
-            )}
-          </div>
-        </div>
+    <BaseCard className="gap-4">
+      <BaseCardHeader title={item.client.name} subtitle={subtitle}>
         <StatusPill value={formatLabel(item.risk)} tone={clientRiskTone(item.risk)} />
-      </div>
+      </BaseCardHeader>
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         <MiniStat label="Pipeline" value={formatMoney(item.revenue.pipeline_value)} />
@@ -51,36 +45,36 @@ export function ClientAccountCard({ item }: { item: ClientIntelligenceItem }) {
       </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <div className="rounded-md border border-border/60 bg-surface-raised/60 p-3 text-[11px]">
+        <div className="rounded-md border border-border/60 bg-surface-raised/60 p-3">
           <div className="flex items-center gap-1.5 text-muted-foreground">
             <Briefcase className="h-3 w-3" />
-            <span className="font-medium uppercase tracking-wide text-[10px]">Delivery</span>
+            <span className="text-eyebrow">Delivery</span>
           </div>
-          <div className="mt-2 text-foreground">
+          <div className="text-body-secondary mt-2 text-foreground">
             {item.delivery.active_projects} active · {item.delivery.blocked_projects} blocked
           </div>
-          <div className="mt-1 text-muted-foreground">
+          <div className="text-meta mt-1">
             {item.delivery.repositories_linked} repos · {item.delivery.pending_approvals} approvals
           </div>
           {topProject ? (
-            <div className="mt-2 truncate text-muted-foreground">
+            <div className="text-meta mt-2 truncate">
               {topProject.name} · {formatLabel(topProject.status)}
             </div>
           ) : null}
         </div>
-        <div className="rounded-md border border-border/60 bg-surface-raised/60 p-3 text-[11px]">
+        <div className="rounded-md border border-border/60 bg-surface-raised/60 p-3">
           <div className="flex items-center gap-1.5 text-muted-foreground">
             <TrendingUp className="h-3 w-3" />
-            <span className="font-medium uppercase tracking-wide text-[10px]">Revenue</span>
+            <span className="text-eyebrow">Revenue</span>
           </div>
-          <div className="mt-2 text-foreground">
+          <div className="text-body-secondary mt-2 text-foreground">
             {Math.round(item.revenue.average_expected_margin)}% average margin
           </div>
-          <div className="mt-1 text-muted-foreground">
+          <div className="text-meta mt-1">
             {item.revenue.won_opportunities} won · {item.revenue.stalled_opportunities} stalled
           </div>
           {topOpportunity ? (
-            <div className="mt-2 truncate text-muted-foreground">
+            <div className="text-meta mt-2 truncate">
               {topOpportunity.title} · {formatMoney(topOpportunity.expected_value)}
             </div>
           ) : null}
@@ -88,15 +82,15 @@ export function ClientAccountCard({ item }: { item: ClientIntelligenceItem }) {
       </div>
 
       <div className="rounded-md border border-border/60 bg-surface-raised/60 p-3">
-        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Next action</div>
-        <div className="mt-1 text-[12px] leading-relaxed text-foreground">{item.next_action}</div>
+        <div className="text-eyebrow">Next action</div>
+        <div className="text-body mt-1 leading-relaxed text-foreground">{item.next_action}</div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
         {memoryPaths.slice(0, 3).map((path) => (
           <span
             key={path}
-            className="max-w-full truncate rounded border border-border/60 bg-surface-raised/40 px-2 py-1 font-mono text-[10px] text-muted-foreground"
+            className="text-meta max-w-full truncate rounded border border-border/60 bg-surface-raised/40 px-2 py-1 font-mono"
             title={path}
           >
             {path}
@@ -107,6 +101,6 @@ export function ClientAccountCard({ item }: { item: ClientIntelligenceItem }) {
           <ArrowRight className="h-3 w-3" />
         </Button>
       </div>
-    </div>
+    </BaseCard>
   );
 }

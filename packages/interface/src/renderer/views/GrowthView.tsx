@@ -1,10 +1,13 @@
-import { useState } from "react";
-import { Loader2, Megaphone, ShieldCheck, Sparkles, WandSparkles } from "lucide-react";
+import { Megaphone, ShieldCheck, Sparkles, WandSparkles } from "lucide-react";
 import { SectionShell } from "../components/dashboard/SectionShell";
 import { MetricTile } from "../components/dashboard/MetricTile";
 import { EmptyState } from "../components/dashboard/EmptyState";
+import { ActionBanner } from "../components/dashboard/ActionBanner";
+import { BaseCard, BaseCardHeader } from "../components/dashboard/BaseCard";
+import { KpiBar } from "../components/dashboard/KpiBar";
+import { ViewToolbar } from "../components/dashboard/ViewToolbar";
 import { Badge } from "../components/ui/badge";
-import { Button } from "../components/ui/button";
+import { useAsyncAction } from "../hooks/useAsyncAction";
 import { formatLabel, timeAgo } from "../lib/format";
 import type { GrowthContentPipelineResult } from "../lib/api";
 import type { DashboardState } from "../lib/types";
@@ -16,9 +19,7 @@ export function GrowthView({
   state: DashboardState;
   onGenerateContent: () => Promise<GrowthContentPipelineResult>;
 }) {
-  const [generating, setGenerating] = useState(false);
-  const [lastResult, setLastResult] = useState<GrowthContentPipelineResult | undefined>();
-  const [error, setError] = useState<string | undefined>();
+  const generate = useAsyncAction(onGenerateContent);
   const growthArtifacts = state.artifacts.filter((artifact) =>
     ["social-post-brief", "ad-campaign-brief", "creative-brief", "campaign-brief"].includes(
       artifact.type,
@@ -32,39 +33,36 @@ export function GrowthView({
     <SectionShell
       title="Growth"
       description="Draft-first marketing, content, social, and ads assets."
-    >
-      <div className="mb-4 flex flex-col gap-3 rounded-lg border border-border/70 bg-surface-subtle/50 p-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <div className="text-[12px] font-semibold text-foreground">Content Pipeline</div>
-          <div className="mt-1 text-[10px] text-muted-foreground">
-            {lastResult
-              ? `${lastResult.drafts.length} drafts generated · report ${lastResult.report.id}`
-              : "Generates local drafts only. Publishing, spend, client contact, and claims stay approval-gated."}
-          </div>
-          {error ? <div className="mt-1 text-[10px] text-danger">{error}</div> : null}
-        </div>
-        <Button
-          size="sm"
-          onClick={() => {
-            setGenerating(true);
-            setError(undefined);
-            onGenerateContent()
-              .then(setLastResult)
-              .catch((e) => setError((e as Error).message))
-              .finally(() => setGenerating(false));
+      action={
+        <ViewToolbar
+          primary={{
+            label: "Generate drafts",
+            icon: WandSparkles,
+            onClick: () => void generate.run(),
+            busy: generate.busy,
+            busyLabel: "Generating",
           }}
-          disabled={generating}
-        >
-          {generating ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <WandSparkles className="h-3.5 w-3.5" />
-          )}
-          {generating ? "Generating" : "Generate Drafts"}
-        </Button>
-      </div>
+        />
+      }
+    >
+      <ActionBanner
+        tone={generate.error ? "danger" : generate.result ? "success" : "info"}
+        title={
+          generate.error
+            ? "Content generation failed"
+            : generate.result
+              ? `${generate.result.drafts.length} drafts generated · report ${generate.result.report.id}`
+              : "Content pipeline"
+        }
+        detail={
+          generate.error ??
+          "Generates local drafts only. Publishing, spend, client contact, and claims stay approval-gated."
+        }
+        onDismiss={generate.error || generate.result ? generate.reset : undefined}
+        className="mb-section"
+      />
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <KpiBar>
         <MetricTile
           label="Growth artifacts"
           value={String(growthArtifacts.length)}
@@ -86,32 +84,28 @@ export function GrowthView({
           icon={ShieldCheck}
           tone={state.approvals.length > 0 ? "warning" : "success"}
         />
-      </div>
+      </KpiBar>
 
-      <div className="mt-5">
+      <div className="mt-section">
         <div className="flex items-center justify-between">
-          <h3 className="text-[12px] font-semibold text-foreground">Growth Memory</h3>
-          <span className="text-[10px] text-muted-foreground">
+          <h3 className="text-section-title">Growth Memory</h3>
+          <span className="text-meta">
             {growthMemory?.ready ? "Ready" : "Incomplete"} · {configuredMemory}/3 sections
           </span>
         </div>
         <div className="mt-2 grid gap-3 md:grid-cols-3">
           {(growthMemory?.sections ?? []).map((section) => (
-            <div
-              key={section.id}
-              className="flex flex-col gap-3 rounded-lg border border-border/70 bg-surface-subtle/60 p-4"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-[12px] font-semibold text-foreground">{section.title}</div>
+            <BaseCard key={section.id} className="gap-3">
+              <BaseCardHeader title={section.title}>
                 <Badge variant={section.status === "configured" ? "success" : "muted"}>
                   {formatLabel(section.status)}
                 </Badge>
-              </div>
-              <div className="font-mono text-[10px] text-muted-foreground">{section.path}</div>
-              <p className="line-clamp-4 text-[11px] leading-relaxed text-foreground/80">
+              </BaseCardHeader>
+              <div className="text-meta font-mono">{section.path}</div>
+              <p className="text-body-secondary line-clamp-4 leading-relaxed text-foreground/80">
                 {section.preview || "No memory configured yet."}
               </p>
-            </div>
+            </BaseCard>
           ))}
           {!growthMemory ? (
             <div className="md:col-span-3">
@@ -124,24 +118,17 @@ export function GrowthView({
         </div>
       </div>
 
-      <div className="mt-5">
-        <h3 className="text-[12px] font-semibold text-foreground">Recent draft assets</h3>
+      <div className="mt-section">
+        <h3 className="text-section-title">Recent draft assets</h3>
         <div className="mt-2 grid gap-3 md:grid-cols-3">
           {growthArtifacts.slice(0, 6).map((artifact) => (
-            <div
-              key={artifact.id}
-              className="rounded-lg border border-border/70 bg-surface-subtle/60 p-4"
-            >
-              <div className="text-[12px] font-semibold text-foreground">
-                {formatLabel(artifact.type)}
-              </div>
-              <div className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
-                {artifact.id}
-              </div>
-              <div className="mt-3 text-[10px] text-muted-foreground">
+            <BaseCard key={artifact.id} variant="interactive" className="gap-2">
+              <BaseCardHeader title={formatLabel(artifact.type)} />
+              <div className="text-meta truncate font-mono">{artifact.id}</div>
+              <div className="text-meta">
                 {artifact.created ? timeAgo(artifact.created) : "created"}
               </div>
-            </div>
+            </BaseCard>
           ))}
           {growthArtifacts.length === 0 ? (
             <div className="md:col-span-3">

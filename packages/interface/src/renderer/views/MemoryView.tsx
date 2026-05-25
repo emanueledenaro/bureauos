@@ -4,6 +4,7 @@ import { SectionShell } from "../components/dashboard/SectionShell";
 import { MetricTile } from "../components/dashboard/MetricTile";
 import { StatusPill } from "../components/dashboard/StatusPill";
 import { EmptyState } from "../components/dashboard/EmptyState";
+import { KpiBar } from "../components/dashboard/KpiBar";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { sortNewest } from "../lib/builders";
@@ -84,7 +85,7 @@ export function MemoryView({ state }: { state: DashboardState }) {
         </div>
       }
     >
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <KpiBar columns={4}>
         <MetricTile label="Clients" value={String(state.clients.length)} detail="Profiles" icon={Database} />
         <MetricTile
           label="Projects"
@@ -104,7 +105,7 @@ export function MemoryView({ state }: { state: DashboardState }) {
           detail="Recent stream"
           icon={Database}
         />
-      </div>
+      </KpiBar>
 
       <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="rounded-lg border border-border/70 bg-surface-subtle/60 p-4">

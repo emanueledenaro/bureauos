@@ -1,12 +1,16 @@
-import { useState } from "react";
 import { AlertTriangle, RotateCcw, ShieldAlert, ShieldCheck } from "lucide-react";
 import { SectionShell } from "../components/dashboard/SectionShell";
 import { MetricTile } from "../components/dashboard/MetricTile";
 import { StatusPill } from "../components/dashboard/StatusPill";
 import { EmptyState } from "../components/dashboard/EmptyState";
-import { Button } from "../components/ui/button";
+import { ActionBanner } from "../components/dashboard/ActionBanner";
+import { BaseCard, BaseCardHeader } from "../components/dashboard/BaseCard";
+import { KpiBar } from "../components/dashboard/KpiBar";
+import { ViewToolbar } from "../components/dashboard/ViewToolbar";
+import { useAsyncAction } from "../hooks/useAsyncAction";
 import { clientName } from "../lib/builders";
 import { formatLabel, timeAgo } from "../lib/format";
+import type { AutonomousRetryResult } from "../lib/api";
 import type { DashboardState } from "../lib/types";
 
 export function RiskView({
@@ -14,41 +18,57 @@ export function RiskView({
   onRetryScan,
 }: {
   state: DashboardState;
-  onRetryScan: () => Promise<unknown>;
+  onRetryScan: () => Promise<AutonomousRetryResult>;
 }) {
-  const [retrying, setRetrying] = useState(false);
-  const [error, setError] = useState<string | undefined>();
   const blocked = state.projects.filter((project) => project.status === "blocked");
   const failed = state.runs.filter((run) => run.status === "failed");
   const blockedRuns = state.runs.filter((run) => run.status === "blocked");
   const latestRetryReport = [...state.artifacts]
     .filter((artifact) => artifact.type === "autonomy-retry-report")
     .sort((a, b) => (b.created ?? "").localeCompare(a.created ?? ""))[0];
+  const retry = useAsyncAction(onRetryScan);
 
-  const retryScan = async (): Promise<void> => {
-    setRetrying(true);
-    setError(undefined);
-    try {
-      await onRetryScan();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setRetrying(false);
-    }
-  };
+  const isClean =
+    state.approvals.length === 0 &&
+    blocked.length === 0 &&
+    failed.length === 0 &&
+    blockedRuns.length === 0;
 
   return (
     <SectionShell
       title="Risk"
       description="Approvals, blocked work, and policy-controlled execution."
       action={
-        <Button variant="outline" size="sm" onClick={() => void retryScan()} disabled={retrying}>
-          <RotateCcw className={retrying ? "animate-spin" : ""} />
-          Retry scan
-        </Button>
+        <ViewToolbar
+          primary={{
+            label: "Retry scan",
+            icon: RotateCcw,
+            onClick: () => void retry.run(),
+            busy: retry.busy,
+            busyLabel: "Retrying",
+          }}
+        />
       }
     >
-      <div className="grid gap-3 sm:grid-cols-3">
+      {retry.error ? (
+        <ActionBanner
+          tone="danger"
+          title="Retry scan failed"
+          detail={retry.error}
+          onDismiss={retry.reset}
+          className="mb-3"
+        />
+      ) : null}
+      {latestRetryReport ? (
+        <ActionBanner
+          tone="info"
+          title="Last retry scan"
+          detail={`${latestRetryReport.retry_count ?? 0} retries · ${latestRetryReport.escalation_count ?? 0} escalations · ${latestRetryReport.created ? timeAgo(latestRetryReport.created) : "now"} · max ${latestRetryReport.max_attempts ?? "policy"}`}
+          className="mb-3"
+        />
+      ) : null}
+
+      <KpiBar>
         <MetricTile
           label="Pending approvals"
           value={String(state.approvals.length)}
@@ -66,87 +86,59 @@ export function RiskView({
         <MetricTile
           label="Run recovery"
           value={String(failed.length + blockedRuns.length)}
-          detail={
-            latestRetryReport
-              ? `${latestRetryReport.retry_count ?? 0} retries · ${latestRetryReport.escalation_count ?? 0} escalations`
-              : "Failed or blocked runs"
-          }
+          detail="Failed or blocked runs"
           icon={ShieldAlert}
           tone={failed.length + blockedRuns.length > 0 ? "danger" : "success"}
         />
-      </div>
+      </KpiBar>
 
-      {latestRetryReport || error ? (
-        <div className="mt-4 rounded-lg border border-border/70 bg-surface-subtle/60 px-4 py-3 text-[11px]">
-          {error ? (
-            <div className="text-danger">Retry scan failed: {error}</div>
-          ) : (
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-muted-foreground">
-              <span className="font-medium text-foreground">Last retry scan</span>
-              <span>{latestRetryReport?.created ? timeAgo(latestRetryReport.created) : "now"}</span>
-              <span>{latestRetryReport?.retry_count ?? 0} retries</span>
-              <span>{latestRetryReport?.escalation_count ?? 0} escalations</span>
-              <span>max {latestRetryReport?.max_attempts ?? "policy"}</span>
-            </div>
-          )}
-        </div>
-      ) : null}
-
-      <div className="mt-5 grid gap-3 md:grid-cols-2">
+      <div className="mt-section grid gap-3 md:grid-cols-2">
         {state.approvals.map((approval) => (
-          <div
-            key={approval.id}
-            className="flex flex-col gap-2 rounded-lg border border-border/70 bg-surface-subtle/60 p-4"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="text-[12px] font-semibold text-foreground">
-                {formatLabel(approval.action)}
-              </div>
+          <BaseCard key={approval.id} variant="accent" accentTone="warning" className="gap-2">
+            <BaseCardHeader title={formatLabel(approval.action)}>
               <StatusPill value="Pending" tone="warning" />
-            </div>
-            <div className="text-[11px] text-muted-foreground">{approval.scope}</div>
-            <div className="font-mono text-[10px] text-muted-foreground/80">{approval.target}</div>
-            <div className="mt-1 text-[10px] text-muted-foreground">
+            </BaseCardHeader>
+            <div className="text-body-secondary text-muted-foreground">{approval.scope}</div>
+            <div className="text-meta font-mono">{approval.target}</div>
+            <div className="text-meta">
               {approval.actor} · {approval.created ? timeAgo(approval.created) : "now"}
             </div>
-          </div>
+          </BaseCard>
         ))}
 
         {blocked.map((project) => (
-          <div
+          <BaseCard
             key={`blocked-${project.id}`}
-            className="flex flex-col gap-2 rounded-lg border border-danger/30 bg-danger-subtle/20 p-4"
+            variant="accent"
+            accentTone="danger"
+            className="gap-2"
           >
-            <div className="flex items-start justify-between gap-3">
-              <div className="text-[12px] font-semibold text-foreground">{project.name}</div>
+            <BaseCardHeader title={project.name}>
               <StatusPill value="Blocked" tone="danger" />
-            </div>
-            <div className="text-[11px] text-muted-foreground">
+            </BaseCardHeader>
+            <div className="text-body-secondary text-muted-foreground">
               {clientName(state.clients, project.client_id)}
             </div>
-            <div className="text-[10px] text-muted-foreground">
-              {project.stack || "Stack not set"}
-            </div>
-          </div>
+            <div className="text-meta">{project.stack || "Stack not set"}</div>
+          </BaseCard>
         ))}
 
         {[...failed, ...blockedRuns].map((run) => (
-          <div
+          <BaseCard
             key={`run-risk-${run.id}`}
-            className="flex flex-col gap-2 rounded-lg border border-warning/30 bg-warning-subtle/20 p-4"
+            variant="accent"
+            accentTone="warning"
+            className="gap-2"
           >
-            <div className="flex items-start justify-between gap-3">
-              <div className="text-[12px] font-semibold text-foreground">
-                {formatLabel(run.type)}
-              </div>
+            <BaseCardHeader title={formatLabel(run.type)}>
               <StatusPill value={formatLabel(run.status)} tone="warning" />
-            </div>
-            <div className="text-[11px] text-muted-foreground">{run.scope}</div>
-            <div className="font-mono text-[10px] text-muted-foreground/80">{run.id}</div>
-          </div>
+            </BaseCardHeader>
+            <div className="text-body-secondary text-muted-foreground">{run.scope}</div>
+            <div className="text-meta font-mono">{run.id}</div>
+          </BaseCard>
         ))}
 
-        {state.approvals.length === 0 && blocked.length === 0 && failed.length === 0 && blockedRuns.length === 0 ? (
+        {isClean ? (
           <div className="md:col-span-2">
             <EmptyState
               title="No active risk"

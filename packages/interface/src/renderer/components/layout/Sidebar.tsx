@@ -8,6 +8,7 @@ import {
   Home,
   Inbox,
   Database,
+  MessageSquare,
   Settings as SettingsIcon,
   ShieldCheck,
   ShieldAlert,
@@ -40,6 +41,7 @@ interface BadgeData {
 }
 
 const PRIMARY: NavItem[] = [
+  { id: "coordinator", label: "Coordinator", icon: MessageSquare },
   { id: "portfolio", label: "Home", icon: Home },
   { id: "revenue", label: "Revenue", icon: Wallet },
   { id: "delivery", label: "Delivery", icon: Briefcase, badgeKey: "projects" },
