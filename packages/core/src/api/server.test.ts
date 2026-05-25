@@ -1133,6 +1133,31 @@ describe("API server", () => {
     });
   });
 
+  it("audits capability use checks through the API", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const response = await fetch(`${server.url}/capabilities/check`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        agent: "development",
+        capabilityId: "codex",
+        action: "read_repo",
+        target: "github.com/acme/web",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      status: string;
+      artifact: { type: string };
+      policy: { action: string };
+    };
+    expect(body.status).toBe("allowed");
+    expect(body.artifact.type).toBe("capability-audit");
+    expect(body.policy.action).toBe("observe_signals");
+  });
+
   it("connects OpenAI Codex with the browser OAuth callback flow", async () => {
     const oauthFetch = (async () =>
       jsonResponse({

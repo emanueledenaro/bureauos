@@ -237,6 +237,14 @@ export type {
   GrowthReviewResult,
 } from "./growth/review.js";
 
+// Capability usage
+export { CapabilityUseService } from "./capabilities/usage.js";
+export type {
+  CapabilityUseDeps,
+  CapabilityUseInput,
+  CapabilityUseResult,
+} from "./capabilities/usage.js";
+
 // Provider auth
 export {
   authorizeOpenAICodexOAuth,

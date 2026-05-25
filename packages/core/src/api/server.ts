@@ -3,6 +3,7 @@ import { readFile, stat, open } from "node:fs/promises";
 import { URL } from "node:url";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { CapabilityRegistry } from "@bureauos/capabilities";
+import { CapabilityUseService } from "../capabilities/usage.js";
 import type { BureauConfig } from "../config/schema.js";
 import { workspacePaths } from "../paths.js";
 import { ClientRegistry } from "../registries/client.js";
@@ -457,6 +458,38 @@ const ROUTES: Record<string, RouteHandler> = {
 
   "GET /capabilities": ({ res, options }) => {
     ok(res, CapabilityRegistry.fromConfig(options.config.capabilities).list());
+  },
+
+  "POST /capabilities/check": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as {
+      agent?: string;
+      capabilityId?: string;
+      action?: string;
+      target?: string;
+      policyAction?: string;
+      linkedIssueNumbers?: number[];
+      testEvidence?: string[];
+      approvalIds?: string[];
+    };
+    if (!body.agent || !body.capabilityId || !body.action) {
+      ok(res, { error: "agent, capabilityId, and action required" }, 400);
+      return;
+    }
+    const result = await new CapabilityUseService(options.workspaceRoot, {
+      config: options.config,
+    }).check({
+      agent: body.agent,
+      capabilityId: body.capabilityId,
+      action: body.action,
+      ...(typeof body.target === "string" ? { target: body.target } : {}),
+      ...(typeof body.policyAction === "string" ? { policyAction: body.policyAction } : {}),
+      ...(Array.isArray(body.linkedIssueNumbers)
+        ? { linkedIssueNumbers: body.linkedIssueNumbers }
+        : {}),
+      ...(Array.isArray(body.testEvidence) ? { testEvidence: body.testEvidence } : {}),
+      ...(Array.isArray(body.approvalIds) ? { approvalIds: body.approvalIds } : {}),
+    });
+    ok(res, result, result.status === "allowed" ? 200 : 202);
   },
 
   "GET /coordinator/messages": async ({ res, options, url }) => {

@@ -5,6 +5,7 @@ import {
   ArtifactStore,
   AuditLog,
   BusinessReportService,
+  CapabilityUseService,
   ClientAccountPlanService,
   ClientIntelligenceService,
   ClientRegistry,
@@ -112,6 +113,8 @@ Providers:
 
 Capabilities:
   capabilities list                         Show agent tool/runtime capability boundaries
+  capabilities check --agent A --capability C --action X
+                                            Audit a policy-bounded capability-use request
 
 Server:
   serve [--port N]                          Start the local HTTP API server
@@ -1385,6 +1388,48 @@ const handleCapabilitiesList: Handler = async () => {
   return 0;
 };
 
+const handleCapabilitiesCheck: Handler = async (args) => {
+  const flags = parseFlags(args, {
+    agent: { type: "string" },
+    capability: { type: "string" },
+    action: { type: "string" },
+    target: { type: "string" },
+    "policy-action": { type: "string" },
+    issue: { type: "number" },
+    test: { type: "string" },
+    approval: { type: "string" },
+  });
+  if (typeof flags === "string") return err(`capabilities check: ${flags}`);
+  if (typeof flags.agent !== "string") return err("capabilities check: --agent required");
+  if (typeof flags.capability !== "string")
+    return err("capabilities check: --capability required");
+  if (typeof flags.action !== "string") return err("capabilities check: --action required");
+
+  const config = await loadWorkspaceConfig(process.cwd()).catch(() => defaultConfig("freelancer"));
+  const result = await new CapabilityUseService(process.cwd(), { config }).check({
+    agent: flags.agent,
+    capabilityId: flags.capability,
+    action: flags.action,
+    ...(typeof flags.target === "string" ? { target: flags.target } : {}),
+    ...(typeof flags["policy-action"] === "string"
+      ? { policyAction: flags["policy-action"] }
+      : {}),
+    ...(typeof flags.issue === "number" ? { linkedIssueNumbers: [flags.issue] } : {}),
+    ...(typeof flags.test === "string" ? { testEvidence: [flags.test] } : {}),
+    ...(typeof flags.approval === "string" ? { approvalIds: [flags.approval] } : {}),
+  });
+
+  process.stdout.write(
+    `capability: ${result.capability.capability_id}.${result.capability.action} -> ${result.status}\n`,
+  );
+  process.stdout.write(`policy: ${result.policy.action} (${result.policy.outcome})\n`);
+  if (result.missing_gates.length > 0)
+    process.stdout.write(`missing gates: ${result.missing_gates.join(", ")}\n`);
+  if (result.approval) process.stdout.write(`approval: ${result.approval.id}\n`);
+  process.stdout.write(`artifact: ${result.artifact.id}\n`);
+  return 0;
+};
+
 // --- Command map and dispatch ---
 
 const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
@@ -1510,7 +1555,7 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
     logout: handleAuthLogout,
   },
   providers: { list: handleProvidersList },
-  capabilities: { list: handleCapabilitiesList },
+  capabilities: { list: handleCapabilitiesList, check: handleCapabilitiesCheck },
   github: {
     "provision-repo": handleGitHubProvisionRepo,
     "draft-issues": handleGitHubDraftIssues,

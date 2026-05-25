@@ -423,6 +423,35 @@ describe("bureau cli", () => {
     expect(yaml).toContain("edit_code: true");
   });
 
+  it("audits capability-use checks from CLI", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+
+    const code = await main([
+      "node",
+      "bureau",
+      "capabilities",
+      "check",
+      "--agent",
+      "development",
+      "--capability",
+      "codex",
+      "--action",
+      "read_repo",
+      "--target",
+      "github.com/acme/web",
+    ]);
+
+    expect(code).toBe(0);
+    const artifacts = await readdir(join(dir, ".bureauos", "memory", "artifacts"));
+    const bodies = await Promise.all(
+      artifacts.map((file) => readFile(join(dir, ".bureauos", "memory", "artifacts", file), "utf8")),
+    );
+    expect(bodies.some((body) => body.includes("Capability Use Audit"))).toBe(true);
+
+    const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
+    expect(audit).toContain("capability.use.allowed");
+  });
+
   it("keeps OpenAI Codex OAuth separate from OpenAI API auth", async () => {
     await main(["node", "bureau", "init", "--name", "BOS"]);
     const oauthCode = await main([

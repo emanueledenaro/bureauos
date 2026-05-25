@@ -155,6 +155,8 @@ Runtime status:
 - `bureauos.yaml` can define or override capability assignments.
 - `GET /capabilities` returns the active capability matrix to ElectronJS.
 - `bureau capabilities list` prints the same capability boundaries in the CLI.
+- `POST /capabilities/check` and `bureau capabilities check` evaluate a requested capability use against registry, policy, and evidence gates before execution.
+- Every check writes a `capability-audit` artifact and an audit-log event.
 - The ElectronJS Agents view shows assigned capabilities, enabled actions, risk class, and approval gates.
 
 ## Per-Agent Capability Boundaries
