@@ -200,6 +200,8 @@ When a run starts, BureauOS should select capabilities based on:
 - owner approvals
 - available connectors
 - required evidence
+- model capability metadata
+- budget tier limits
 
 Example:
 
@@ -214,6 +216,37 @@ Agents:
 - Compliance: policy memory, client permissions
 - Proposal: document templates
 ```
+
+## Provider Route Controls
+
+Model routing is explicit. BureauOS does not silently move from one billing path to another.
+
+Each provider connector exposes model metadata:
+
+- `capabilities`: examples include `chat`, `reasoning`, `coding`, `vision`, `streaming`, `tool-use`, `oauth`, `local`, and `low-cost`
+- `budget_tier`: one of `free`, `low`, `standard`, `high`, `premium`
+
+Agents can request additional model capabilities and budget ceilings:
+
+```yaml
+agents:
+  social:
+    provider: openai
+    model: gpt-4o-mini
+    required_model_capabilities:
+      - chat
+    max_budget_tier: standard
+    prefer_low_cost: true
+
+  security:
+    provider: anthropic
+    model: claude-sonnet-4-6
+    required_model_capabilities:
+      - reasoning
+    max_budget_tier: high
+```
+
+The router only evaluates the owner-approved route or explicit chain. `openai-codex` OAuth remains isolated from `openai` API-key billing even when the OAuth route is unavailable or does not match the requested capability.
 
 ## Capability Audit
 

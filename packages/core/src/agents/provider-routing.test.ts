@@ -81,4 +81,76 @@ describe("agent provider routing", () => {
 
     await expect(selectAgentModel(router, config, "product")).resolves.toBeUndefined();
   });
+
+  it("applies per-agent capability and budget criteria during model selection", async () => {
+    const config = defaultConfig("freelancer");
+    config.agents.development = {
+      provider: "local",
+      model: "local-model",
+      capabilities: [],
+      required_model_capabilities: [],
+      max_budget_tier: "low",
+      prefer_low_cost: true,
+    };
+    const router = new ProviderRouter();
+    router.register(new FakeProvider("local-default", "local", { ok: true }), {
+      model: "local-model",
+      capabilities: ["chat", "coding", "low-cost"],
+      budgetTier: "free",
+    });
+
+    configureAgentProviderRouting(router, config, ["development"]);
+
+    const selected = await selectAgentModel(router, config, "development");
+
+    expect(selected?.provider.id).toBe("local-default");
+    expect(selected?.model).toBe("local-model");
+  });
+
+  it("returns no model when the chosen provider exceeds the agent budget cap", async () => {
+    const config = defaultConfig("freelancer");
+    config.agents.pricing = {
+      provider: "anthropic",
+      model: "claude-opus-4-7",
+      capabilities: [],
+      required_model_capabilities: [],
+      max_budget_tier: "standard",
+      prefer_low_cost: false,
+    };
+    const router = new ProviderRouter();
+    router.register(new FakeProvider("anthropic-default", "anthropic", { ok: true }), {
+      model: "claude-opus-4-7",
+      capabilities: ["chat", "reasoning"],
+      budgetTier: "premium",
+    });
+
+    configureAgentProviderRouting(router, config, ["pricing"]);
+
+    await expect(selectAgentModel(router, config, "pricing")).resolves.toBeUndefined();
+  });
+
+  it("evaluates the role-selected model metadata instead of the provider default", async () => {
+    const config = defaultConfig("freelancer");
+    config.agents.content = {
+      provider: "openai",
+      model: "gpt-4o-mini",
+      capabilities: [],
+      required_model_capabilities: ["chat"],
+      max_budget_tier: "low",
+      prefer_low_cost: true,
+    };
+    const router = new ProviderRouter();
+    router.register(new FakeProvider("openai-default", "openai", { ok: true }), {
+      model: "gpt-5",
+      capabilities: ["chat", "reasoning", "coding"],
+      budgetTier: "high",
+    });
+
+    configureAgentProviderRouting(router, config, ["content"]);
+
+    const selected = await selectAgentModel(router, config, "content");
+
+    expect(selected?.provider.id).toBe("openai-default");
+    expect(selected?.model).toBe("gpt-4o-mini");
+  });
 });

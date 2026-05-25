@@ -808,7 +808,12 @@ describe("API server", () => {
       provider: string;
       source: string;
       defaultModel: string;
-      models: Array<{ id: string; name: string }>;
+      models: Array<{
+        id: string;
+        name: string;
+        capabilities: string[];
+        budgetTier: string;
+      }>;
     };
     expect(body).toMatchObject({
       provider: "openai",
@@ -816,7 +821,9 @@ describe("API server", () => {
       defaultModel: "gpt-5-enterprise",
     });
     expect(body.models).toEqual(
-      expect.arrayContaining([{ id: "gpt-5-enterprise", name: "GPT-5 Enterprise" }]),
+      expect.arrayContaining([
+        expect.objectContaining({ id: "gpt-5-enterprise", name: "GPT-5 Enterprise" }),
+      ]),
     );
   });
 
@@ -838,7 +845,7 @@ describe("API server", () => {
     const body = (await response.json()) as {
       source: string;
       defaultModel: string;
-      models: Array<{ id: string }>;
+      models: Array<{ id: string; capabilities: string[]; budgetTier: string }>;
     };
     expect(body.source).toBe("connection");
     expect(body.defaultModel).toBe("gpt-4o");

@@ -93,6 +93,11 @@ describe("buildConfiguredProviderRouter", () => {
     });
     expect(configured.router.get("openrouter-default")).toBeUndefined();
     expect(configured.router.get("openai-default")?.defaultModel).toBe("gpt-5-enterprise");
+    expect(configured.router.profileFor("openai-default")).toMatchObject({
+      model: "gpt-5-enterprise",
+      capabilities: ["chat"],
+      budgetTier: "standard",
+    });
   });
 
   it("persists refreshed OpenAI Codex OAuth tokens for stored credentials", async () => {

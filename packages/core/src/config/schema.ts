@@ -31,6 +31,8 @@ const ProviderName = z.enum([
 ]);
 export type ProviderName = z.infer<typeof ProviderName>;
 
+const ProviderBudgetTier = z.enum(["free", "low", "standard", "high", "premium"]);
+
 const ProviderConfig = z
   .object({
     name: z.string().optional(),
@@ -44,6 +46,9 @@ const ProviderConfig = z
           .object({
             id: z.string().optional(),
             name: z.string().optional(),
+            capabilities: z.array(z.string()).optional(),
+            budgetTier: ProviderBudgetTier.optional(),
+            budget_tier: ProviderBudgetTier.optional(),
             disabled: z.boolean().optional(),
           })
           .passthrough(),
@@ -91,6 +96,9 @@ const AgentConfig = z.object({
   model: z.string().default("gpt-5"),
   runtime: z.string().optional(),
   capabilities: z.array(z.string()).default([]),
+  required_model_capabilities: z.array(z.string()).default([]),
+  max_budget_tier: ProviderBudgetTier.optional(),
+  prefer_low_cost: z.boolean().default(false),
 });
 
 const SupremeCoordinatorConfig = z
@@ -99,6 +107,9 @@ const SupremeCoordinatorConfig = z
     model: z.string().default("gpt-5"),
     user_facing: z.boolean().default(true),
     always_on: z.boolean().default(true),
+    required_model_capabilities: z.array(z.string()).default([]),
+    max_budget_tier: ProviderBudgetTier.optional(),
+    prefer_low_cost: z.boolean().default(false),
   })
   .default({});
 

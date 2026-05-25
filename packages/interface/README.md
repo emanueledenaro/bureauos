@@ -19,7 +19,7 @@ Layout matches [docs/ui-reference/operating-room.md](../../docs/ui-reference/ope
 - Growth memory cards for brand, offers, and channels
 - Client intelligence cards with value, project history, relationship follow-ups, and memory paths
 - Memory view with audited Supreme Coordinator packet search, root memory preview, and ranked hits
-- Settings mode with safe workspace configuration, provider auth connect/disconnect, model picker, and OpenCode-style connector metadata
+- Settings mode with safe workspace configuration, provider auth connect/disconnect, model picker, model capability/budget metadata, and OpenCode-style connector metadata
 - Supreme Coordinator chat reloaded from audited global workspace memory, with general questions answered through the provider router when configured
 - Agent Layer footer
 - Agents view with capability assignments, enabled actions, risk, and approval gates
@@ -53,4 +53,4 @@ pnpm --filter @bureauos/interface run dist
 
 ## Status
 
-The dashboard reads live kernel state and supports an adaptive Today queue, registry-derived Goals/OKR board, provider-routed coordinator chat with durable history and audited global memory packets, opportunity intake, ownership-aware project dispatch, approval resolution with filtered history, cross-project executive report generation, client intelligence, memory packet search, growth memory for brand/offers/channels, safe workspace settings, provider auth settings with connector catalog/default model/model-list visibility, capability inspection, GitHub issue draft generation, and policy-gated GitHub issue creation when a repository and token are configured. Remaining work is tracked under Phase 4 in the [BACKLOG](../../BACKLOG.md).
+The dashboard reads live kernel state and supports an adaptive Today queue, registry-derived Goals/OKR board, provider-routed coordinator chat with durable history and audited global memory packets, opportunity intake, ownership-aware project dispatch, approval resolution with filtered history, cross-project executive report generation, client intelligence, memory packet search, growth memory for brand/offers/channels, safe workspace settings, provider auth settings with connector catalog/default model/model-list/capability/budget visibility, capability inspection, GitHub issue draft generation, and policy-gated GitHub issue creation when a repository and token are configured. Remaining work is tracked under Phase 4 in the [BACKLOG](../../BACKLOG.md).

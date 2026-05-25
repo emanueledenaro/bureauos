@@ -39,6 +39,7 @@ import {
   type OpenAICodexOAuthFetch,
   type ProviderCatalogConfig,
   type ProviderConnection,
+  type ProviderModelInfo,
   type ProviderType,
 } from "@bureauos/providers";
 import {
@@ -91,7 +92,7 @@ interface ProviderModelList {
   provider: ProviderType;
   source: "connector" | "connection";
   defaultModel: string;
-  models: Array<{ id: string; name: string }>;
+  models: ProviderModelInfo[];
 }
 
 interface SettingsSummary {
@@ -291,7 +292,12 @@ async function providerModels(
   const ids = await adapter.listModels();
   const models = ids.map((id) => {
     const configured = fallbackModels.find((model) => model.id === id);
-    return { id, name: configured?.name ?? id };
+    return {
+      id,
+      name: configured?.name ?? id,
+      capabilities: configured?.capabilities ?? ["chat"],
+      budgetTier: configured?.budgetTier ?? "standard",
+    };
   });
   return {
     provider,

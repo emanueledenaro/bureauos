@@ -1,4 +1,4 @@
-import type { ProviderType } from "./types.js";
+import type { ProviderBudgetTier, ProviderRouteProfile, ProviderType } from "./types.js";
 
 export type ProviderConnectorAuthMode = "oauth" | "api-key" | "local";
 
@@ -51,6 +51,8 @@ export interface ProviderEnvironmentMapping {
 export interface ProviderModelInfo {
   id: string;
   name: string;
+  capabilities: string[];
+  budgetTier: ProviderBudgetTier;
 }
 
 export interface ProviderConnector {
@@ -78,6 +80,9 @@ export interface ProviderConfigInput {
     {
       id?: string;
       name?: string;
+      capabilities?: string[];
+      budgetTier?: ProviderBudgetTier;
+      budget_tier?: ProviderBudgetTier;
       disabled?: boolean;
       [key: string]: unknown;
     }
@@ -106,8 +111,18 @@ const CONNECTORS: readonly ProviderConnector[] = [
     defaultAuthMode: "oauth",
     defaultModel: "gpt-5",
     models: [
-      { id: "gpt-5", name: "GPT-5" },
-      { id: "gpt-5-codex", name: "GPT-5 Codex" },
+      {
+        id: "gpt-5",
+        name: "GPT-5",
+        capabilities: ["chat", "reasoning", "coding", "vision", "streaming", "oauth"],
+        budgetTier: "standard",
+      },
+      {
+        id: "gpt-5-codex",
+        name: "GPT-5 Codex",
+        capabilities: ["chat", "reasoning", "coding", "vision", "streaming", "tool-use", "oauth"],
+        budgetTier: "standard",
+      },
     ],
     authMethods: [{ type: "oauth", label: "ChatGPT Plus/Pro (browser)" }],
     env: {
@@ -127,10 +142,30 @@ const CONNECTORS: readonly ProviderConnector[] = [
     defaultAuthMode: "api-key",
     defaultModel: "gpt-5",
     models: [
-      { id: "gpt-5", name: "GPT-5" },
-      { id: "gpt-4o", name: "GPT-4o" },
-      { id: "gpt-4o-mini", name: "GPT-4o Mini" },
-      { id: "o3-mini", name: "o3 Mini" },
+      {
+        id: "gpt-5",
+        name: "GPT-5",
+        capabilities: ["chat", "reasoning", "coding", "vision", "streaming", "tool-use"],
+        budgetTier: "high",
+      },
+      {
+        id: "gpt-4o",
+        name: "GPT-4o",
+        capabilities: ["chat", "vision", "streaming", "tool-use"],
+        budgetTier: "standard",
+      },
+      {
+        id: "gpt-4o-mini",
+        name: "GPT-4o Mini",
+        capabilities: ["chat", "streaming", "low-latency", "low-cost"],
+        budgetTier: "low",
+      },
+      {
+        id: "o3-mini",
+        name: "o3 Mini",
+        capabilities: ["chat", "reasoning", "coding", "low-cost"],
+        budgetTier: "low",
+      },
     ],
     authMethods: [{ type: "api", label: "API key" }],
     env: { apiKey: ["OPENAI_API_KEY"] },
@@ -146,9 +181,24 @@ const CONNECTORS: readonly ProviderConnector[] = [
     defaultAuthMode: "api-key",
     defaultModel: "claude-sonnet-4-6",
     models: [
-      { id: "claude-opus-4-7", name: "Claude Opus 4.7" },
-      { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
-      { id: "claude-haiku-4-5", name: "Claude Haiku 4.5" },
+      {
+        id: "claude-opus-4-7",
+        name: "Claude Opus 4.7",
+        capabilities: ["chat", "reasoning", "coding", "vision", "streaming", "tool-use"],
+        budgetTier: "premium",
+      },
+      {
+        id: "claude-sonnet-4-6",
+        name: "Claude Sonnet 4.6",
+        capabilities: ["chat", "reasoning", "coding", "vision", "streaming", "tool-use"],
+        budgetTier: "high",
+      },
+      {
+        id: "claude-haiku-4-5",
+        name: "Claude Haiku 4.5",
+        capabilities: ["chat", "streaming", "low-latency", "low-cost"],
+        budgetTier: "low",
+      },
     ],
     authMethods: [{ type: "api", label: "API key" }],
     env: { apiKey: ["ANTHROPIC_API_KEY"] },
@@ -164,8 +214,18 @@ const CONNECTORS: readonly ProviderConnector[] = [
     defaultAuthMode: "api-key",
     defaultModel: "gemini-2.5-pro",
     models: [
-      { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro" },
-      { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
+      {
+        id: "gemini-2.5-pro",
+        name: "Gemini 2.5 Pro",
+        capabilities: ["chat", "reasoning", "coding", "vision", "streaming"],
+        budgetTier: "high",
+      },
+      {
+        id: "gemini-2.5-flash",
+        name: "Gemini 2.5 Flash",
+        capabilities: ["chat", "vision", "streaming", "low-latency", "low-cost"],
+        budgetTier: "low",
+      },
     ],
     authMethods: [{ type: "api", label: "API key" }],
     env: { apiKey: ["GOOGLE_API_KEY"] },
@@ -181,8 +241,18 @@ const CONNECTORS: readonly ProviderConnector[] = [
     defaultAuthMode: "api-key",
     defaultModel: "openai/gpt-5",
     models: [
-      { id: "openai/gpt-5", name: "OpenAI GPT-5" },
-      { id: "anthropic/claude-sonnet-4.6", name: "Claude Sonnet 4.6" },
+      {
+        id: "openai/gpt-5",
+        name: "OpenAI GPT-5",
+        capabilities: ["chat", "reasoning", "coding", "streaming"],
+        budgetTier: "high",
+      },
+      {
+        id: "anthropic/claude-sonnet-4.6",
+        name: "Claude Sonnet 4.6",
+        capabilities: ["chat", "reasoning", "coding", "streaming"],
+        budgetTier: "high",
+      },
     ],
     authMethods: [{ type: "api", label: "API key" }],
     env: { apiKey: ["OPENROUTER_API_KEY"] },
@@ -197,7 +267,14 @@ const CONNECTORS: readonly ProviderConnector[] = [
     source: "builtin",
     defaultAuthMode: "local",
     defaultModel: "local-model",
-    models: [{ id: "local-model", name: "Local Model" }],
+    models: [
+      {
+        id: "local-model",
+        name: "Local Model",
+        capabilities: ["chat", "coding", "streaming", "local", "low-cost"],
+        budgetTier: "free",
+      },
+    ],
     authMethods: [{ type: "local", label: "Local endpoint" }],
     env: { baseUrl: ["LOCAL_MODEL_URL"] },
     popular: false,
@@ -211,7 +288,14 @@ const CONNECTORS: readonly ProviderConnector[] = [
     source: "builtin",
     defaultAuthMode: "api-key",
     defaultModel: "custom-model",
-    models: [{ id: "custom-model", name: "Custom Model" }],
+    models: [
+      {
+        id: "custom-model",
+        name: "Custom Model",
+        capabilities: ["chat", "streaming"],
+        budgetTier: "standard",
+      },
+    ],
     authMethods: [
       {
         type: "api",
@@ -250,7 +334,10 @@ function cloneMethod(method: ProviderAuthMethod): ProviderAuthMethod {
 function cloneConnector(connector: ProviderConnector): ProviderConnector {
   return {
     ...connector,
-    models: connector.models.map((model) => ({ ...model })),
+    models: connector.models.map((model) => ({
+      ...model,
+      capabilities: [...model.capabilities],
+    })),
     authMethods: connector.authMethods.map(cloneMethod),
     env: {
       ...(connector.env.apiKey ? { apiKey: [...connector.env.apiKey] } : {}),
@@ -266,7 +353,9 @@ function configuredModels(
   existing: ProviderModelInfo[],
   config?: ProviderConfigInput,
 ): ProviderModelInfo[] {
-  const models = new Map(existing.map((model) => [model.id, { ...model }]));
+  const models = new Map(
+    existing.map((model) => [model.id, { ...model, capabilities: [...model.capabilities] }]),
+  );
   for (const [key, model] of Object.entries(config?.models ?? {})) {
     if (model.disabled) {
       models.delete(key);
@@ -274,9 +363,13 @@ function configuredModels(
       continue;
     }
     const id = model.id ?? key;
+    const existingModel = existing.find((item) => item.id === id);
+    const configuredBudgetTier = model.budgetTier ?? model.budget_tier;
     models.set(id, {
       id,
-      name: model.name ?? existing.find((item) => item.id === id)?.name ?? key,
+      name: model.name ?? existingModel?.name ?? key,
+      capabilities: model.capabilities ?? existingModel?.capabilities ?? ["chat"],
+      budgetTier: configuredBudgetTier ?? existingModel?.budgetTier ?? "standard",
     });
   }
   return [...models.values()];
@@ -359,5 +452,21 @@ export function resolveProviderCatalog(config: ProviderCatalogConfig = {}): Prov
       all.some((connector) => connector.id === id),
     ),
     auth: providerAuthMethods(config),
+  };
+}
+
+export function routeProfileForProviderModel(
+  provider: ProviderType,
+  modelId: string,
+  config: ProviderCatalogConfig = {},
+): ProviderRouteProfile {
+  const connector = getProviderConnector(provider, config);
+  const model =
+    connector.models.find((item) => item.id === modelId) ??
+    connector.models.find((item) => item.id === connector.defaultModel);
+  return {
+    model: modelId,
+    capabilities: model ? [...model.capabilities] : ["chat"],
+    budgetTier: model?.budgetTier ?? "standard",
   };
 }

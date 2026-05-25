@@ -80,7 +80,7 @@ Every major capability described in the docs must become one of:
 | Delivery agents | concrete/template agents with provider-backed drafting and deterministic local template when selected route is unavailable | partial |
 | Growth agents | template agents with provider-backed drafting and deterministic local template when selected route is unavailable | partial |
 | Compliance agent | concrete compliance agent with provider-backed drafting and deterministic local template when selected route is unavailable | partial |
-| Agent provider routing | `ProviderRouter`, `configureAgentProviderRouting`, dispatcher model capability | implemented |
+| Agent provider routing | `ProviderRouter`, `configureAgentProviderRouting`, dispatcher model capability, per-model capability metadata, budget-tier filtering, and no API fallback from `openai-codex` OAuth | implemented |
 | Codex runtime capability | capability registry boundary plus adapter placeholder | partial |
 | MCP capability bus | `CapabilityRegistry`, config parsing, `/capabilities`, `bureau capabilities list`, Electron Agents capability matrix | partial |
 
@@ -129,7 +129,7 @@ Every major capability described in the docs must become one of:
 | Google provider | Gemini REST adapter with `generateText`/SSE `stream` | implemented |
 | OpenRouter provider | OpenAI-compatible adapter with model listing, `generateText`, and SSE `stream` | implemented |
 | Local provider | OpenAI-compatible local/Ollama adapter with model listing, `generateText`, and SSE `stream` | implemented |
-| Provider connector catalog | `listProviderConnectors`, OpenCode-style `provider` config overrides, `enabled_providers`/`disabled_providers`, `/provider/connectors`, `/provider/models`, catalog-backed auth methods, model defaults/lists, and env mappings | implemented |
+| Provider connector catalog | `listProviderConnectors`, OpenCode-style `provider` config overrides, `enabled_providers`/`disabled_providers`, `/provider/connectors`, `/provider/models`, catalog-backed auth methods, model defaults/lists, model capability/budget metadata, and env mappings | implemented |
 | Provider auth/connect | `ProviderAuthStore`, auth modes, OpenCode-style `/provider/auth` and OAuth authorize/callback endpoints, `.bureauos/auth/providers.json` | implemented |
 | Electron provider settings | Settings mode, safe workspace configuration summary, connector catalog selector, model picker, browser OAuth for `openai-codex`, explicit API-key/local endpoint connect for API providers | implemented |
 | Gmail/Slack/Drive/Calendar | not implemented | designed |
@@ -152,7 +152,6 @@ Every major capability described in the docs must become one of:
 
 1. Add ElectronJS pages for clients, projects, approvals, reports, memory, settings.
 2. Expand always-on scheduler execution beyond run stubs into deeper verification/retry loops.
-3. Add budget-aware and capability-aware routing.
-4. Add connector adapters behind draft-first policy gates.
-5. Wire Codex runtime execution for development/reviewer/QA under policy.
-6. Add OS notifications/tray/autostart for long-running daemon mode.
+3. Add connector adapters behind draft-first policy gates.
+4. Wire Codex runtime execution for development/reviewer/QA under policy.
+5. Add OS notifications/tray/autostart for long-running daemon mode.

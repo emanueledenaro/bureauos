@@ -3160,7 +3160,14 @@ function SettingsView({
       ...(modelList?.models ?? []),
       ...(connector?.models ?? []),
       ...(connectedProvider?.default_model
-        ? [{ id: connectedProvider.default_model, name: connectedProvider.default_model }]
+        ? [
+            {
+              id: connectedProvider.default_model,
+              name: connectedProvider.default_model,
+              capabilities: [],
+              budgetTier: "standard" as const,
+            },
+          ]
         : []),
     ].filter((model) => {
       if (seen.has(model.id)) return false;
@@ -3168,6 +3175,7 @@ function SettingsView({
       return true;
     });
   }, [connector?.models, connectedProvider?.default_model, modelList?.models]);
+  const selectedModel = modelChoices.find((model) => model.id === defaultModel);
 
   useEffect(() => {
     let cancelled = false;
@@ -3356,7 +3364,24 @@ function SettingsView({
                     Models from {modelList.source}
                   </span>
                 ) : null}
+                {selectedModel ? (
+                  <span className="rounded border border-neutral-800 px-2 py-1">
+                    {formatLabel(selectedModel.budgetTier)} budget
+                  </span>
+                ) : null}
               </div>
+              {selectedModel?.capabilities.length ? (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {selectedModel.capabilities.slice(0, 6).map((capability) => (
+                    <span
+                      key={capability}
+                      className="rounded border border-neutral-800 px-2 py-1 text-[10px] text-neutral-500"
+                    >
+                      {formatLabel(capability)}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
             </div>
             <div className="text-right text-[10px] uppercase tracking-[0.08em] text-neutral-600">
               {connector.authMethods.map((method) => method.label).join(" / ")}

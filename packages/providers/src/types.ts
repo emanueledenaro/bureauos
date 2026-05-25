@@ -17,6 +17,14 @@ export type ProviderType =
   | "custom";
 export type RuntimeType = "codex" | "claude-code" | "gemini-cli" | "custom";
 
+export type ProviderBudgetTier = "free" | "low" | "standard" | "high" | "premium";
+
+export interface ProviderRouteProfile {
+  model?: string;
+  capabilities: readonly string[];
+  budgetTier: ProviderBudgetTier;
+}
+
 export interface ValidationResult {
   ok: boolean;
   reason?: string;

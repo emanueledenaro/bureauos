@@ -163,7 +163,7 @@ Goal: real model calls behind a provider-agnostic interface. The router selects 
 - [x] Add an OpenCode-style auth store and commands (`bureau auth login/list/logout`) for provider credentials.
 - [x] Add provider connection management in ElectronJS Settings.
 - [x] Wire real model calls (`generateText`, `stream`) for OpenAI, Anthropic, Google, OpenRouter, Local, and OpenAI Codex OAuth.
-- [ ] Add budget-aware and capability-aware routing.
+- [x] Add budget-aware and capability-aware routing.
 - [ ] Add OS keychain integration as an alternative credential source.
 - [ ] Add tests with recorded HTTP fixtures for each adapter.
 

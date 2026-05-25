@@ -10,11 +10,13 @@ export type {
   RuntimeResult,
   GenerateTextOptions,
   GenerateTextResult,
+  ProviderBudgetTier,
+  ProviderRouteProfile,
   ValidationResult,
 } from "./types.js";
 
 export { ProviderRouter } from "./router.js";
-export type { ProviderSelection } from "./router.js";
+export type { ProviderSelection, ProviderSelectionCriteria } from "./router.js";
 export {
   defaultProviderAuthMode,
   defaultProviderCredentialId,
@@ -22,6 +24,7 @@ export {
   listProviderConnectors,
   providerAuthMethods,
   resolveProviderCatalog,
+  routeProfileForProviderModel,
 } from "./catalog.js";
 export type {
   ProviderAuthMethod,

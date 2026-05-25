@@ -47,7 +47,11 @@ describe("provider connector catalog", () => {
           env: ["OPENAI_ENTERPRISE_KEY"],
           options: { defaultModel: "gpt-5-enterprise" },
           models: {
-            "gpt-5-enterprise": { name: "GPT-5 Enterprise" },
+            "gpt-5-enterprise": {
+              name: "GPT-5 Enterprise",
+              capabilities: ["chat", "reasoning"],
+              budgetTier: "premium",
+            },
             "gpt-4o-mini": { disabled: true },
           },
         },
@@ -63,5 +67,9 @@ describe("provider connector catalog", () => {
     });
     expect(connectors[0]?.models.map((model) => model.id)).toContain("gpt-5-enterprise");
     expect(connectors[0]?.models.map((model) => model.id)).not.toContain("gpt-4o-mini");
+    expect(connectors[0]?.models.find((model) => model.id === "gpt-5-enterprise")).toMatchObject({
+      capabilities: ["chat", "reasoning"],
+      budgetTier: "premium",
+    });
   });
 });

@@ -14,6 +14,7 @@ import {
   defaultProviderCredentialId,
   getProviderConnector,
   listProviderConnectors,
+  routeProfileForProviderModel,
   type ProviderCatalogConfig,
 } from "./catalog.js";
 import { ProviderRouter } from "./router.js";
@@ -77,25 +78,44 @@ function registerCredential(
               }
             : {}),
         }),
+        routeProfileForProviderModel(credential.provider, defaultModel, config),
       );
       return;
     case "openai":
-      router.register(new OpenAIAdapter(credential.id, { apiKey, baseUrl, defaultModel }));
+      router.register(
+        new OpenAIAdapter(credential.id, { apiKey, baseUrl, defaultModel }),
+        routeProfileForProviderModel(credential.provider, defaultModel, config),
+      );
       return;
     case "anthropic":
-      router.register(new AnthropicAdapter(credential.id, { apiKey, defaultModel }));
+      router.register(
+        new AnthropicAdapter(credential.id, { apiKey, defaultModel }),
+        routeProfileForProviderModel(credential.provider, defaultModel, config),
+      );
       return;
     case "google":
-      router.register(new GoogleAdapter(credential.id, { apiKey, baseUrl, defaultModel }));
+      router.register(
+        new GoogleAdapter(credential.id, { apiKey, baseUrl, defaultModel }),
+        routeProfileForProviderModel(credential.provider, defaultModel, config),
+      );
       return;
     case "openrouter":
-      router.register(new OpenRouterAdapter(credential.id, { apiKey, baseUrl, defaultModel }));
+      router.register(
+        new OpenRouterAdapter(credential.id, { apiKey, baseUrl, defaultModel }),
+        routeProfileForProviderModel(credential.provider, defaultModel, config),
+      );
       return;
     case "local":
-      router.register(new LocalAdapter(credential.id, { apiKey, baseUrl, defaultModel }));
+      router.register(
+        new LocalAdapter(credential.id, { apiKey, baseUrl, defaultModel }),
+        routeProfileForProviderModel(credential.provider, defaultModel, config),
+      );
       return;
     case "custom":
-      router.register(new OpenAIAdapter(credential.id, { apiKey, baseUrl, defaultModel }));
+      router.register(
+        new OpenAIAdapter(credential.id, { apiKey, baseUrl, defaultModel }),
+        routeProfileForProviderModel(credential.provider, defaultModel, config),
+      );
       return;
   }
 }

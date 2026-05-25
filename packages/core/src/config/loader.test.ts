@@ -110,6 +110,42 @@ describe("loadConfig", () => {
     expect(config.provider.openai?.models["gpt-5-enterprise"]?.name).toBe("GPT-5 Enterprise");
     expect(config.disabled_providers).toEqual(["openrouter"]);
   });
+
+  it("loads provider model routing controls from bureauos.yaml", async () => {
+    const path = join(dir, "bureauos.yaml");
+    await writeFile(
+      path,
+      [
+        "provider:",
+        "  openai:",
+        "    models:",
+        "      gpt-4o-mini:",
+        "        capabilities:",
+        '          - "chat"',
+        '          - "low-cost"',
+        '        budget_tier: "low"',
+        "agents:",
+        "  content:",
+        "    provider: openai",
+        "    model: gpt-4o-mini",
+        '    max_budget_tier: "low"',
+        "    prefer_low_cost: true",
+        "    required_model_capabilities:",
+        '      - "chat"',
+      ].join("\n"),
+      "utf8",
+    );
+
+    const config = await loadConfig(path);
+    expect(config.provider.openai?.models["gpt-4o-mini"]?.capabilities).toEqual([
+      "chat",
+      "low-cost",
+    ]);
+    expect(config.provider.openai?.models["gpt-4o-mini"]?.budget_tier).toBe("low");
+    expect(config.agents.content?.max_budget_tier).toBe("low");
+    expect(config.agents.content?.prefer_low_cost).toBe(true);
+    expect(config.agents.content?.required_model_capabilities).toEqual(["chat"]);
+  });
 });
 
 describe("defaultConfig", () => {

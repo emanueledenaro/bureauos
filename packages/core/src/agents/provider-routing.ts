@@ -1,5 +1,8 @@
+import { routeProfileForProviderModel } from "@bureauos/providers";
 import type {
   ProviderAdapter,
+  ProviderSelection,
+  ProviderSelectionCriteria,
   ProviderRouter,
   ProviderType,
   ValidationResult,
@@ -34,6 +37,18 @@ function providerId(provider: ProviderType): string {
   return `${provider}-default`;
 }
 
+function defaultRequiredModelCapabilities(role: AgentDefinition): string[] {
+  const capabilities = new Set<string>(["chat"]);
+  if (
+    ["supreme_coordinator", "qa", "security", "reviewer", "compliance", "pricing"].includes(role.id)
+  ) {
+    capabilities.add("reasoning");
+  }
+  if (role.id === "development") capabilities.add("coding");
+  if (role.id === "creative") capabilities.add("vision");
+  return [...capabilities];
+}
+
 function roleModelPreference(
   config: BureauConfig,
   roleId: string,
@@ -51,6 +66,32 @@ function roleModelPreference(
   return {
     provider: roleConfig?.provider ?? config.supreme_coordinator.provider,
     model: roleConfig?.model ?? config.supreme_coordinator.model,
+  };
+}
+
+function roleSelectionCriteria(
+  config: BureauConfig,
+  role: AgentDefinition,
+): ProviderSelectionCriteria {
+  const roleConfig =
+    role.id === "supreme_coordinator" ? config.supreme_coordinator : config.agents[role.id];
+  const preference = roleModelPreference(config, role.id);
+  const preferredProviderType = toProviderType(preference.provider);
+  const preferredProviderId = providerId(preferredProviderType);
+  const requiredCapabilities = new Set(defaultRequiredModelCapabilities(role));
+  for (const capability of roleConfig?.required_model_capabilities ?? [])
+    requiredCapabilities.add(capability);
+  return {
+    requiredCapabilities: [...requiredCapabilities],
+    ...(roleConfig?.max_budget_tier ? { maxBudgetTier: roleConfig.max_budget_tier } : {}),
+    ...(roleConfig?.prefer_low_cost ? { preferLowCost: true } : {}),
+    routeProfiles: {
+      [preferredProviderId]: routeProfileForProviderModel(
+        preferredProviderType,
+        preference.model,
+        config,
+      ),
+    },
   };
 }
 
@@ -77,11 +118,13 @@ export function configureAgentProviderRouting(
 function modelForSelection(
   config: BureauConfig,
   roleId: string,
-  provider: ProviderAdapter,
+  selection: ProviderSelection,
 ): string {
-  if (provider.defaultModel) return provider.defaultModel;
+  const provider = selection.adapter;
   const preference = roleModelPreference(config, roleId);
   if (toProviderType(preference.provider) === provider.type) return preference.model;
+  if (selection.profile.model) return selection.profile.model;
+  if (provider.defaultModel) return provider.defaultModel;
   return PROVIDER_DEFAULT_MODELS[provider.type];
 }
 
@@ -90,11 +133,15 @@ export async function selectAgentModel(
   config: BureauConfig,
   roleId: string,
 ): Promise<AgentModelSelection | undefined> {
-  const selected = await router.selectForAgent(roleId);
+  const role = AGENT_INDEX.get(roleId);
+  const selected = await router.selectForAgent(
+    roleId,
+    role ? roleSelectionCriteria(config, role) : {},
+  );
   if (!selected) return undefined;
   return {
     provider: selected.adapter,
-    model: modelForSelection(config, roleId, selected.adapter),
+    model: modelForSelection(config, roleId, selected),
     validation: selected.validation,
   };
 }

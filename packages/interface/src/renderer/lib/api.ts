@@ -478,7 +478,12 @@ export interface ProviderConnector {
   source: "builtin" | "config";
   defaultAuthMode: "oauth" | "api-key" | "local";
   defaultModel: string;
-  models: Array<{ id: string; name: string }>;
+  models: Array<{
+    id: string;
+    name: string;
+    capabilities: string[];
+    budgetTier: "free" | "low" | "standard" | "high" | "premium";
+  }>;
   authMethods: ProviderAuthMethod[];
   popular: boolean;
   requiresBaseUrl: boolean;
@@ -488,7 +493,12 @@ export interface ProviderModelList {
   provider: string;
   source: "connector" | "connection";
   defaultModel: string;
-  models: Array<{ id: string; name: string }>;
+  models: Array<{
+    id: string;
+    name: string;
+    capabilities: string[];
+    budgetTier: "free" | "low" | "standard" | "high" | "premium";
+  }>;
 }
 export interface ProviderAuthAuthorization {
   url: string;

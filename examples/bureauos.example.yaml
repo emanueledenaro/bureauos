@@ -55,6 +55,23 @@ provider:
       - "OPENAI_API_KEY"
     options:
       defaultModel: "gpt-5"
+    models:
+      gpt-5:
+        capabilities:
+          - chat
+          - reasoning
+          - coding
+          - vision
+          - streaming
+          - tool-use
+        budget_tier: high
+      gpt-4o-mini:
+        capabilities:
+          - chat
+          - streaming
+          - low-latency
+          - low-cost
+        budget_tier: low
   openai-codex:
     name: "OpenAI Codex"
     options:
@@ -99,10 +116,14 @@ agents:
     model: gpt-5
   content:
     provider: openai
-    model: gpt-5
+    model: gpt-4o-mini
+    max_budget_tier: standard
+    prefer_low_cost: true
   social:
     provider: openai
-    model: gpt-5
+    model: gpt-4o-mini
+    max_budget_tier: standard
+    prefer_low_cost: true
   creative:
     provider: openai
     model: gpt-5
