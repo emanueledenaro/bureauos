@@ -1,4 +1,4 @@
-import { mkdtemp, rm, access, readFile } from "node:fs/promises";
+import { mkdtemp, rm, access, readFile, readdir } from "node:fs/promises";
 import { constants as FS } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -117,6 +117,13 @@ describe("bureau cli", () => {
 
     const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
     expect(audit).toContain("report.business.generated");
+
+    const artifactsDir = join(dir, ".bureauos", "memory", "artifacts");
+    const artifacts = await readdir(artifactsDir);
+    const bodies = await Promise.all(
+      artifacts.map((artifact) => readFile(join(artifactsDir, artifact), "utf8")),
+    );
+    expect(bodies.some((body) => body.includes("Cross-Project Executive Report"))).toBe(true);
   });
 
   it("generates GitHub issue drafts from CLI", async () => {

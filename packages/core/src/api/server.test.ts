@@ -385,7 +385,11 @@ describe("API server", () => {
     expect(reports.status).toBe(200);
     const body = (await reports.json()) as Array<{ type: string }>;
     expect(body.map((report) => report.type)).toEqual(
-      expect.arrayContaining(["executive-report", "business-operating-report"]),
+      expect.arrayContaining([
+        "executive-report",
+        "cross-project-executive-report",
+        "business-operating-report",
+      ]),
     );
   });
 

@@ -63,7 +63,8 @@ Every major capability described in the docs must become one of:
 | Supreme Coordinator chat | React renderer + `/coordinator/messages`, workspace-backed chat history, memory packet assembly, provider-router-backed answer path with deterministic local fallback | partial |
 | Approvals panel and page | React renderer + `/approvals`, `/approvals/resolved`, `/approvals/resolve`, pending rail, filtered history page | implemented |
 | Reports generation | `BusinessReportService`, `bureau report generate`, `/reports/generate` | implemented |
-| Reports view | report action in Revenue Pulse, `/reports` endpoint | partial |
+| Cross-project executive reports | `cross-project-executive-report` artifact from project, ownership, approval, run, and pipeline registries | implemented |
+| Reports view | report action in Revenue Pulse, `/reports` endpoint including executive, cross-project, operating, and client reports | partial |
 | Settings view | provider settings panel plus safe `/settings` workspace configuration summary | partial |
 | Native tray, notifications, auto-start | not implemented | designed |
 
@@ -141,6 +142,7 @@ Every major capability described in the docs must become one of:
 | Runtime-enforced memory isolation | `MemoryBoundaryService`, `ScopedMemoryStore`, dispatcher `memory` capability | implemented |
 | Supreme Coordinator global memory access | `CoordinatorGlobalMemoryService`, `GET /coordinator/memory`, audited `memory.global.search` events, relative memory paths | implemented |
 | Per-project PM ownership config | `ProjectRegistry` creates/repairs `OWNERSHIP.md`, `GET /project-ownership`, CLI project create/list/dispatch PM visibility, Electron portfolio PM chips | implemented |
+| Cross-project executive report | `BusinessReportService` portfolio matrix with PM, risk, approvals, active runs, and next action per project | implemented |
 
 ## Current Priority Order
 

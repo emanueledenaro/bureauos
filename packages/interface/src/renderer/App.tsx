@@ -1522,7 +1522,7 @@ function RevenuePulse({
           </button>
           {report ? (
             <div className="mt-2 text-[10px] text-emerald-400">
-              Report {report.executive_report.id} generated
+              Portfolio report {report.cross_project_report.id} generated
             </div>
           ) : null}
         </div>
@@ -2203,14 +2203,17 @@ function AgentsWorkspace({ state }: { state: DashboardState }) {
 
 function ReportsWorkspace({ state }: { state: DashboardState }) {
   const reports = state.artifacts.filter((artifact) =>
-    ["executive-report", "business-operating-report", "client-account-plan"].includes(
-      artifact.type,
-    ),
+    [
+      "executive-report",
+      "cross-project-executive-report",
+      "business-operating-report",
+      "client-account-plan",
+    ].includes(artifact.type),
   );
   return (
     <SectionShell
       title="Reports"
-      description="Executive and business reports generated from current registries."
+      description="Executive, cross-project, and business reports generated from current registries."
     >
       <div className="grid grid-cols-3 gap-3">
         {sortNewest(reports).map((artifact) => (

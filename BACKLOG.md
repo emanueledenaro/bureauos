@@ -285,7 +285,7 @@ Goal: real multi-project support with isolated project memory and project-manage
 - [x] Add per-project Project Manager configuration and ownership records.
 - [x] Enforce project memory isolation at capability/runtime boundaries.
 - [x] Implement the coordinator's global memory access path (with audit).
-- [ ] Implement cross-project executive reports.
+- [x] Implement cross-project executive reports.
 - [x] Add tests proving isolation cannot be bypassed by accident.
 
 ## Phase 6 — Growth and Revenue (v0.6)

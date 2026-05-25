@@ -74,7 +74,7 @@ Runs and audit:
   audit search <q>
 
 Reports:
-  report generate                           Generate executive and business operating reports
+  report generate                           Generate executive, cross-project, and operating reports
 
 Memory write:
   decision --what "..." --why "..." [--run id]   Append a decision record
@@ -632,9 +632,13 @@ const handleReportGenerate: Handler = async () => {
   const result = await new BusinessReportService(process.cwd(), { config }).generate();
   process.stdout.write(`bureau: generated executive report ${result.executive_report.id}\n`);
   process.stdout.write(
+    `bureau: generated cross-project report ${result.cross_project_report.id}\n`,
+  );
+  process.stdout.write(
     `bureau: generated business operating report ${result.business_operating_report.id}\n`,
   );
   process.stdout.write(`pipeline: ${result.metrics.pipeline_value}\n`);
+  process.stdout.write(`portfolio: ${result.portfolio.length} project(s)\n`);
   if (result.next_actions.length) {
     process.stdout.write(`next: ${result.next_actions.join(" | ")}\n`);
   }

@@ -563,6 +563,7 @@ const ROUTES: Record<string, RouteHandler> = {
       artifacts.filter((artifact) => {
         return (
           artifact.type === "executive-report" ||
+          artifact.type === "cross-project-executive-report" ||
           artifact.type === "business-operating-report" ||
           artifact.type === "client-account-plan"
         );

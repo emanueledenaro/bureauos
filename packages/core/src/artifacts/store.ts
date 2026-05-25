@@ -24,6 +24,7 @@ export type ArtifactType =
   | "project-dispatch-packet"
   | "agent-handoff"
   | "executive-report"
+  | "cross-project-executive-report"
   | "business-operating-report"
   | "brand-brief"
   | "offer-brief"

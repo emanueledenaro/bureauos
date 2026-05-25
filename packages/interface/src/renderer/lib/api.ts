@@ -262,7 +262,25 @@ export interface CoordinatorGlobalMemoryPacket {
 export interface BusinessReportResult {
   generated_at: string;
   executive_report: ArtifactRecord;
+  cross_project_report: ArtifactRecord;
   business_operating_report: ArtifactRecord;
+  portfolio: Array<{
+    project_id: string;
+    project_slug: string;
+    project_name: string;
+    client_id: string;
+    client_name: string;
+    status: string;
+    manager_agent_id: string;
+    team_id: string;
+    assigned_agents: string[];
+    pending_approvals: number;
+    active_runs: number;
+    runs_needing_human: number;
+    client_pipeline_value: number;
+    risk: string;
+    next_action: string;
+  }>;
   metrics: {
     clients_total: number;
     projects_total: number;
