@@ -20,6 +20,7 @@ import {
 } from "../coordinator/intake.js";
 import { CoordinatorChatService } from "../coordinator/chat.js";
 import { CoordinatorMessageStore } from "../coordinator/messages.js";
+import { CoordinatorGlobalMemoryService } from "../memory/global.js";
 import { ProjectDispatchService } from "../dispatch/project-dispatch.js";
 import { GitHubIssueDraftService } from "../github/issue-drafts.js";
 import {
@@ -388,6 +389,22 @@ const ROUTES: Record<string, RouteHandler> = {
       ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 200)
       : 50;
     ok(res, await new CoordinatorMessageStore(options.workspaceRoot).list(limit));
+  },
+
+  "GET /coordinator/memory": async ({ res, options, url }) => {
+    const query = url.searchParams.get("query") ?? "";
+    const requestedLimit = Number(url.searchParams.get("limit") ?? "12");
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 50)
+      : 12;
+    ok(
+      res,
+      await new CoordinatorGlobalMemoryService(options.workspaceRoot).assemble({
+        query,
+        limit,
+        source: "api",
+      }),
+    );
   },
 
   "POST /coordinator/messages": async ({ res, options, req }) => {

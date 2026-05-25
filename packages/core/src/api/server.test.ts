@@ -245,6 +245,40 @@ describe("API server", () => {
       role: string;
     }>;
     expect(messages.map((message) => message.role)).toEqual(["owner", "coordinator"]);
+
+    const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(audit).toContain("memory.global.search");
+  });
+
+  it("exposes audited global coordinator memory without leaking absolute paths", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    await fetch(`${server.url}/coordinator/intake`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        clientName: "Pizzeria Aurora",
+        message: "Ho parlato con una pizzeria: vuole sito con prenotazioni.",
+      }),
+    });
+
+    const response = await fetch(`${server.url}/coordinator/memory?query=Pizzeria%20Aurora`);
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      topHits: Array<{ path: string; snippet: string; score: number }>;
+      audit: { action: string; actor: string; capability: string };
+    };
+    expect(body.audit).toMatchObject({
+      action: "memory.global.search",
+      actor: "supreme_coordinator",
+      capability: "global_memory_search",
+    });
+    expect(body.topHits.some((hit) => hit.path.startsWith("clients/pizzeria-aurora/"))).toBe(true);
+    expect(JSON.stringify(body)).not.toContain(dir);
+
+    const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(audit).toContain("memory.global.search");
   });
 
   it("routes opportunity-like coordinator chat messages into intake", async () => {

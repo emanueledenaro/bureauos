@@ -65,6 +65,17 @@ export type {
   MemoryBoundaryDeps,
   MemoryBoundaryInput,
 } from "./memory/isolation.js";
+export {
+  GLOBAL_MEMORY_ACTOR,
+  GLOBAL_MEMORY_CAPABILITY,
+  CoordinatorGlobalMemoryService,
+} from "./memory/global.js";
+export type {
+  CoordinatorGlobalMemoryDeps,
+  CoordinatorGlobalMemoryHit,
+  CoordinatorGlobalMemoryInput,
+  CoordinatorGlobalMemoryPacket,
+} from "./memory/global.js";
 
 // Policy
 export { PolicyEngine } from "./policy/engine.js";

@@ -214,6 +214,7 @@ Goal: a local web app that visualizes kernel state, shaped like [docs/ui-referen
 - [x] Implement Server-Sent Events for live timeline streaming.
 - [x] Add `GET /coordinator/messages` so the ElectronJS Coordinator panel can reload durable chat history.
 - [x] Add `POST /coordinator/messages` so chat can either answer from memory or route opportunity messages into intake.
+- [x] Add `GET /coordinator/memory` so the Supreme Coordinator can expose an audited global-memory packet.
 - [x] Add `GET /settings` with safe workspace configuration for the ElectronJS Settings page.
 - [x] Add `POST /coordinator/intake` so the ElectronJS Coordinator panel can create client/project/opportunity work.
 - [x] Add `POST /projects/dispatch` so Project Manager can create scoped packets and specialist handoffs.
@@ -283,7 +284,7 @@ Goal: real multi-project support with isolated project memory and project-manage
 - [x] Implement context-packet generation per agent (bounded context, not full memory).
 - [ ] Add per-project Project Manager configuration and ownership records.
 - [x] Enforce project memory isolation at capability/runtime boundaries.
-- [ ] Implement the coordinator's global memory access path (with audit).
+- [x] Implement the coordinator's global memory access path (with audit).
 - [ ] Implement cross-project executive reports.
 - [x] Add tests proving isolation cannot be bypassed by accident.
 

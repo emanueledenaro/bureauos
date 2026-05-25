@@ -1,4 +1,4 @@
-import { LocalMemoryStore, assembleContextPacket, type ContextPacket } from "@bureauos/memory";
+import type { ContextPacket } from "@bureauos/memory";
 import {
   buildConfiguredProviderRouter,
   type GenerateTextResult,
@@ -7,7 +7,7 @@ import {
 import { configureAgentProviderRouting, selectAgentModel } from "../agents/provider-routing.js";
 import type { BureauConfig } from "../config/schema.js";
 import { defaultConfig } from "../config/loader.js";
-import { workspacePaths } from "../paths.js";
+import { CoordinatorGlobalMemoryService } from "../memory/global.js";
 import {
   CoordinatorIntakeService,
   type CoordinatorAttachmentInput,
@@ -48,6 +48,7 @@ export interface CoordinatorChatDeps {
   config?: BureauConfig;
   messages?: CoordinatorMessageStore;
   intake?: CoordinatorIntakeService;
+  memory?: CoordinatorGlobalMemoryService;
   env?: NodeJS.ProcessEnv;
 }
 
@@ -233,6 +234,7 @@ export class CoordinatorChatService {
   private readonly config: BureauConfig;
   private readonly messages: CoordinatorMessageStore;
   private readonly intake: CoordinatorIntakeService;
+  private readonly memory: CoordinatorGlobalMemoryService;
   private readonly env: NodeJS.ProcessEnv;
 
   constructor(
@@ -243,6 +245,7 @@ export class CoordinatorChatService {
     this.messages = deps.messages ?? new CoordinatorMessageStore(workspaceRoot);
     this.intake =
       deps.intake ?? new CoordinatorIntakeService(workspaceRoot, { config: this.config });
+    this.memory = deps.memory ?? new CoordinatorGlobalMemoryService(workspaceRoot);
     this.env = deps.env ?? process.env;
   }
 
@@ -251,8 +254,11 @@ export class CoordinatorChatService {
     if (!message) throw new Error("coordinator chat requires a message");
     const attachments = input.attachments ?? [];
 
-    const store = new LocalMemoryStore(workspacePaths(this.workspaceRoot).memoryDir);
-    const packet = await assembleContextPacket(store, message, { limit: 6 });
+    const packet = await this.memory.assemble({
+      query: message,
+      limit: 6,
+      source: "coordinator_chat",
+    });
     const recent = await this.messages.list(12);
     const memory = memoryMeta(packet);
 

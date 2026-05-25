@@ -239,6 +239,12 @@ export interface CoordinatorChatResult {
     hits: Array<{ path: string; snippet: string; score: number }>;
   };
 }
+export interface CoordinatorGlobalMemoryPacket {
+  rootMemory: string;
+  generatedAt: string;
+  topHits: Array<{ path: string; snippet: string; score: number }>;
+  audit: AuditEvent;
+}
 export interface BusinessReportResult {
   generated_at: string;
   executive_report: ArtifactRecord;
@@ -399,6 +405,10 @@ export const Api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+  coordinatorMemory: (query: string, limit = 12) =>
+    api<CoordinatorGlobalMemoryPacket>(
+      `/coordinator/memory?query=${encodeURIComponent(query)}&limit=${limit}`,
+    ),
   audit: (n = 50) => api<AuditEvent[]>(`/audit?n=${n}`),
   coordinatorIntake: (input: {
     message: string;

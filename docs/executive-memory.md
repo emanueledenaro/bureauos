@@ -223,6 +223,17 @@ Project Manager: project memory
 Specialist Agent: task context only
 ```
 
+## Runtime Path
+
+The implemented coordinator path is `CoordinatorGlobalMemoryService`.
+
+- it loads the compact `ROOT.md` plus focused search hits from the whole `.bureauos/memory/` tree
+- it is reserved for `supreme_coordinator`
+- it writes `memory.global.search` audit events for successful access
+- denied non-coordinator attempts write `memory.global.search.denied`
+- API consumers use `GET /coordinator/memory?query=...`
+- returned hit paths are relative to memory, so the interface does not expose absolute machine paths
+
 ## Memory Integrity
 
 Memory must be reviewable.

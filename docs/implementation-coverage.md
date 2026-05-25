@@ -25,7 +25,7 @@ Every major capability described in the docs must become one of:
 
 | Documented capability | Runtime surface | Status |
 | --- | --- | --- |
-| Supreme Coordinator as only owner-facing agent | `CoordinatorIntakeService`, `CoordinatorChatService`, ElectronJS Coordinator panel, `bureau intake`, `POST /coordinator/intake`, `GET/POST /coordinator/messages` | partial |
+| Supreme Coordinator as only owner-facing agent | `CoordinatorIntakeService`, `CoordinatorChatService`, `CoordinatorGlobalMemoryService`, ElectronJS Coordinator panel, `bureau intake`, `POST /coordinator/intake`, `GET/POST /coordinator/messages`, `GET /coordinator/memory` | partial |
 | Company memory | `.bureauos/memory/COMPANY.md`, `ROOT.md`, daily notes, decisions | partial |
 | Client memory | `ClientRegistry`, per-client memory files | implemented |
 | Project memory | `ProjectRegistry`, per-project memory files | implemented |
@@ -139,6 +139,7 @@ Every major capability described in the docs must become one of:
 | Project-scoped memory packet | `project-dispatch-packet` artifact | implemented |
 | Per-agent handoff packet | `agent-handoff` artifact | implemented |
 | Runtime-enforced memory isolation | `MemoryBoundaryService`, `ScopedMemoryStore`, dispatcher `memory` capability | implemented |
+| Supreme Coordinator global memory access | `CoordinatorGlobalMemoryService`, `GET /coordinator/memory`, audited `memory.global.search` events, relative memory paths | implemented |
 | Per-project PM ownership config | not implemented | designed |
 
 ## Current Priority Order

@@ -8,6 +8,7 @@ import { AGENT_INDEX } from "../agents/roles.js";
 import { AgentRegistry, type AgentRuntime } from "../agents/runtime.js";
 import { defaultConfig } from "../config/loader.js";
 import { initWorkspace } from "../init/initializer.js";
+import { CoordinatorGlobalMemoryService } from "../memory/global.js";
 import { MEMORY_BOUNDARY_CAPABILITY, MEMORY_CAPABILITY } from "../memory/isolation.js";
 import { workspacePaths } from "../paths.js";
 import { PolicyEngine } from "../policy/engine.js";
@@ -173,5 +174,35 @@ describe("memory isolation", () => {
 
     const log = await readFile(paths.auditLog, "utf8");
     expect(log).toContain("memory.boundary.applied");
+  });
+
+  it("gives the supreme coordinator an audited global memory path", async () => {
+    const clients = new ClientRegistry(dir);
+    const alphaClient = await clients.create({ name: "Alpha Client" });
+    const betaClient = await clients.create({ name: "Beta Client" });
+    const projects = new ProjectRegistry(dir);
+    await projects.create({ name: "Alpha Web", clientId: alphaClient.id });
+    const beta = await projects.create({ name: "Beta Web", clientId: betaClient.id });
+
+    const memory = await new CoordinatorGlobalMemoryService(dir).assemble({
+      query: "Beta Web",
+      source: "memory-isolation-test",
+    });
+
+    expect(memory.topHits.some((hit) => hit.path === `projects/${beta.slug}/PROJECT.md`)).toBe(
+      true,
+    );
+    expect(JSON.stringify(memory)).not.toContain(dir);
+
+    await expect(
+      new CoordinatorGlobalMemoryService(dir).assemble({
+        actor: "project_manager",
+        query: "Beta Web",
+      }),
+    ).rejects.toThrow(/global memory access denied/);
+
+    const log = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(log).toContain("memory.global.search");
+    expect(log).toContain("memory.global.search.denied");
   });
 });
