@@ -47,6 +47,51 @@ export interface CompanyPulse {
     active_opportunities: number;
   };
 }
+export interface SettingsSummary {
+  config_path: string;
+  organization: { name: string };
+  setup: {
+    preset: string;
+    mode: string;
+    generated_by: string;
+    advanced_config_required: boolean;
+  };
+  interface: {
+    enabled: boolean;
+    mode: string;
+    mobile_first: boolean;
+  };
+  supreme_coordinator: {
+    provider: string;
+    model: string;
+    user_facing: boolean;
+    always_on: boolean;
+  };
+  autonomy: Record<string, boolean>;
+  growth_autonomy: Record<string, boolean>;
+  memory: Record<string, boolean>;
+  limits: Record<string, number | boolean>;
+  github: Record<string, boolean>;
+  triggers: {
+    github: Record<string, boolean>;
+    schedules: Record<string, string>;
+    thresholds: Record<string, number>;
+  };
+  agents: {
+    configured: number;
+    roles: number;
+  };
+  capabilities: {
+    configured: number;
+    catalog: number;
+  };
+  providers: {
+    connectors: number;
+    configured_overrides: string[];
+    enabled: string[];
+    disabled: string[];
+  };
+}
 
 export interface ClientRecord {
   id: string;
@@ -336,6 +381,7 @@ export const Api = {
   capabilities: () => api<CapabilityDefinition[]>("/capabilities"),
   artifacts: () => api<ArtifactRecord[]>("/artifacts"),
   providers: () => api<ProviderConnection[]>("/providers"),
+  settings: () => api<SettingsSummary>("/settings"),
   providerConnectors: () => api<ProviderConnector[]>("/provider/connectors"),
   providerModels: (provider: string) =>
     api<ProviderModelList>(`/provider/models?provider=${encodeURIComponent(provider)}`),

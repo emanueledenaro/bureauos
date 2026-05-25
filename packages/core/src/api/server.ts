@@ -91,6 +91,34 @@ interface ProviderModelList {
   models: Array<{ id: string; name: string }>;
 }
 
+interface SettingsSummary {
+  config_path: string;
+  organization: BureauConfig["organization"];
+  setup: BureauConfig["setup"];
+  interface: BureauConfig["interface"];
+  supreme_coordinator: BureauConfig["supreme_coordinator"];
+  autonomy: BureauConfig["autonomy"];
+  growth_autonomy: BureauConfig["growth_autonomy"];
+  memory: BureauConfig["memory"];
+  limits: BureauConfig["limits"];
+  github: BureauConfig["github"];
+  triggers: BureauConfig["triggers"];
+  agents: {
+    configured: number;
+    roles: number;
+  };
+  capabilities: {
+    configured: number;
+    catalog: number;
+  };
+  providers: {
+    connectors: number;
+    configured_overrides: string[];
+    enabled: string[];
+    disabled: string[];
+  };
+}
+
 const PROVIDER_TYPES: ReadonlySet<ProviderType> = new Set([
   "openai-codex",
   "openai",
@@ -270,8 +298,44 @@ async function providerModels(
   };
 }
 
+function settingsSummary(options: ApiServerOptions): SettingsSummary {
+  const connectors = listProviderConnectors(options.config);
+  const capabilities = CapabilityRegistry.fromConfig(options.config.capabilities).list();
+  return {
+    config_path: workspacePaths(options.workspaceRoot).configFile,
+    organization: options.config.organization,
+    setup: options.config.setup,
+    interface: options.config.interface,
+    supreme_coordinator: options.config.supreme_coordinator,
+    autonomy: options.config.autonomy,
+    growth_autonomy: options.config.growth_autonomy,
+    memory: options.config.memory,
+    limits: options.config.limits,
+    github: options.config.github,
+    triggers: options.config.triggers,
+    agents: {
+      configured: Object.keys(options.config.agents).length,
+      roles: AGENT_ROLES.length,
+    },
+    capabilities: {
+      configured: Object.keys(options.config.capabilities).length,
+      catalog: capabilities.length,
+    },
+    providers: {
+      connectors: connectors.length,
+      configured_overrides: Object.keys(options.config.provider ?? {}),
+      enabled: connectors.map((connector) => connector.id),
+      disabled: options.config.disabled_providers,
+    },
+  };
+}
+
 const ROUTES: Record<string, RouteHandler> = {
   "GET /health": ({ res }) => ok(res, { ok: true }),
+
+  "GET /settings": ({ res, options }) => {
+    ok(res, settingsSummary(options));
+  },
 
   "GET /company-pulse": async ({ res, options }) => {
     const d = deps(options);

@@ -86,6 +86,38 @@ describe("API server", () => {
     expect(audit).toContain("coordinator.intake.completed");
   });
 
+  it("exposes safe workspace settings for the ElectronJS settings page", async () => {
+    const config = defaultConfig("agency");
+    config.organization.name = "Settings Agency";
+    config.provider.openai = {
+      name: "OpenAI Private",
+      options: { defaultModel: "gpt-5-private", apiKey: "must-not-leak" },
+    };
+    server = await startApiServer({ workspaceRoot: dir, config });
+
+    const response = await fetch(`${server.url}/settings`);
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      config_path: string;
+      organization: { name: string };
+      setup: { preset: string };
+      supreme_coordinator: { provider: string; model: string };
+      providers: { configured_overrides: string[]; enabled: string[] };
+      agents: { roles: number };
+      capabilities: { catalog: number };
+    };
+    expect(body.organization.name).toBe("Settings Agency");
+    expect(body.setup.preset).toBe("agency");
+    expect(body.config_path).toBe(workspacePaths(dir).configFile);
+    expect(body.supreme_coordinator.provider).toBe("openai-codex");
+    expect(body.providers.configured_overrides).toEqual(["openai"]);
+    expect(body.providers.enabled).toContain("openai");
+    expect(body.agents.roles).toBeGreaterThan(0);
+    expect(body.capabilities.catalog).toBeGreaterThan(0);
+    expect(JSON.stringify(body)).not.toContain("must-not-leak");
+  });
+
   it("persists coordinator message history for the ElectronJS chat", async () => {
     server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
 

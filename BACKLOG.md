@@ -214,7 +214,7 @@ Goal: a local web app that visualizes kernel state, shaped like [docs/ui-referen
 - [x] Implement Server-Sent Events for live timeline streaming.
 - [x] Add `GET /coordinator/messages` so the ElectronJS Coordinator panel can reload durable chat history.
 - [x] Add `POST /coordinator/messages` so chat can either answer from memory or route opportunity messages into intake.
-- [ ] Add the missing endpoint: `/settings`.
+- [x] Add `GET /settings` with safe workspace configuration for the ElectronJS Settings page.
 - [x] Add `POST /coordinator/intake` so the ElectronJS Coordinator panel can create client/project/opportunity work.
 - [x] Add `POST /projects/dispatch` so Project Manager can create scoped packets and specialist handoffs.
 

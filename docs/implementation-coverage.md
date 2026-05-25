@@ -64,7 +64,7 @@ Every major capability described in the docs must become one of:
 | Approvals panel | React renderer + `/approvals/resolve` | partial |
 | Reports generation | `BusinessReportService`, `bureau report generate`, `/reports/generate` | implemented |
 | Reports view | report action in Revenue Pulse, `/reports` endpoint | partial |
-| Settings view | provider settings panel | partial |
+| Settings view | provider settings panel plus safe `/settings` workspace configuration summary | partial |
 | Native tray, notifications, auto-start | not implemented | designed |
 
 ## Agent Organization
@@ -126,7 +126,7 @@ Every major capability described in the docs must become one of:
 | Local provider | OpenAI-compatible local/Ollama adapter with model listing, `generateText`, and SSE `stream` | implemented |
 | Provider connector catalog | `listProviderConnectors`, OpenCode-style `provider` config overrides, `enabled_providers`/`disabled_providers`, `/provider/connectors`, `/provider/models`, catalog-backed auth methods, model defaults/lists, and env mappings | implemented |
 | Provider auth/connect | `ProviderAuthStore`, auth modes, OpenCode-style `/provider/auth` and OAuth authorize/callback endpoints, `.bureauos/auth/providers.json` | implemented |
-| Electron provider settings | Settings mode, connector catalog selector, model picker, browser OAuth for `openai-codex`, explicit API-key/local endpoint connect for API providers | implemented |
+| Electron provider settings | Settings mode, safe workspace configuration summary, connector catalog selector, model picker, browser OAuth for `openai-codex`, explicit API-key/local endpoint connect for API providers | implemented |
 | Gmail/Slack/Drive/Calendar | not implemented | designed |
 | Supabase/Stripe/Vercel | not implemented | designed |
 | Ads platforms | draft-only policy, no adapter | designed |

@@ -19,6 +19,7 @@ import {
   type ProviderModelList,
   type ProjectRecord,
   type RunRecord,
+  type SettingsSummary,
 } from "./lib/api";
 
 function classes(...parts: Array<string | false | undefined>): string {
@@ -80,6 +81,7 @@ interface DashboardState {
   capabilities: CapabilityDefinition[];
   providers: ProviderConnection[];
   providerConnectors: ProviderConnector[];
+  settings?: SettingsSummary;
   artifacts: ArtifactRecord[];
   audit: AuditEvent[];
   error?: string;
@@ -173,6 +175,7 @@ function useDashboard(): { state: DashboardState; refresh: () => Promise<void> }
         capabilities,
         artifacts,
         providers,
+        settings,
         providerConnectors,
         audit,
       ] = await Promise.all([
@@ -186,6 +189,7 @@ function useDashboard(): { state: DashboardState; refresh: () => Promise<void> }
         Api.capabilities(),
         Api.artifacts(),
         Api.providers(),
+        Api.settings(),
         Api.providerConnectors(),
         Api.audit(30),
       ]);
@@ -200,6 +204,7 @@ function useDashboard(): { state: DashboardState; refresh: () => Promise<void> }
         capabilities,
         artifacts,
         providers,
+        settings,
         providerConnectors,
         audit,
         loading: false,
@@ -483,6 +488,10 @@ function completedRunCoverage(runs: RunRecord[]): number {
   if (!runs.length) return 0;
   const completed = runs.filter((run) => run.status === "completed").length;
   return Math.round((completed / runs.length) * 100);
+}
+
+function enabledCount(values: Record<string, boolean>): number {
+  return Object.values(values).filter(Boolean).length;
 }
 
 function toneDot(tone: Tone): string {
@@ -2076,12 +2085,14 @@ function ReportsWorkspace({ state }: { state: DashboardState }) {
 }
 
 function SettingsView({
+  settings,
   providers,
   providerConnectors,
   onProviderLogin,
   onProviderLogout,
   onRefresh,
 }: {
+  settings?: SettingsSummary;
   providers: ProviderConnection[];
   providerConnectors: ProviderConnector[];
   onProviderLogin: (input: {
@@ -2330,6 +2341,130 @@ function SettingsView({
           ) : null}
         </div>
       ) : null}
+      {settings ? (
+        <div className="mt-5 grid grid-cols-3 gap-3">
+          <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+            <div className="text-[10px] uppercase tracking-[0.08em] text-neutral-600">
+              Workspace
+            </div>
+            <div className="mt-2 text-[13px] font-semibold text-neutral-50">
+              {settings.organization.name}
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-neutral-500">
+              <span>Preset {settings.setup.preset}</span>
+              <span>Mode {settings.setup.mode}</span>
+              <span>Interface {settings.interface.mode}</span>
+              <span>{settings.interface.mobile_first ? "Mobile-first" : "Desktop-first"}</span>
+            </div>
+            <div className="mt-3 truncate text-[10px] text-neutral-600">{settings.config_path}</div>
+          </div>
+          <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+            <div className="text-[10px] uppercase tracking-[0.08em] text-neutral-600">
+              Supreme Coordinator
+            </div>
+            <div className="mt-2 text-[13px] font-semibold text-neutral-50">
+              {settings.supreme_coordinator.provider}
+            </div>
+            <div className="mt-2 text-[11px] text-neutral-500">
+              Model {settings.supreme_coordinator.model}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-neutral-500">
+              <span className="rounded border border-neutral-800 px-2 py-1">
+                {settings.supreme_coordinator.user_facing ? "Owner-facing" : "Internal only"}
+              </span>
+              <span className="rounded border border-neutral-800 px-2 py-1">
+                {settings.supreme_coordinator.always_on ? "Always-on" : "Manual"}
+              </span>
+            </div>
+          </div>
+          <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+            <div className="text-[10px] uppercase tracking-[0.08em] text-neutral-600">
+              Organization
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-neutral-500">
+              <span>{settings.agents.roles} agent roles</span>
+              <span>{settings.agents.configured} configured</span>
+              <span>{settings.capabilities.catalog} capabilities</span>
+              <span>{settings.providers.connectors} providers</span>
+            </div>
+            <div className="mt-3 text-[10px] text-neutral-600">
+              Overrides: {settings.providers.configured_overrides.join(", ") || "none"}
+            </div>
+          </div>
+          <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+            <div className="text-[10px] uppercase tracking-[0.08em] text-neutral-600">Autonomy</div>
+            <div className="mt-2 text-[13px] font-semibold text-neutral-50">
+              {enabledCount(settings.autonomy)} / {Object.keys(settings.autonomy).length} enabled
+            </div>
+            <div className="mt-2 space-y-1 text-[10px] text-neutral-500">
+              {Object.entries(settings.autonomy).map(([key, value]) => (
+                <div key={key} className="flex justify-between gap-2">
+                  <span className="truncate">{formatLabel(key)}</span>
+                  <span className={value ? "text-emerald-400" : "text-neutral-600"}>
+                    {value ? "on" : "off"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+            <div className="text-[10px] uppercase tracking-[0.08em] text-neutral-600">
+              Growth Policy
+            </div>
+            <div className="mt-2 text-[13px] font-semibold text-neutral-50">
+              {enabledCount(settings.growth_autonomy)} /{" "}
+              {Object.keys(settings.growth_autonomy).length} enabled
+            </div>
+            <div className="mt-2 space-y-1 text-[10px] text-neutral-500">
+              {Object.entries(settings.growth_autonomy)
+                .slice(0, 8)
+                .map(([key, value]) => (
+                  <div key={key} className="flex justify-between gap-2">
+                    <span className="truncate">{formatLabel(key)}</span>
+                    <span className={value ? "text-emerald-400" : "text-neutral-600"}>
+                      {value ? "on" : "off"}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          </div>
+          <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+            <div className="text-[10px] uppercase tracking-[0.08em] text-neutral-600">
+              Limits & Signals
+            </div>
+            <div className="mt-2 space-y-1 text-[10px] text-neutral-500">
+              <div className="flex justify-between gap-2">
+                <span>Retries</span>
+                <span>{settings.limits.max_retries_per_task}</span>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span>Files before review</span>
+                <span>{settings.limits.max_files_changed_without_human_review}</span>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span>Stale PR hours</span>
+                <span>{settings.triggers.thresholds.stale_pr_hours}</span>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span>Blocked issue hours</span>
+                <span>{settings.triggers.thresholds.blocked_issue_hours}</span>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span>Memory global access</span>
+                <span
+                  className={
+                    settings.memory.coordinator_has_global_access
+                      ? "text-emerald-400"
+                      : "text-neutral-600"
+                  }
+                >
+                  {settings.memory.coordinator_has_global_access ? "on" : "off"}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {provider === "openai-codex" ? (
         <div className="mt-4 rounded-md border border-neutral-800 bg-neutral-950 p-4">
           <div className="text-[11px] font-semibold text-neutral-50">
@@ -2476,6 +2611,7 @@ export function App() {
               {mode === "reports" ? <ReportsWorkspace state={state} /> : null}
               {mode === "settings" ? (
                 <SettingsView
+                  settings={state.settings}
                   providers={state.providers}
                   providerConnectors={state.providerConnectors}
                   onProviderLogin={onProviderLogin}
