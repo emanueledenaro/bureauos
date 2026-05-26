@@ -189,6 +189,109 @@ describe("CoordinatorChatService", () => {
     await expect(new ApprovalRegistry(dir).listPending()).resolves.toEqual([]);
   });
 
+  it("skips repeated slow tool-planning calls while a provider is degraded", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    const clients = new ClientRegistry(dir);
+    await clients.create({ name: "Pizzeria Amodeo" });
+    let generateCalls = 0;
+    const fakeProvider: ProviderAdapter = {
+      id: "degraded-tool-planner",
+      type: "custom",
+      name: "Degraded Tool Planner",
+      async listModels() {
+        return ["fake-model"];
+      },
+      async validateCredentials() {
+        return { ok: true };
+      },
+      async generateText() {
+        generateCalls += 1;
+        return new Promise(() => {});
+      },
+      async *stream() {
+        yield "unused";
+      },
+    };
+    const deps = {
+      config: defaultConfig("freelancer"),
+      providerSelector: async () => ({ provider: fakeProvider, model: "fake-model" }),
+      toolPlanningTimeoutMs: 1,
+      toolPlanningDegradedTtlMs: 60_000,
+    };
+
+    const first = await new CoordinatorChatService(dir, deps).process({
+      source: "test",
+      message: "quanti clienti abbiamo?",
+    });
+    const second = await new CoordinatorChatService(dir, deps).process({
+      source: "test",
+      message: "quanti clienti abbiamo?",
+    });
+
+    expect(generateCalls).toBe(1);
+    expect(first.coordinatorMessage.meta?.planningProvider).toMatchObject({
+      reason: "provider tool planning timed out after 1ms",
+    });
+    expect(second.coordinatorMessage.meta?.planningProvider).toMatchObject({
+      reason: expect.stringContaining("provider tool planning skipped while degraded"),
+    });
+    expect(second.coordinatorMessage.text).toBe("Abbiamo 1 cliente salvato: Pizzeria Amodeo.");
+  });
+
+  it("retries and clears degraded tool-planning state after the cooldown", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    const clients = new ClientRegistry(dir);
+    await clients.create({ name: "Pizzeria Amodeo" });
+    let generateCalls = 0;
+    let shouldHang = true;
+    const fakeProvider: ProviderAdapter = {
+      id: "recovering-tool-planner",
+      type: "custom",
+      name: "Recovering Tool Planner",
+      async listModels() {
+        return ["fake-model"];
+      },
+      async validateCredentials() {
+        return { ok: true };
+      },
+      async generateText() {
+        generateCalls += 1;
+        if (shouldHang) return new Promise(() => {});
+        return {
+          model: "fake-model",
+          text: JSON.stringify({ action: "list_clients", confidence: 0.88 }),
+        };
+      },
+      async *stream() {
+        yield "unused";
+      },
+    };
+    const deps = {
+      config: defaultConfig("freelancer"),
+      providerSelector: async () => ({ provider: fakeProvider, model: "fake-model" }),
+      toolPlanningTimeoutMs: 1,
+      toolPlanningDegradedTtlMs: 1,
+    };
+
+    await new CoordinatorChatService(dir, deps).process({
+      source: "test",
+      message: "quanti clienti abbiamo?",
+    });
+    shouldHang = false;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const recovered = await new CoordinatorChatService(dir, deps).process({
+      source: "test",
+      message: "quanti clienti abbiamo?",
+    });
+
+    expect(generateCalls).toBe(2);
+    expect(recovered.provider.reason).toBe("coordinator_tool_plan");
+    expect(recovered.coordinatorMessage.meta?.tool).toMatchObject({
+      name: "list_clients",
+      confidence: 0.88,
+    });
+  });
+
   it("streams client-only saves as plain confirmations", async () => {
     const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
     const service = new CoordinatorChatService(dir, { config: defaultConfig("freelancer") });

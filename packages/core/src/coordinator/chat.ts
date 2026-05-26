@@ -63,6 +63,7 @@ export interface CoordinatorChatDeps {
   providerSelector?: CoordinatorProviderSelector;
   providerTimeoutMs?: number;
   toolPlanningTimeoutMs?: number;
+  toolPlanningDegradedTtlMs?: number;
 }
 
 export interface CoordinatorProviderSelection {
@@ -91,6 +92,14 @@ interface CoordinatorToolPlanningResult {
 
 const DEFAULT_PROVIDER_TIMEOUT_MS = 12_000;
 const DEFAULT_TOOL_PLANNING_TIMEOUT_MS = 3_000;
+const DEFAULT_TOOL_PLANNING_DEGRADED_TTL_MS = 30_000;
+
+interface ToolPlanningDegradedState {
+  reason: string;
+  until: number;
+}
+
+const toolPlanningDegradedProviders = new Map<string, ToolPlanningDegradedState>();
 
 function includesAny(message: string, words: readonly string[]): boolean {
   const lower = message.toLowerCase();
@@ -624,6 +633,13 @@ function providerMeta(
   };
 }
 
+function toolPlanningHealthKey(
+  workspaceRoot: string,
+  selection: CoordinatorProviderSelection,
+): string {
+  return `${workspaceRoot}:${selection.provider.id}:${selection.model}`;
+}
+
 function requireMessagePair(records: readonly CoordinatorMessageRecord[]): {
   ownerMessage: CoordinatorMessageRecord;
   coordinatorMessage: CoordinatorMessageRecord;
@@ -646,6 +662,7 @@ export class CoordinatorChatService {
   private readonly providerSelector: CoordinatorProviderSelector;
   private readonly providerTimeoutMs: number;
   private readonly toolPlanningTimeoutMs: number;
+  private readonly toolPlanningDegradedTtlMs: number;
 
   constructor(
     private readonly workspaceRoot: string,
@@ -663,6 +680,8 @@ export class CoordinatorChatService {
     this.toolPlanningTimeoutMs =
       deps.toolPlanningTimeoutMs ??
       Math.min(this.providerTimeoutMs, DEFAULT_TOOL_PLANNING_TIMEOUT_MS);
+    this.toolPlanningDegradedTtlMs =
+      deps.toolPlanningDegradedTtlMs ?? DEFAULT_TOOL_PLANNING_DEGRADED_TTL_MS;
   }
 
   private async planToolAction(
@@ -676,6 +695,21 @@ export class CoordinatorChatService {
         provider: providerMeta("unavailable", undefined, undefined, "no_valid_provider_route"),
       };
     }
+
+    const healthKey = toolPlanningHealthKey(this.workspaceRoot, selection);
+    const degraded = toolPlanningDegradedProviders.get(healthKey);
+    const now = Date.now();
+    if (degraded && degraded.until > now) {
+      return {
+        provider: providerMeta(
+          "failed",
+          selection,
+          undefined,
+          `provider tool planning skipped while degraded: ${degraded.reason}`,
+        ),
+      };
+    }
+    if (degraded) toolPlanningDegradedProviders.delete(healthKey);
 
     try {
       const generated = await withTimeout(
@@ -693,18 +727,21 @@ export class CoordinatorChatService {
         this.toolPlanningTimeoutMs,
         `provider tool planning timed out after ${this.toolPlanningTimeoutMs}ms`,
       );
+      toolPlanningDegradedProviders.delete(healthKey);
       return {
         plan: parseCoordinatorToolPlan(generated.text),
         provider: providerMeta("used", selection, generated, "coordinator_tool_plan"),
       };
     } catch (error) {
+      const reason = error instanceof Error ? error.message : "provider tool planning failed";
+      if (this.toolPlanningDegradedTtlMs > 0) {
+        toolPlanningDegradedProviders.set(healthKey, {
+          reason,
+          until: Date.now() + this.toolPlanningDegradedTtlMs,
+        });
+      }
       return {
-        provider: providerMeta(
-          "failed",
-          selection,
-          undefined,
-          error instanceof Error ? error.message : "provider tool planning failed",
-        ),
+        provider: providerMeta("failed", selection, undefined, reason),
       };
     }
   }
