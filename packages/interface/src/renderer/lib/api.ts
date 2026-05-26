@@ -589,6 +589,16 @@ export interface GrowthContentPipelineResult {
   report: ArtifactRecord;
   next_actions: string[];
 }
+export interface GrowthReviewResult {
+  generated_at: string;
+  report: ArtifactRecord;
+  memory_ready: boolean;
+  missing_sections: string[];
+  recent_content_count: number;
+  pipeline_value: number;
+  follow_ups_due: number;
+  recommendations: string[];
+}
 export interface RevenuePipelineItem {
   opportunity: OpportunityRecord;
   client?: ClientRecord;
@@ -850,6 +860,11 @@ export const Api = {
     }),
   generateGrowthContent: (input: { maxDrafts?: number; focus?: string } = {}) =>
     api<GrowthContentPipelineResult>("/growth/content-pipeline/generate", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  generateGrowthReview: (input: { recentDays?: number } = {}) =>
+    api<GrowthReviewResult>("/growth/review/generate", {
       method: "POST",
       body: JSON.stringify(input),
     }),

@@ -1,4 +1,13 @@
-import { Megaphone, ShieldCheck, Sparkles, Target, WandSparkles } from "lucide-react";
+import {
+  ClipboardCheck,
+  FileText,
+  Megaphone,
+  ShieldCheck,
+  Sparkles,
+  Target,
+  WandSparkles,
+  type LucideIcon,
+} from "lucide-react";
 import { SectionShell } from "../components/dashboard/SectionShell";
 import { MetricTile } from "../components/dashboard/MetricTile";
 import { EmptyState } from "../components/dashboard/EmptyState";
@@ -9,23 +18,39 @@ import { ViewToolbar } from "../components/dashboard/ViewToolbar";
 import { OperationalFocus } from "../components/dashboard/OperationalFocus";
 import { Badge } from "../components/ui/badge";
 import { useAsyncAction } from "../hooks/useAsyncAction";
+import { sortNewest } from "../lib/builders";
 import { formatLabel, timeAgo } from "../lib/format";
-import type { GrowthContentPipelineResult } from "../lib/api";
+import type { ArtifactRecord, GrowthContentPipelineResult, GrowthReviewResult } from "../lib/api";
 import type { DashboardState } from "../lib/types";
+
+const GROWTH_DRAFT_TYPES = new Set([
+  "social-post-brief",
+  "ad-campaign-brief",
+  "creative-brief",
+  "campaign-brief",
+]);
 
 export function GrowthView({
   state,
   onGenerateContent,
+  onGenerateReview,
 }: {
   state: DashboardState;
   onGenerateContent: () => Promise<GrowthContentPipelineResult>;
+  onGenerateReview: () => Promise<GrowthReviewResult>;
 }) {
   const generate = useAsyncAction(onGenerateContent);
-  const growthArtifacts = state.artifacts.filter((artifact) =>
-    ["social-post-brief", "ad-campaign-brief", "creative-brief", "campaign-brief"].includes(
-      artifact.type,
-    ),
+  const review = useAsyncAction(onGenerateReview);
+  const growthArtifacts = sortNewest(
+    state.artifacts.filter((artifact) => GROWTH_DRAFT_TYPES.has(artifact.type)),
   );
+  const contentReports = sortNewest(
+    state.artifacts.filter((artifact) => artifact.type === "content-pipeline-report"),
+  );
+  const growthReviews = sortNewest(
+    state.artifacts.filter((artifact) => artifact.type === "growth-review"),
+  );
+  const pendingApprovals = sortNewest(state.approvals);
   const growthMemory = state.growthMemory;
   const configuredMemory =
     growthMemory?.sections.filter((section) => section.status === "configured").length ?? 0;
@@ -65,6 +90,15 @@ export function GrowthView({
             busy: generate.busy,
             busyLabel: "Generating",
           }}
+          secondary={[
+            {
+              label: "Run review",
+              icon: ClipboardCheck,
+              onClick: () => void review.run(),
+              busy: review.busy,
+              busyLabel: "Reviewing",
+            },
+          ]}
         />
       }
     >
@@ -83,6 +117,24 @@ export function GrowthView({
           title={`${generate.result.drafts.length} drafts generated · report ${generate.result.report.id}`}
           detail="Drafts were created locally; external publishing stays gated."
           onDismiss={generate.reset}
+          className="mb-3"
+        />
+      ) : null}
+      {review.error ? (
+        <ActionBanner
+          tone="danger"
+          title="Growth review failed"
+          detail={review.error}
+          onDismiss={review.reset}
+          className="mb-3"
+        />
+      ) : null}
+      {review.result ? (
+        <ActionBanner
+          tone="success"
+          title={`Growth review generated · ${review.result.report.id}`}
+          detail={review.result.recommendations[0] ?? "Review is ready locally."}
+          onDismiss={review.reset}
           className="mb-3"
         />
       ) : null}
@@ -125,15 +177,67 @@ export function GrowthView({
       </KpiBar>
 
       <div className="mt-section">
-        <div className="flex items-center justify-between">
-          <h3 className="text-section-title">Growth Memory</h3>
-          <span className="text-meta">
-            {growthMemory?.ready ? "Ready" : "Incomplete"} · {configuredMemory}/3 sections
-          </span>
+        <SectionHeading
+          title="Growth service coverage"
+          meta={`${contentReports.length + growthReviews.length} service reports`}
+        />
+        <div className="mt-2 grid items-stretch gap-3 lg:grid-cols-4">
+          <ServiceCard
+            icon={Target}
+            title="Memory sections"
+            status={`${configuredMemory}/3 configured`}
+            badge={growthMemory?.ready ? "Ready" : "Setup needed"}
+            detail={
+              growthMemory?.ready
+                ? "Brand, offers, and channels are available for draft generation."
+                : `Missing ${
+                    growthMemory?.missing_sections.map(formatLabel).join(", ") || "growth memory"
+                  }.`
+            }
+            artifacts={(growthMemory?.sections ?? []).map((section) => ({
+              id: section.path,
+              type: section.status,
+            }))}
+          />
+          <ServiceCard
+            icon={FileText}
+            title="Content pipeline"
+            status={`${growthArtifacts.length} draft artifacts`}
+            badge={contentReports[0]?.id ?? "No report yet"}
+            detail="Social, campaign, creative, and ads briefs stay draft-only until policy allows external action."
+            artifacts={[...contentReports.slice(0, 1), ...growthArtifacts.slice(0, 3)]}
+          />
+          <ServiceCard
+            icon={ClipboardCheck}
+            title="Growth review"
+            status={`${growthReviews.length} review reports`}
+            badge={growthReviews[0]?.id ?? "Run review"}
+            detail="Weekly review checks memory readiness, recent content, pipeline, and follow-up pressure."
+            artifacts={growthReviews.slice(0, 4)}
+          />
+          <ServiceCard
+            icon={ShieldCheck}
+            title="Approval gates"
+            status={`${pendingApprovals.length} pending gates`}
+            badge={pendingApprovals.length ? "Owner gate" : "Clear"}
+            detail="Publishing, paid spend, public claims, final proposals, and pricing changes remain gated."
+            artifacts={pendingApprovals.slice(0, 4).map((approval) => ({
+              id: approval.id,
+              type: approval.action,
+              created: approval.created,
+            }))}
+          />
         </div>
-        <div className="mt-2 grid gap-3 md:grid-cols-3">
+      </div>
+
+      <div className="mt-section">
+        <SectionHeading
+          title="Growth Memory"
+          meta={`${growthMemory?.ready ? "Ready" : "Incomplete"} · ${configuredMemory}/3 sections`}
+        />
+        <div className="mt-2 grid items-stretch gap-3 md:grid-cols-3">
           {(growthMemory?.sections ?? []).map((section) => (
-            <BaseCard key={section.id} className="gap-3">
+            <BaseCard key={section.id} className="h-full gap-3">
               <BaseCardHeader title={section.title}>
                 <Badge variant={section.status === "configured" ? "success" : "muted"}>
                   {formatLabel(section.status)}
@@ -157,10 +261,10 @@ export function GrowthView({
       </div>
 
       <div className="mt-section">
-        <h3 className="text-section-title">Recent draft assets</h3>
-        <div className="mt-2 grid gap-3 md:grid-cols-3">
+        <SectionHeading title="Recent draft assets" meta={`${growthArtifacts.length} total`} />
+        <div className="mt-2 grid items-stretch gap-3 md:grid-cols-3">
           {growthArtifacts.slice(0, 6).map((artifact) => (
-            <BaseCard key={artifact.id} variant="interactive" className="gap-2">
+            <BaseCard key={artifact.id} variant="interactive" className="h-full gap-2">
               <BaseCardHeader title={formatLabel(artifact.type)} />
               <div className="text-meta truncate font-mono">{artifact.id}</div>
               <div className="text-meta">
@@ -179,5 +283,66 @@ export function GrowthView({
         </div>
       </div>
     </SectionShell>
+  );
+}
+
+function SectionHeading({ title, meta }: { title: string; meta?: string }) {
+  return (
+    <div className="flex min-h-8 min-w-0 flex-wrap items-end justify-between gap-2">
+      <h3 className="text-section-title">{title}</h3>
+      {meta ? <span className="text-meta truncate">{meta}</span> : null}
+    </div>
+  );
+}
+
+function ServiceCard({
+  icon: Icon,
+  title,
+  status,
+  badge,
+  detail,
+  artifacts,
+}: {
+  icon: LucideIcon;
+  title: string;
+  status: string;
+  badge: string;
+  detail: string;
+  artifacts: Array<Pick<ArtifactRecord, "id" | "type" | "created">>;
+}) {
+  return (
+    <BaseCard className="h-full gap-3">
+      <BaseCardHeader
+        title={
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-border/60 bg-background/45 text-muted-foreground">
+              <Icon className="h-3.5 w-3.5" />
+            </span>
+            <span className="truncate">{title}</span>
+          </span>
+        }
+        subtitle={status}
+      >
+        <Badge variant="muted" className="max-w-[150px] truncate">
+          {badge}
+        </Badge>
+      </BaseCardHeader>
+      <p className="text-body-secondary line-clamp-3 text-foreground/80">{detail}</p>
+      <div className="mt-auto space-y-1 border-t border-border/60 pt-3">
+        {artifacts.length > 0 ? (
+          artifacts.slice(0, 4).map((artifact) => (
+            <div
+              key={artifact.id}
+              className="flex min-w-0 items-center justify-between gap-3 text-meta"
+            >
+              <span className="min-w-0 truncate font-mono">{artifact.id}</span>
+              <span className="shrink-0">{formatLabel(artifact.type)}</span>
+            </div>
+          ))
+        ) : (
+          <div className="text-meta">No local artifacts yet.</div>
+        )}
+      </div>
+    </BaseCard>
   );
 }

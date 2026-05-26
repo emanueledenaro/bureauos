@@ -40,6 +40,7 @@ import {
   type CoordinatorChatResult,
   type CoordinatorChatStreamHandlers,
   type GrowthContentPipelineResult,
+  type GrowthReviewResult,
   type MemoryTriggerResult,
   type ProjectRepositoryVerificationResult,
   type RevenuePipelineResult,
@@ -144,6 +145,12 @@ export function App() {
     return result;
   };
 
+  const onGenerateGrowthReview = async (): Promise<GrowthReviewResult> => {
+    const result = await Api.generateGrowthReview({ recentDays: 7 });
+    await refresh();
+    return result;
+  };
+
   const onGenerateRevenuePipeline = async (): Promise<RevenuePipelineResult> => {
     const result = await Api.generateRevenuePipeline({ maxOpportunities: 5 });
     await refresh();
@@ -232,6 +239,7 @@ export function App() {
               onGenerateClientSuccessStatus={onGenerateClientSuccessStatus}
               onMemoryTriggerScan={onMemoryTriggerScan}
               onGenerateGrowthContent={onGenerateGrowthContent}
+              onGenerateGrowthReview={onGenerateGrowthReview}
               onGenerateRevenuePipeline={onGenerateRevenuePipeline}
               onRefresh={refresh}
             />
@@ -372,6 +380,7 @@ function DashboardLayout({
   onGenerateClientSuccessStatus,
   onMemoryTriggerScan,
   onGenerateGrowthContent,
+  onGenerateGrowthReview,
   onGenerateRevenuePipeline,
   onRefresh,
 }: {
@@ -404,6 +413,7 @@ function DashboardLayout({
   onGenerateClientSuccessStatus: () => Promise<ClientSuccessStatusResult>;
   onMemoryTriggerScan: () => Promise<MemoryTriggerResult>;
   onGenerateGrowthContent: () => Promise<GrowthContentPipelineResult>;
+  onGenerateGrowthReview: () => Promise<GrowthReviewResult>;
   onGenerateRevenuePipeline: () => Promise<RevenuePipelineResult>;
   onRefresh: () => Promise<void>;
 }) {
@@ -434,6 +444,7 @@ function DashboardLayout({
     onGenerateClientSuccessStatus,
     onMemoryTriggerScan,
     onGenerateGrowthContent,
+    onGenerateGrowthReview,
     onGenerateRevenuePipeline,
     onRefresh,
   });
@@ -472,6 +483,7 @@ function renderMainView({
   onGenerateClientSuccessStatus,
   onMemoryTriggerScan,
   onGenerateGrowthContent,
+  onGenerateGrowthReview,
   onGenerateRevenuePipeline,
   onRefresh,
 }: {
@@ -494,6 +506,7 @@ function renderMainView({
   onGenerateClientSuccessStatus: () => Promise<ClientSuccessStatusResult>;
   onMemoryTriggerScan: () => Promise<MemoryTriggerResult>;
   onGenerateGrowthContent: () => Promise<GrowthContentPipelineResult>;
+  onGenerateGrowthReview: () => Promise<GrowthReviewResult>;
   onGenerateRevenuePipeline: () => Promise<RevenuePipelineResult>;
   onRefresh: () => Promise<void>;
 }) {
@@ -518,7 +531,13 @@ function renderMainView({
     case "delivery":
       return <DeliveryView state={state} onVerifyRepositories={onVerifyRepositories} />;
     case "growth":
-      return <GrowthView state={state} onGenerateContent={onGenerateGrowthContent} />;
+      return (
+        <GrowthView
+          state={state}
+          onGenerateContent={onGenerateGrowthContent}
+          onGenerateReview={onGenerateGrowthReview}
+        />
+      );
     case "clients":
       return (
         <ClientsView

@@ -120,11 +120,11 @@ function TableGrid<Row>({
   const content = (
     <div style={{ minWidth: `${minWidth}px` }}>
       <div
-        className={cn("grid bg-surface-subtle/35 text-eyebrow", rowPadding)}
+        className={cn("grid gap-3 bg-surface-subtle/35 text-eyebrow", rowPadding)}
         style={{ gridTemplateColumns: gridTemplate }}
       >
         {columns.map((column) => (
-          <span key={column.id} className={alignClass(column.align)}>
+          <span key={column.id} className={cn("min-w-0 truncate", alignClass(column.align))}>
             {column.header}
           </span>
         ))}

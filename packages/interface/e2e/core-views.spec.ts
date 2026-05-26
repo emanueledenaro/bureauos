@@ -163,6 +163,40 @@ test.describe("Operating Room portfolio modes", () => {
   });
 });
 
+test.describe("Operating Room growth and revenue services", () => {
+  let workspace: InterfaceWorkspace;
+
+  test.beforeAll(async () => {
+    workspace = await createInterfaceWorkspace("seeded");
+  });
+
+  test.afterAll(async () => {
+    await workspace.close();
+  });
+
+  test("surfaces shipped growth and revenue services with local evidence", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openWorkspace(page, workspace);
+
+    await openDesktopView(page, "Growth");
+    const main = page.locator("main");
+    await expect(main).toContainText("Growth service coverage");
+    await expect(main).toContainText("Content pipeline");
+    await expect(main).toContainText("Growth review");
+    await expect(main).toContainText("Approval gates");
+    await expectNoHorizontalOverflow(page);
+
+    await openDesktopView(page, "Revenue");
+    await expect(main).toContainText("Revenue service coverage");
+    await expect(main).toContainText("Pipeline reports");
+    await expect(main).toContainText("Qualification");
+    await expect(main).toContainText("Proposal drafts");
+    await expect(main).toContainText("Pricing and conversion");
+    await expect(main).toContainText("Account health gates");
+    await expectNoHorizontalOverflow(page);
+  });
+});
+
 test.describe("Operating Room policy explain", () => {
   let workspace: InterfaceWorkspace;
 
