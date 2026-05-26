@@ -761,7 +761,7 @@ describe("API server", () => {
     expect(rawHistory).toContain("pizzeria-aurora-booking-website");
   });
 
-  it("answers general coordinator chat messages from memory without creating an intake", async () => {
+  it("answers client registry coordinator chat messages without creating an intake", async () => {
     server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
 
     const response = await fetch(`${server.url}/coordinator/messages`, {
@@ -784,7 +784,11 @@ describe("API server", () => {
       text: "Che clienti abbiamo attivi oggi?",
     });
     expect(body.coordinatorMessage.role).toBe("coordinator");
-    expect(body.coordinatorMessage.text).toContain("memoria locale");
+    expect(body.coordinatorMessage.text).toBe("Non ci sono clienti salvati nel registry locale.");
+    expect(body.coordinatorMessage.meta?.tool).toMatchObject({
+      name: "list_clients",
+      source: "safety_fallback",
+    });
     expect(body.provider.status).toBe("unavailable");
 
     const clients = await fetch(`${server.url}/clients`);
@@ -823,7 +827,7 @@ describe("API server", () => {
       | undefined;
     expect(final?.result.provider.status).toBe("unavailable");
     expect(deltas).toBe(final?.result.coordinatorMessage.text);
-    expect(deltas).toContain("memoria locale");
+    expect(deltas).toBe("Non ci sono clienti salvati nel registry locale.");
 
     const messages = (await (await fetch(`${server.url}/coordinator/messages`)).json()) as Array<{
       role: string;

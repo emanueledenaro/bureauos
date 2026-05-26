@@ -108,6 +108,87 @@ describe("CoordinatorChatService", () => {
     await expect(new OpportunityRegistry(dir).list()).resolves.toEqual([]);
   });
 
+  it("lets the provider choose the list_clients tool before answering registry questions", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    const clients = new ClientRegistry(dir);
+    await clients.create({ name: "Pizzeria Amodeo" });
+    await clients.create({ name: "Acme Labs" });
+    let providerWasAsked = false;
+    const fakeProvider: ProviderAdapter = {
+      id: "fake-provider",
+      type: "custom",
+      name: "Fake Provider",
+      async listModels() {
+        return ["fake-model"];
+      },
+      async validateCredentials() {
+        return { ok: true };
+      },
+      async generateText() {
+        providerWasAsked = true;
+        return {
+          model: "fake-model",
+          text: JSON.stringify({
+            action: "list_clients",
+            confidence: 0.91,
+          }),
+        };
+      },
+      async *stream() {
+        yield "unused";
+      },
+    };
+    const service = new CoordinatorChatService(dir, {
+      config: defaultConfig("freelancer"),
+      providerSelector: async () => ({ provider: fakeProvider, model: "fake-model" }),
+    });
+
+    const result = await service.process({
+      source: "test",
+      message: "quanti clienti abbiamo?",
+    });
+
+    expect(providerWasAsked).toBe(true);
+    expect(result.provider.reason).toBe("coordinator_tool_plan");
+    expect(result.coordinatorMessage.meta?.tool).toMatchObject({ name: "list_clients" });
+    expect(result.coordinatorMessage.meta?.clients).toMatchObject({ count: 2 });
+    expect(result.coordinatorMessage.text).toBe(
+      "Abbiamo 2 clienti salvati: Acme Labs, Pizzeria Amodeo.",
+    );
+    await expect(new ProjectRegistry(dir).list()).resolves.toEqual([]);
+    await expect(new OpportunityRegistry(dir).list()).resolves.toEqual([]);
+    await expect(new ApprovalRegistry(dir).listPending()).resolves.toEqual([]);
+  });
+
+  it("answers obvious client registry questions from local tools when the provider is unavailable", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    const clients = new ClientRegistry(dir);
+    await clients.create({ name: "Pizzeria Amodeo" });
+    await clients.create({ name: "BureauOS" });
+    const service = new CoordinatorChatService(dir, { config: defaultConfig("freelancer") });
+
+    const result = await service.process({
+      source: "test",
+      message: "quanti clienti abbiamo?",
+    });
+
+    expect(result.provider.reason).toBe("client_registry_fallback");
+    expect(result.coordinatorMessage.meta?.planningProvider).toMatchObject({
+      reason: "no_valid_provider_route",
+    });
+    expect(result.coordinatorMessage.meta?.tool).toMatchObject({
+      name: "list_clients",
+      source: "safety_fallback",
+    });
+    expect(result.coordinatorMessage.meta?.clients).toMatchObject({ count: 2 });
+    expect(result.coordinatorMessage.text).toBe(
+      "Abbiamo 2 clienti salvati: BureauOS, Pizzeria Amodeo.",
+    );
+    await expect(new ProjectRegistry(dir).list()).resolves.toEqual([]);
+    await expect(new OpportunityRegistry(dir).list()).resolves.toEqual([]);
+    await expect(new ApprovalRegistry(dir).listPending()).resolves.toEqual([]);
+  });
+
   it("streams client-only saves as plain confirmations", async () => {
     const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
     const service = new CoordinatorChatService(dir, { config: defaultConfig("freelancer") });

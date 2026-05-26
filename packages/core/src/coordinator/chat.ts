@@ -8,6 +8,7 @@ import { configureAgentProviderRouting, selectAgentModel } from "../agents/provi
 import type { BureauConfig } from "../config/schema.js";
 import { defaultConfig } from "../config/loader.js";
 import { CoordinatorGlobalMemoryService } from "../memory/global.js";
+import { ClientRegistry, type ClientRecord } from "../registries/client.js";
 import {
   CoordinatorIntakeService,
   isClientOnlySaveRequest,
@@ -56,10 +57,12 @@ export interface CoordinatorChatDeps {
   config?: BureauConfig;
   messages?: CoordinatorMessageStore;
   intake?: CoordinatorIntakeService;
+  clients?: ClientRegistry;
   memory?: CoordinatorGlobalMemoryService;
   env?: NodeJS.ProcessEnv;
   providerSelector?: CoordinatorProviderSelector;
   providerTimeoutMs?: number;
+  toolPlanningTimeoutMs?: number;
 }
 
 export interface CoordinatorProviderSelection {
@@ -74,7 +77,7 @@ export type CoordinatorProviderSelector = (
 ) => Promise<CoordinatorProviderSelection | undefined>;
 
 interface CoordinatorToolPlan {
-  action: "save_client" | "create_intake" | "answer";
+  action: "save_client" | "create_intake" | "list_clients" | "answer";
   clientName?: string;
   industry?: string;
   answer?: string;
@@ -87,6 +90,7 @@ interface CoordinatorToolPlanningResult {
 }
 
 const DEFAULT_PROVIDER_TIMEOUT_MS = 12_000;
+const DEFAULT_TOOL_PLANNING_TIMEOUT_MS = 3_000;
 
 function includesAny(message: string, words: readonly string[]): boolean {
   const lower = message.toLowerCase();
@@ -172,6 +176,19 @@ function includesToolGatewaySignal(message: string): boolean {
     "registra",
     "salva",
   ]);
+}
+
+function isClientRegistryQuestion(
+  message: string,
+  attachments: readonly CoordinatorAttachmentInput[],
+): boolean {
+  if (attachments.length > 0) return false;
+  const lower = message.toLowerCase();
+  if (!includesAny(lower, ["client", "cliente", "clienti", "lead"])) return false;
+  return (
+    includesAny(lower, ["elenca", "elenco", "lista", "quali", "quanti"]) ||
+    /\b(clienti|lead)\s+(?:registrati|salvati|abbiamo)\b/i.test(lower)
+  );
 }
 
 function wordsIn(message: string): string[] {
@@ -400,17 +417,19 @@ function toolPlanningPrompt(
     "Available tools:",
     "- save_client: persist only a client identity/anagraphic record. Use this when the owner only asks to save, remember, register, or add a client/lead, without project scope.",
     "- create_intake: create the full client/project/opportunity intake package. Use this only when the owner gives project, website, app, proposal, budget, booking, automation, marketing, or delivery scope.",
+    "- list_clients: read the local client registry. Use this for questions about how many clients exist, which clients are saved, or client list/status.",
     "- answer: respond without mutating memory. Use this for questions, status requests, ambiguity, or when a mutation is not safe.",
     "",
     "Rules:",
     "- Never invent project scope from a client-only request.",
     "- Extract the clean client name. Do not include trailing request text such as 'lo puoi salvare'.",
     "- If the owner only names a client/lead and asks to save, remember, register, or add it, choose save_client with only the clean business name.",
+    "- If the owner asks how many clients exist or asks to list saved clients, choose list_clients.",
     "- If the owner says the client wants a website/app/booking/proposal, choose create_intake.",
     "- If unclear, choose answer and ask one concise clarification.",
     "",
     "JSON shape:",
-    '{"action":"save_client|create_intake|answer","clientName":"optional clean client name","industry":"optional","answer":"optional owner-facing answer","confidence":0.0}',
+    '{"action":"save_client|create_intake|list_clients|answer","clientName":"optional clean client name","industry":"optional","answer":"optional owner-facing answer","confidence":0.0}',
     "",
     memoryPrompt(packet, recent),
   ].join("\n");
@@ -454,6 +473,18 @@ function deterministicAnswer(
   ].join("\n");
 }
 
+function clientRegistryAnswer(clients: readonly ClientRecord[]): string {
+  if (clients.length === 0) {
+    return "Non ci sono clienti salvati nel registry locale.";
+  }
+  const sorted = [...clients].sort((a, b) => a.name.localeCompare(b.name, "it"));
+  const names = sorted.map((client) => client.name);
+  const visibleNames = names.slice(0, 8).join(", ");
+  const remaining = names.length > 8 ? `, più altri ${names.length - 8}` : "";
+  const noun = clients.length === 1 ? "cliente salvato" : "clienti salvati";
+  return `Abbiamo ${clients.length} ${noun}: ${visibleNames}${remaining}.`;
+}
+
 function parseCoordinatorToolPlan(raw: string): CoordinatorToolPlan | undefined {
   const json = extractFirstJsonObject(raw);
   if (!json) return undefined;
@@ -475,9 +506,11 @@ function parseCoordinatorToolPlan(raw: string): CoordinatorToolPlan | undefined 
       ? "save_client"
       : rawAction === "create_intake" || rawAction === "intake.create"
         ? "create_intake"
-        : rawAction === "answer" || rawAction === "clarify"
-          ? "answer"
-          : undefined;
+        : rawAction === "list_clients" || rawAction === "clients.list"
+          ? "list_clients"
+          : rawAction === "answer" || rawAction === "clarify"
+            ? "answer"
+            : undefined;
   if (!action) return undefined;
 
   const clientName = stringArg(args, "clientName") ?? stringArg(args, "client_name");
@@ -607,10 +640,12 @@ export class CoordinatorChatService {
   private readonly config: BureauConfig;
   private readonly messages: CoordinatorMessageStore;
   private readonly intake: CoordinatorIntakeService;
+  private readonly clients: ClientRegistry;
   private readonly memory: CoordinatorGlobalMemoryService;
   private readonly env: NodeJS.ProcessEnv;
   private readonly providerSelector: CoordinatorProviderSelector;
   private readonly providerTimeoutMs: number;
+  private readonly toolPlanningTimeoutMs: number;
 
   constructor(
     private readonly workspaceRoot: string,
@@ -620,10 +655,14 @@ export class CoordinatorChatService {
     this.messages = deps.messages ?? new CoordinatorMessageStore(workspaceRoot);
     this.intake =
       deps.intake ?? new CoordinatorIntakeService(workspaceRoot, { config: this.config });
+    this.clients = deps.clients ?? new ClientRegistry(workspaceRoot);
     this.memory = deps.memory ?? new CoordinatorGlobalMemoryService(workspaceRoot);
     this.env = deps.env ?? process.env;
     this.providerSelector = deps.providerSelector ?? selectCoordinatorProvider;
     this.providerTimeoutMs = deps.providerTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
+    this.toolPlanningTimeoutMs =
+      deps.toolPlanningTimeoutMs ??
+      Math.min(this.providerTimeoutMs, DEFAULT_TOOL_PLANNING_TIMEOUT_MS);
   }
 
   private async planToolAction(
@@ -651,8 +690,8 @@ export class CoordinatorChatService {
           temperature: 0,
           maxTokens: 500,
         }),
-        this.providerTimeoutMs,
-        `provider tool planning timed out after ${this.providerTimeoutMs}ms`,
+        this.toolPlanningTimeoutMs,
+        `provider tool planning timed out after ${this.toolPlanningTimeoutMs}ms`,
       );
       return {
         plan: parseCoordinatorToolPlan(generated.text),
@@ -676,7 +715,10 @@ export class CoordinatorChatService {
     if (!message) throw new Error("coordinator chat requires a message");
     const attachments = input.attachments ?? [];
 
-    if (hasIntakeIntent(message, attachments) || isLowContextMessage(message, attachments)) {
+    if (
+      hasCoordinatorToolIntent(message, attachments) ||
+      isLowContextMessage(message, attachments)
+    ) {
       const result = await this.process(input);
       for (const text of visibleDeltas(result.coordinatorMessage.text)) {
         yield { type: "delta", text };
@@ -824,6 +866,45 @@ export class CoordinatorChatService {
         };
       }
 
+      if (planned.plan?.action === "list_clients") {
+        const clients = await this.clients.list();
+        const answer = clientRegistryAnswer(clients);
+        const { ownerMessage, coordinatorMessage } = requireMessagePair(
+          await this.messages.appendMany([
+            {
+              role: "owner",
+              text: message,
+              attachments: messageAttachments(attachments),
+              meta: { mode: "answer" },
+            },
+            {
+              role: "coordinator",
+              text: answer,
+              meta: {
+                mode: "answer",
+                provider: planned.provider,
+                memory,
+                tool: {
+                  name: "list_clients",
+                  confidence: planned.plan.confidence,
+                },
+                clients: {
+                  count: clients.length,
+                  names: clients.map((client) => client.name),
+                },
+              },
+            },
+          ]),
+        );
+        return {
+          mode: "answer",
+          ownerMessage,
+          coordinatorMessage,
+          provider: planned.provider,
+          memory,
+        };
+      }
+
       if (planned.plan?.action === "answer" && planned.plan.answer) {
         const answer = sanitizeCoordinatorAnswer(planned.plan.answer);
         const { ownerMessage, coordinatorMessage } = requireMessagePair(
@@ -853,6 +934,52 @@ export class CoordinatorChatService {
       if (planned.plan?.action === "create_intake") {
         plannedIntakeProvider = planned.provider;
       }
+    }
+
+    if (isClientRegistryQuestion(message, attachments)) {
+      const clients = await this.clients.list();
+      const answer = clientRegistryAnswer(clients);
+      const provider = providerMeta(
+        "unavailable",
+        undefined,
+        undefined,
+        "client_registry_fallback",
+      );
+      const { ownerMessage, coordinatorMessage } = requireMessagePair(
+        await this.messages.appendMany([
+          {
+            role: "owner",
+            text: message,
+            attachments: messageAttachments(attachments),
+            meta: { mode: "answer" },
+          },
+          {
+            role: "coordinator",
+            text: answer,
+            meta: {
+              mode: "answer",
+              provider,
+              memory,
+              ...(toolPlanningProvider ? { planningProvider: toolPlanningProvider } : {}),
+              tool: {
+                name: "list_clients",
+                source: "safety_fallback",
+              },
+              clients: {
+                count: clients.length,
+                names: clients.map((client) => client.name),
+              },
+            },
+          },
+        ]),
+      );
+      return {
+        mode: "answer",
+        ownerMessage,
+        coordinatorMessage,
+        provider,
+        memory,
+      };
     }
 
     if (isClientOnlySaveRequest({ message, attachments })) {
