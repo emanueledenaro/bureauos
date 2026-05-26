@@ -18,7 +18,7 @@ import {
   type CoordinatorMessageAttachment,
   type CoordinatorMessageRecord,
 } from "./messages.js";
-import { coordinatorIdleAnswer } from "./idle.js";
+import { coordinatorIdentityAnswer, coordinatorIdleAnswer } from "./idle.js";
 import { sanitizeCoordinatorVisibleText } from "./sanitize.js";
 
 export interface CoordinatorChatInput {
@@ -211,6 +211,7 @@ function isLowContextMessage(
   attachments: readonly CoordinatorAttachmentInput[],
 ): boolean {
   if (attachments.length > 0) return false;
+  if (isLowContextIdentityMessage(message, attachments)) return true;
   if (hasCurrentWorkReference(message, attachments) || hasStatusIntent(message)) return false;
   const words = wordsIn(message);
   if (words.length === 0) return true;
@@ -234,6 +235,42 @@ function isLowContextMessage(
     "grazie",
   ]);
   return words.length <= 3 && words.every((word) => lowContextWords.has(word));
+}
+
+function isLowContextIdentityMessage(
+  message: string,
+  attachments: readonly CoordinatorAttachmentInput[],
+): boolean {
+  if (attachments.length > 0) return false;
+  const lower = message.toLowerCase();
+  const identitySignals = [
+    "chi sei",
+    "cosa sei",
+    "come ti chiami",
+    "presentati",
+    "presentazione",
+    "che ruolo hai",
+    "qual e il tuo ruolo",
+    "qual è il tuo ruolo",
+    "cosa fai",
+  ];
+  if (!identitySignals.some((signal) => lower.includes(signal))) return false;
+  const words = wordsIn(message);
+  if (words.length > 8) return false;
+  const operationalSignals = [
+    "bug",
+    "cliente",
+    "client",
+    "commit",
+    "fix",
+    "linear",
+    "progetto",
+    "project",
+    "pull",
+    "task",
+    "ticket",
+  ];
+  return !operationalSignals.some((signal) => lower.includes(signal));
 }
 
 function memoryMeta(packet: ContextPacket): CoordinatorChatResult["memory"] {
@@ -308,7 +345,8 @@ function userPrompt(
   ].join("\n");
 }
 
-function idleAnswer(provider: CoordinatorChatProviderMeta): string {
+function idleAnswer(message: string, provider: CoordinatorChatProviderMeta): string {
+  if (isLowContextIdentityMessage(message, [])) return coordinatorIdentityAnswer();
   const providerIssue =
     provider.status === "failed"
       ? `Il provider ${provider.provider ?? "configurato"} non ha risposto.`
@@ -602,7 +640,7 @@ export class CoordinatorChatService {
         undefined,
         "low_context_current_message",
       );
-      const answer = idleAnswer(provider);
+      const answer = idleAnswer(message, provider);
       const { ownerMessage, coordinatorMessage } = requireMessagePair(
         await this.messages.appendMany([
           {

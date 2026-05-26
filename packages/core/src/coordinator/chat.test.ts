@@ -124,6 +124,54 @@ describe("CoordinatorChatService", () => {
     expect(result.coordinatorMessage.text.toLowerCase()).not.toContain("crafting");
   });
 
+  it("answers low-context identity prompts without provider or fallback mechanics", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    let providerWasAsked = false;
+    const service = new CoordinatorChatService(dir, {
+      config: defaultConfig("freelancer"),
+      providerSelector: async () => {
+        providerWasAsked = true;
+        throw new Error("provider should not be asked for identity prompts");
+      },
+    });
+
+    for (const message of ["chi sei?", "ciao chi sei?", "presentati"]) {
+      const result = await service.process({ source: "test", message });
+
+      expect(result.provider.reason).toBe("low_context_current_message");
+      expect(result.coordinatorMessage.text).toBe(
+        "Ciao Emanuele, sono il Supreme Coordinator di BureauOS. Tengo insieme clienti, progetti, consegne, priorita e rischi; quando mi dai un obiettivo operativo, lo trasformo in prossimi passi verificabili.",
+      );
+      expect(result.coordinatorMessage.text.toLowerCase()).not.toContain("provider");
+      expect(result.coordinatorMessage.text.toLowerCase()).not.toContain("memoria locale");
+      expect(result.coordinatorMessage.text.toLowerCase()).not.toContain("fallback");
+    }
+
+    expect(providerWasAsked).toBe(false);
+  });
+
+  it("streams low-context identity answers directly", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    const service = new CoordinatorChatService(dir, {
+      config: defaultConfig("freelancer"),
+      providerSelector: async () => {
+        throw new Error("provider should not be asked for identity prompts");
+      },
+    });
+
+    const events: CoordinatorChatStreamEvent[] = [];
+    for await (const event of service.stream({ source: "test", message: "ciao chi sei?" })) {
+      events.push(event);
+    }
+
+    const final = events.find((event) => event.type === "final");
+    const text = final?.type === "final" ? final.result.coordinatorMessage.text.toLowerCase() : "";
+    expect(text).toContain("supreme coordinator di bureauos");
+    expect(text).not.toContain("provider");
+    expect(text).not.toContain("memoria locale");
+    expect(text).not.toContain("fallback");
+  });
+
   it("strips provider drafting commentary from owner-facing answers", async () => {
     const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
     const fakeProvider: ProviderAdapter = {

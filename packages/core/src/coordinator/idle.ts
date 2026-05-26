@@ -12,6 +12,13 @@ export function coordinatorIdleAnswer(providerIssue = ""): string {
   return "Ciao Emanuele, ci sono.";
 }
 
+export function coordinatorIdentityAnswer(): string {
+  return [
+    "Ciao Emanuele, sono il Supreme Coordinator di BureauOS.",
+    "Tengo insieme clienti, progetti, consegne, priorita e rischi; quando mi dai un obiettivo operativo, lo trasformo in prossimi passi verificabili.",
+  ].join(" ");
+}
+
 export function isLegacyLowContextCoordinatorAnswer(input: {
   role: string;
   text: string;
