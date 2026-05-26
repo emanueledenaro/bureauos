@@ -236,7 +236,12 @@ export function App() {
               onRefresh={refresh}
             />
           </main>
-          <AgentLayer agents={state.agents} />
+          <AgentLayer
+            agents={state.agents}
+            capabilities={state.capabilities}
+            runs={state.runs}
+            onOpenAgents={() => onModeChange("agents")}
+          />
           {state.error ? (
             <div className="border-t border-danger/40 bg-danger-subtle/40 px-5 py-2 text-meta text-danger">
               API server unreachable: {state.error}

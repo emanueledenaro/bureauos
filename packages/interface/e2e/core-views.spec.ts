@@ -144,6 +144,43 @@ test.describe("Operating Room policy explain", () => {
   });
 });
 
+test.describe("Operating Room agent layer detail", () => {
+  let workspace: InterfaceWorkspace;
+
+  test.beforeAll(async () => {
+    workspace = await createInterfaceWorkspace("seeded");
+  });
+
+  test.afterAll(async () => {
+    await workspace.close();
+  });
+
+  test("opens agent details with run and capability usage without shifting layout", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openWorkspace(page, workspace);
+
+    const layer = page.locator("section").filter({ hasText: "Agent Layer" }).last();
+    await layer.getByRole("button", { name: /Development Agent/i }).click();
+    const dialog = page.getByRole("dialog");
+
+    await expect(dialog).toContainText("Agent Detail");
+    await expect(dialog).toContainText("Development Agent");
+    await expect(dialog).toContainText("Recent run");
+    await expect(dialog).toContainText("Development agent validates the seeded website workflow.");
+    await expect(dialog).toContainText("Capability Usage");
+    await expect(dialog).toContainText("codex");
+    await expect(dialog).toContainText("edit_code");
+    await expectNoHorizontalOverflow(page);
+
+    await dialog.getByRole("button", { name: /Agent list/i }).click();
+    await dialog.getByRole("button", { name: /QA Agent/i }).click();
+    await expect(dialog).toContainText("No active run");
+    await expect(dialog).toContainText("No active or recent run for this agent.");
+  });
+});
+
 async function openWorkspace(page: Page, workspace: InterfaceWorkspace): Promise<void> {
   await page.goto(`/?apiBase=${encodeURIComponent(workspace.url)}`);
   await expect(page).toHaveTitle(/BureauOS - Operating Room/);

@@ -109,6 +109,15 @@ async function seedWorkspace(
     clientId: client.id,
     projectId: project.id,
   });
+  await runs.start({
+    type: "health_check",
+    triggerType: "owner_request",
+    triggerSource: "SER-72 agent layer seed",
+    scope: "Development agent validates the seeded website workflow.",
+    createdBy: "development",
+    clientId: client.id,
+    projectId: project.id,
+  });
   await capabilities.check({
     agent: "development",
     capabilityId: "codex",
