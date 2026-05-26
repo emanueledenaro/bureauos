@@ -1,4 +1,15 @@
-import { Activity, AlarmClock, ArrowRight, ListChecks, RefreshCw, ShieldAlert } from "lucide-react";
+import {
+  Activity,
+  AlarmClock,
+  ArrowRight,
+  Briefcase,
+  ListChecks,
+  RefreshCw,
+  ShieldAlert,
+  Users,
+  Wallet,
+  type LucideIcon,
+} from "lucide-react";
 import { SectionShell } from "../components/dashboard/SectionShell";
 import { MetricTile } from "../components/dashboard/MetricTile";
 import { StatusPill } from "../components/dashboard/StatusPill";
@@ -8,9 +19,9 @@ import { KpiBar } from "../components/dashboard/KpiBar";
 import { ViewToolbar } from "../components/dashboard/ViewToolbar";
 import { DataTable, type DataTableColumn } from "../components/dashboard/DataTable";
 import { useAsyncAction } from "../hooks/useAsyncAction";
-import { actionStateLabel, runTone } from "../lib/tone";
+import { actionStateLabel, runTone, toneIndicatorClass, type Tone } from "../lib/tone";
 import { buildTodayActions, sortNewest } from "../lib/builders";
-import { formatLabel } from "../lib/format";
+import { formatLabel, formatMoney } from "../lib/format";
 import type { MemoryTriggerResult } from "../lib/api";
 import type { AdaptiveMode, DashboardState, TodayAction } from "../lib/types";
 
@@ -24,12 +35,23 @@ export function TodayView({
   onMemoryTriggerScan: () => Promise<MemoryTriggerResult>;
 }) {
   const actions = buildTodayActions(state);
+  const nextAction = actions[0];
   const blocked = state.projects.filter((project) => project.status === "blocked").length;
   const followUpsDue =
     state.clientIntelligence?.clients.filter((item) => item.relationship.follow_up_due).length ?? 0;
   const runIssues = state.runs.filter((run) =>
     ["needs_human", "blocked", "failed"].includes(run.status),
   ).length;
+  const activeRuns = state.runs.filter((run) => !["completed", "cancelled"].includes(run.status));
+  const activeProjects = state.projects.filter(
+    (project) => !["delivered", "cancelled"].includes(project.status),
+  ).length;
+  const pipeline =
+    state.clientIntelligence?.totals.pipeline_value ?? state.pulse?.revenue.pipeline_value ?? 0;
+  const activeOpportunities =
+    state.pulse?.revenue.active_opportunities ??
+    state.opportunities.filter((opportunity) => !["won", "lost"].includes(opportunity.status))
+      .length;
   const scan = useAsyncAction(onMemoryTriggerScan);
 
   const columns: DataTableColumn<TodayAction>[] = [
@@ -88,7 +110,7 @@ export function TodayView({
   return (
     <SectionShell
       title="Today"
-      description="A real operating view of what needs attention now."
+      description="Decisions, blockers, client follow-ups, and current company signals."
       action={
         <ViewToolbar
           primary={{
@@ -120,13 +142,34 @@ export function TodayView({
         />
       ) : null}
 
-      <KpiBar>
+      <CommandBrief
+        action={nextAction}
+        pipeline={pipeline}
+        activeOpportunities={activeOpportunities}
+        activeProjects={activeProjects}
+        activeRuns={activeRuns.length}
+        blocked={blocked}
+        runIssues={runIssues}
+        followUpsDue={followUpsDue}
+        approvals={state.approvals.length}
+        clients={state.clients.length}
+        onModeChange={onModeChange}
+      />
+
+      <KpiBar className="mt-3" columns={4}>
         <MetricTile
           label="Action queue"
           value={String(actions.length)}
           detail={`${state.approvals.length} approvals waiting`}
           icon={ListChecks}
           tone={actions.length > 0 ? "warning" : "success"}
+        />
+        <MetricTile
+          label="Pipeline"
+          value={pipeline > 0 ? formatMoney(pipeline) : "$0"}
+          detail={`${activeOpportunities} active opportunities`}
+          icon={Wallet}
+          tone={pipeline > 0 ? "success" : "neutral"}
         />
         <MetricTile
           label="Delivery blockers"
@@ -176,10 +219,7 @@ export function TodayView({
                   <StatusPill value={formatLabel(run.status)} tone={runTone(run.status)} />
                 </div>
               ))}
-            {state.runs.filter((run) => !["completed", "cancelled"].includes(run.status)).length ===
-            0 ? (
-              <div className="text-meta py-4">No active runs.</div>
-            ) : null}
+            {activeRuns.length === 0 ? <div className="text-meta py-4">No active runs.</div> : null}
           </div>
         </div>
 
@@ -219,5 +259,132 @@ export function TodayView({
         </div>
       </div>
     </SectionShell>
+  );
+}
+
+function CommandBrief({
+  action,
+  pipeline,
+  activeOpportunities,
+  activeProjects,
+  activeRuns,
+  blocked,
+  runIssues,
+  followUpsDue,
+  approvals,
+  clients,
+  onModeChange,
+}: {
+  action?: TodayAction;
+  pipeline: number;
+  activeOpportunities: number;
+  activeProjects: number;
+  activeRuns: number;
+  blocked: number;
+  runIssues: number;
+  followUpsDue: number;
+  approvals: number;
+  clients: number;
+  onModeChange: (mode: AdaptiveMode) => void;
+}) {
+  const riskTotal = approvals + blocked + runIssues;
+  const tone: Tone = action?.tone ?? (riskTotal > 0 ? "warning" : "success");
+  const route = action?.route ?? "portfolio";
+  const stats: CommandStat[] = [
+    {
+      label: "Pipeline",
+      value: pipeline > 0 ? formatMoney(pipeline) : "$0",
+      detail: `${activeOpportunities} active`,
+      icon: Wallet,
+      tone: pipeline > 0 ? "success" : "neutral",
+    },
+    {
+      label: "Delivery",
+      value: String(activeProjects),
+      detail: `${activeRuns} running`,
+      icon: Briefcase,
+      tone: blocked + runIssues > 0 ? "danger" : activeRuns > 0 ? "info" : "success",
+    },
+    {
+      label: "Clients",
+      value: String(clients),
+      detail: `${followUpsDue} follow-up${followUpsDue === 1 ? "" : "s"}`,
+      icon: Users,
+      tone: followUpsDue > 0 ? "warning" : "success",
+    },
+    {
+      label: "Risk",
+      value: String(riskTotal),
+      detail: `${approvals} approval${approvals === 1 ? "" : "s"}`,
+      icon: ShieldAlert,
+      tone: riskTotal > 0 ? (blocked + runIssues > 0 ? "danger" : "warning") : "success",
+    },
+  ];
+
+  return (
+    <div className="relative overflow-hidden rounded-lg border border-border/70 bg-surface-raised/55">
+      <span aria-hidden className={`absolute inset-y-0 left-0 w-1 ${toneIndicatorClass[tone]}`} />
+      <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
+        <div className="min-w-0 pl-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusPill
+              value={action ? formatLabel(action.source) : "Clear"}
+              tone={tone}
+              className="shrink-0"
+            />
+            <span className="text-micro">Executive brief</span>
+          </div>
+          <h3 className="mt-3 max-w-3xl text-[18px] font-semibold leading-6 text-foreground">
+            {action?.title ?? "Company operating clean"}
+          </h3>
+          <p className="mt-1 max-w-3xl text-[12px] leading-relaxed text-muted-foreground">
+            {action?.detail ??
+              "No urgent owner decision. BOS keeps monitoring memory, revenue, delivery, client follow-ups, and risk."}
+          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <Button size="sm" onClick={() => onModeChange(route)}>
+              {action ? `Open ${action.source.toLowerCase()}` : "Open portfolio"}
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+            {action?.meta ? (
+              <span className="text-micro rounded-md border border-border/60 bg-background/35 px-2 py-1">
+                {action.meta}
+              </span>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="grid min-w-0 grid-cols-2 gap-2">
+          {stats.map((stat) => (
+            <CommandStatTile key={stat.label} stat={stat} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface CommandStat {
+  label: string;
+  value: string;
+  detail: string;
+  icon: LucideIcon;
+  tone: Tone;
+}
+
+function CommandStatTile({ stat }: { stat: CommandStat }) {
+  const Icon = stat.icon;
+  return (
+    <div className="min-w-0 rounded-md border border-border/60 bg-background/35 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-micro truncate font-medium uppercase">{stat.label}</span>
+        <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      </div>
+      <div className="mt-2 flex items-end gap-2">
+        <span className="text-[17px] font-semibold leading-none text-foreground">{stat.value}</span>
+        <span className={`mb-0.5 h-1.5 w-1.5 rounded-full ${toneIndicatorClass[stat.tone]}`} />
+      </div>
+      <div className="text-micro mt-1 truncate">{stat.detail}</div>
+    </div>
   );
 }

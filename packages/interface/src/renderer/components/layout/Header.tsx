@@ -5,6 +5,7 @@ import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "../../lib/utils";
 import { formatDate, formatMoney, formatTime } from "../../lib/format";
+import { buildTodayActions } from "../../lib/builders";
 import { toneIndicatorClass, toneTextClass, type Tone } from "../../lib/tone";
 import type { AdaptiveMode, DashboardState } from "../../lib/types";
 
@@ -13,6 +14,23 @@ const QUICK_MODES: { id: AdaptiveMode; label: string }[] = [
   { id: "today", label: "Today" },
   { id: "goals", label: "Goals" },
 ];
+
+const MODE_LABELS: Record<AdaptiveMode, string> = {
+  coordinator: "Coordinator",
+  portfolio: "Portfolio",
+  today: "Today",
+  goals: "Goals",
+  revenue: "Revenue",
+  delivery: "Delivery",
+  growth: "Growth",
+  clients: "Clients",
+  risk: "Risk",
+  approvals: "Approvals",
+  memory: "Memory",
+  agents: "Agents",
+  reports: "Reports",
+  settings: "Settings",
+};
 
 export function Header({
   state,
@@ -51,9 +69,10 @@ export function Header({
   const pipeline = state.pulse?.revenue.pipeline_value ?? 0;
   const autonomyTone: Tone = state.error ? "danger" : state.loading ? "warning" : "success";
   const autonomyLabel = state.error ? "Offline" : state.loading ? "Connecting" : "Active";
+  const nextAction = buildTodayActions(state)[0];
 
   return (
-    <header className="flex h-16 items-center gap-3 border-b border-border/60 bg-surface px-3 sm:px-5">
+    <header className="flex h-16 items-center gap-3 border-b border-border/60 bg-surface/95 px-3 sm:px-5">
       <Button
         variant="ghost"
         size="icon"
@@ -65,10 +84,16 @@ export function Header({
       </Button>
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-3">
-          <h1 className="text-[15px] font-semibold text-foreground">Company Pulse</h1>
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="min-w-0">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              Operating Room
+            </div>
+            <h1 className="truncate text-[15px] font-semibold text-foreground">
+              {MODE_LABELS[mode]}
+            </h1>
+          </div>
           <div className="hidden items-center gap-1 text-[11px] text-muted-foreground md:flex">
-            <span className="uppercase tracking-wide text-[10px]">Adaptive</span>
             <span aria-hidden>·</span>
             {QUICK_MODES.map((item, index) => (
               <button
@@ -88,7 +113,9 @@ export function Header({
           </div>
         </div>
         <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-          {state.pulse?.organization ?? "BureauOS"} · Operating Room
+          {nextAction
+            ? `Next: ${nextAction.title} · ${nextAction.source}`
+            : `${state.pulse?.organization ?? "BureauOS"} · no urgent action`}
         </div>
       </div>
 
@@ -200,7 +227,7 @@ function TopMetric({
   return (
     <div
       className={cn(
-        "flex h-9 items-center gap-2.5 rounded-md border border-border/70 bg-surface-subtle px-3",
+        "flex h-9 items-center gap-2.5 rounded-lg border border-border/60 bg-background/35 px-3",
         className,
       )}
     >

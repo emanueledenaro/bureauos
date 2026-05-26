@@ -2,7 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import type * as React from "react";
 import { Sparkline } from "./Sparkline";
 import { cn } from "../../lib/utils";
-import { toneTextClass, type Tone } from "../../lib/tone";
+import { toneIndicatorClass, toneTextClass, type Tone } from "../../lib/tone";
 
 export function MetricTile({
   label,
@@ -28,14 +28,18 @@ export function MetricTile({
   return (
     <div
       className={cn(
-        "group flex flex-col gap-2 rounded-lg border border-border/70 bg-surface-subtle/60 p-4 transition-colors hover:bg-surface-subtle",
+        "group relative flex min-h-[116px] flex-col gap-2 overflow-hidden rounded-lg border border-border/70 bg-surface-subtle/45 p-4 transition-colors hover:border-border hover:bg-surface-subtle/75",
         className,
       )}
     >
+      <span
+        className={cn("absolute inset-x-0 top-0 h-px opacity-70", toneIndicatorClass[tone])}
+        aria-hidden
+      />
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           {Icon ? (
-            <span className="grid h-7 w-7 place-items-center rounded-md border border-border/60 bg-surface-raised text-muted-foreground">
+            <span className="grid h-7 w-7 place-items-center rounded-md border border-border/60 bg-background/45 text-muted-foreground">
               <Icon className="h-3.5 w-3.5" />
             </span>
           ) : null}
@@ -53,9 +57,13 @@ export function MetricTile({
       </div>
       {(detail || trend) && (
         <div className="flex items-center justify-between gap-2 text-[11px]">
-          {detail ? <span className="truncate text-muted-foreground">{detail}</span> : <span />}
+          {detail ? (
+            <span className="min-w-0 truncate text-muted-foreground">{detail}</span>
+          ) : (
+            <span />
+          )}
           {trend ? (
-            <span className={cn("font-medium", toneTextClass[trend.tone ?? tone])}>
+            <span className={cn("shrink-0 font-medium", toneTextClass[trend.tone ?? tone])}>
               {trend.value}
             </span>
           ) : null}

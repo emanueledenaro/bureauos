@@ -40,22 +40,25 @@ interface BadgeData {
   approvals: number;
 }
 
-const PRIMARY: NavItem[] = [
+const COMMAND: NavItem[] = [
   { id: "coordinator", label: "Coordinator", icon: MessageSquare },
   { id: "portfolio", label: "Home", icon: Home },
+  { id: "today", label: "Inbox", icon: Inbox, badgeKey: "runs" },
+];
+
+const BUSINESS: NavItem[] = [
   { id: "revenue", label: "Revenue", icon: Wallet },
   { id: "delivery", label: "Delivery", icon: Briefcase, badgeKey: "projects" },
   { id: "growth", label: "Growth", icon: TrendingUp, badgeKey: "opportunities" },
   { id: "clients", label: "Clients", icon: Users, badgeKey: "clients" },
-  { id: "risk", label: "Risk", icon: ShieldAlert, badgeKey: "risk" },
-  { id: "memory", label: "Memory", icon: Database, badgeKey: "artifacts" },
-  { id: "agents", label: "Agents", icon: Bot, badgeKey: "agents" },
 ];
 
-const SECONDARY: NavItem[] = [
-  { id: "today", label: "Inbox", icon: Inbox, badgeKey: "runs" },
-  { id: "goals", label: "Goals", icon: Target },
+const CONTROL: NavItem[] = [
+  { id: "risk", label: "Risk", icon: ShieldAlert, badgeKey: "risk" },
   { id: "approvals", label: "Approvals", icon: ShieldCheck, badgeKey: "approvals" },
+  { id: "memory", label: "Memory", icon: Database },
+  { id: "agents", label: "Agents", icon: Bot },
+  { id: "goals", label: "Goals", icon: Target },
   { id: "reports", label: "Reports", icon: FileText },
   { id: "settings", label: "Settings", icon: SettingsIcon },
 ];
@@ -102,34 +105,32 @@ function SidebarContent({
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4">
-        <div className="space-y-0.5">
-          {PRIMARY.map((item) => (
-            <SidebarItem
-              key={item.id}
-              item={item}
-              active={mode === item.id}
-              badge={item.badgeKey ? badges[item.badgeKey] : undefined}
-              onClick={() => onModeChange(item.id)}
-            />
-          ))}
-        </div>
-
-        <div className="my-4 border-t border-border/60" />
-
-        <div className="space-y-0.5">
-          {SECONDARY.map((item) => (
-            <SidebarItem
-              key={item.id}
-              item={item}
-              active={mode === item.id}
-              badge={item.badgeKey ? badges[item.badgeKey] : undefined}
-              onClick={() => onModeChange(item.id)}
-            />
-          ))}
-        </div>
+        <NavGroup
+          label="Command"
+          items={COMMAND}
+          badges={badges}
+          mode={mode}
+          onModeChange={onModeChange}
+        />
+        <NavGroup
+          label="Business"
+          items={BUSINESS}
+          badges={badges}
+          mode={mode}
+          onModeChange={onModeChange}
+          className="mt-4"
+        />
+        <NavGroup
+          label="Control"
+          items={CONTROL}
+          badges={badges}
+          mode={mode}
+          onModeChange={onModeChange}
+          className="mt-4"
+        />
       </nav>
 
-      <div className="m-3 rounded-lg border border-border/60 bg-surface-subtle p-3">
+      <div className="m-3 rounded-lg border border-border/60 bg-background/35 p-3">
         <div className="flex items-center justify-between">
           <div className="label-eyebrow">System Status</div>
           <Activity className="h-3 w-3 text-muted-foreground" />
@@ -167,7 +168,7 @@ export function Sidebar({
   onModeChange: (mode: AdaptiveMode) => void;
 }) {
   return (
-    <aside className="hidden h-full w-[208px] shrink-0 border-r border-border/60 bg-surface lg:flex lg:flex-col">
+    <aside className="hidden h-full w-[224px] shrink-0 border-r border-border/60 bg-surface lg:flex lg:flex-col">
       <SidebarContent state={state} mode={mode} onModeChange={onModeChange} />
     </aside>
   );
@@ -203,6 +204,41 @@ export function SidebarDrawer({
   );
 }
 
+function NavGroup({
+  label,
+  items,
+  badges,
+  mode,
+  onModeChange,
+  className,
+}: {
+  label: string;
+  items: NavItem[];
+  badges: BadgeData;
+  mode: AdaptiveMode;
+  onModeChange: (mode: AdaptiveMode) => void;
+  className?: string;
+}) {
+  return (
+    <div className={cn("space-y-1", className)}>
+      <div className="px-2.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
+        {label}
+      </div>
+      <div className="space-y-0.5">
+        {items.map((item) => (
+          <SidebarItem
+            key={item.id}
+            item={item}
+            active={mode === item.id}
+            badge={item.badgeKey ? badges[item.badgeKey] : undefined}
+            onClick={() => onModeChange(item.id)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SidebarItem({
   item,
   active,
@@ -220,12 +256,18 @@ function SidebarItem({
       type="button"
       onClick={onClick}
       className={cn(
-        "group flex h-9 w-full items-center justify-between rounded-md px-2.5 text-left text-[12px] transition-colors focus-ring",
+        "group relative flex h-9 w-full items-center justify-between rounded-md px-2.5 text-left text-[12px] transition-colors focus-ring",
         active
-          ? "bg-surface-raised text-foreground"
+          ? "bg-surface-raised/90 text-foreground"
           : "text-muted-foreground hover:bg-surface-subtle hover:text-foreground",
       )}
     >
+      {active ? (
+        <span
+          aria-hidden
+          className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-primary"
+        />
+      ) : null}
       <div className="flex items-center gap-2.5">
         <Icon
           className={cn(
