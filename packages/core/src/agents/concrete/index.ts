@@ -19,7 +19,14 @@ export type {
   QaSourceArtifact,
   QaVerificationAnalysis,
 } from "./qa.js";
-export { SecurityAgent } from "./security.js";
+export { SecurityAgent, analyzeSecurityInput } from "./security.js";
+export type {
+  SecurityAnalysis,
+  SecurityFinding,
+  SecurityFindingStatus,
+  SecurityRiskLevel,
+  SecuritySourceArtifact,
+} from "./security.js";
 export { ComplianceAgent } from "./compliance.js";
 export { ReviewerAgent, analyzeReviewInput } from "./reviewer.js";
 export type { ReviewAnalysis, ReviewFinding, ReviewFindingSeverity } from "./reviewer.js";

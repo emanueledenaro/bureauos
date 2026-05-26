@@ -20,6 +20,7 @@ import { DevelopmentAgent } from "./development.js";
 import { buildDefaultAgentRegistry } from "./index.js";
 import { QaAgent } from "./qa.js";
 import { ReviewerAgent } from "./reviewer.js";
+import { SecurityAgent } from "./security.js";
 
 class FakeRuntime implements RuntimeAdapter {
   public readonly id = "codex-test";
@@ -352,6 +353,84 @@ describe("concrete agents", () => {
     expect(written?.body).toContain("Status: fail");
     expect(written?.body).toContain("Status: unknown");
     expect(written?.body).toContain("Ready-for-review is blocked");
+  });
+
+  it("flags auth payment and secrets paths in security review", async () => {
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const artifacts = new ArtifactStore(dir);
+    const policy = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
+    await artifacts.write({
+      type: "technical-plan",
+      createdBy: "development",
+      runId: "run_security_sensitive",
+      body: [
+        "# Runtime Diff",
+        "",
+        "Changed files:",
+        "- packages/core/src/auth/oauth-callback.ts",
+        "- packages/core/src/payments/stripe-webhook.ts",
+        "- packages/core/src/config/secrets.ts",
+      ].join("\n"),
+    });
+    const agent = new SecurityAgent({ artifacts, audit, policy });
+
+    const out = await agent.execute({
+      context: {
+        runId: "run_security_sensitive",
+        scope: "Review security-sensitive runtime changes before PR readiness.",
+      },
+      capabilities: new Map(),
+    });
+
+    expect(out.ok).toBe(false);
+    expect(out.decisions).toContain("security:blocked");
+    expect(out.blockers).toEqual([
+      "unresolved high security finding in packages/core/src/auth/oauth-callback.ts: auth",
+      "unresolved high security finding in packages/core/src/payments/stripe-webhook.ts: payment",
+      "unresolved critical security finding in packages/core/src/config/secrets.ts: secret",
+    ]);
+
+    const written = await artifacts.read(out.artifactIds[0]!);
+    expect(written?.record.type).toBe("security-review");
+    expect(written?.record.risk_level).toBe("critical");
+    expect(written?.record.finding_count).toBe(3);
+    expect(written?.record.unresolved_high_risk_count).toBe(3);
+    expect(written?.record.finding_severities).toEqual(["high", "high", "critical"]);
+    expect(written?.record.source_artifact_ids).toHaveLength(1);
+    expect(written?.body).toContain("Severity: critical");
+    expect(written?.body).toContain("Category: secret");
+    expect(written?.body).toContain("Required mitigation:");
+    expect(written?.body).toContain("PR ready status is blocked");
+  });
+
+  it("allows security readiness when sensitive findings are mitigated", async () => {
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const artifacts = new ArtifactStore(dir);
+    const policy = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
+    const agent = new SecurityAgent({ artifacts, audit, policy });
+
+    const out = await agent.execute({
+      context: {
+        runId: "run_security_mitigated",
+        scope: "Review auth change.",
+        briefing: [
+          "Changed files:",
+          "- packages/core/src/auth/session.ts",
+          "SECURITY PASS: auth packages/core/src/auth/session.ts has denial-path tests.",
+        ].join("\n"),
+      },
+      capabilities: new Map(),
+    });
+
+    expect(out.ok).toBe(true);
+    expect(out.decisions).toContain("security:high_risk_ready");
+    expect(out.blockers).toEqual([]);
+    const written = await artifacts.read(out.artifactIds[0]!);
+    expect(written?.record.risk_level).toBe("high");
+    expect(written?.record.finding_count).toBe(1);
+    expect(written?.record.unresolved_high_risk_count).toBe(0);
+    expect(written?.body).toContain("Status: mitigated");
+    expect(written?.body).toContain("PR ready status is allowed");
   });
 
   it("writes structured reviewer findings from diff and test artifacts", async () => {
