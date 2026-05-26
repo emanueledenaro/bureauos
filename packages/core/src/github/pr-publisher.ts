@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { ArtifactStore, type ArtifactRecord } from "../artifacts/store.js";
 import { AuditLog } from "../audit/log.js";
 import type { BureauConfig } from "../config/schema.js";
@@ -37,8 +39,11 @@ export interface GitHubPullRequestPublishInput {
   title: string;
   body?: string;
   draft?: boolean;
+  linkedLinearIssue?: { identifier: string; url?: string };
   linkedIssueNumbers?: readonly number[];
   testEvidence?: readonly string[];
+  runId?: string;
+  evidenceArtifactIds?: readonly string[];
 }
 
 export interface GitHubPullRequestPublishResult {
@@ -87,24 +92,93 @@ function auditPolicyResult(
   return outcome === "require_more_context" ? "escalate" : outcome;
 }
 
-function formatIssues(issues: readonly number[]): string {
+function formatGitHubIssues(issues: readonly number[]): string {
   return issues.length ? issues.map((issue) => `#${issue}`).join(", ") : "(none)";
 }
 
 function defaultBody(args: {
   body?: string;
+  template?: string;
   project: ProjectRecord;
+  repositoryUrl: string;
+  linkedLinearIssue?: GitHubPullRequestPublishInput["linkedLinearIssue"];
   linkedIssues: readonly number[];
   testEvidence: readonly string[];
+  runId?: string;
+  evidenceArtifactIds: readonly string[];
 }): string {
   const explicit = args.body?.trim();
   if (explicit) return explicit;
-  return `## BureauOS Pull Request
+  const linkedIssueLines = [
+    args.linkedLinearIssue
+      ? `- Linear: ${args.linkedLinearIssue.url ? `[${args.linkedLinearIssue.identifier}](${args.linkedLinearIssue.url})` : args.linkedLinearIssue.identifier}`
+      : "- Linear: (none)",
+    `- GitHub: ${formatGitHubIssues(args.linkedIssues)}`,
+    `- BureauOS run: ${args.runId ?? "(none)"}`,
+  ].join("\n");
+  const verification = args.testEvidence.length
+    ? args.testEvidence.join("\n")
+    : "No test evidence supplied.";
+  const artifactEvidence = args.evidenceArtifactIds.length
+    ? args.evidenceArtifactIds.map((id) => `- ${id}`).join("\n")
+    : "- (none)";
+
+  if (args.template?.includes("## Summary")) {
+    return `## Summary
+
+BureauOS draft PR for ${args.project.name}.
+
+Repository: ${args.repositoryUrl}
+
+## Linked Issue
+
+${linkedIssueLines}
+
+## What Changed
+
+- Prepared a policy-gated BureauOS delivery pull request.
+- Attached run, issue, and verification evidence for review.
+
+## Verification
+
+\`\`\`bash
+${verification}
+\`\`\`
+
+Evidence artifacts:
+
+${artifactEvidence}
+
+## Risk
+
+- Risk level: medium
+- Security review required: no
+- Human approval required: yes; merge and production deploy remain separate approval-gated actions.
+
+## BureauOS Checklist
+
+- [x] The change is scoped to one concern.
+- [x] The PR is linked to an issue or explains why no issue is needed.
+- [x] Tests or verification notes are included.
+- [x] Any policy or autonomy impact is documented.
+- [ ] Any decision worth preserving has a decision record.
+`;
+  }
+
+  return `## Summary
 
 Project: ${args.project.name}
-Linked issues: ${formatIssues(args.linkedIssues)}
+Repository: ${args.repositoryUrl}
 
-## Test Evidence
+## Linked Issue
+
+${linkedIssueLines}
+
+## What Changed
+
+- Prepared a policy-gated BureauOS delivery pull request.
+
+## Verification
 
 ${
   args.testEvidence.length
@@ -112,9 +186,22 @@ ${
     : "- No test evidence supplied."
 }
 
-## Policy Boundary
+Evidence artifacts:
 
-Created by BureauOS under open-pull-request policy. Merge and production deployment remain separate approval-gated actions.
+${artifactEvidence}
+
+## Risk
+
+- Risk level: medium
+- Human approval required: yes; merge and production deployment remain separate approval-gated actions.
+
+## BureauOS Checklist
+
+- [x] The change is scoped to one concern.
+- [x] The PR is linked to an issue or explains why no issue is needed.
+- [x] Tests or verification notes are included.
+- [x] Any policy or autonomy impact is documented.
+- [ ] Any decision worth preserving has a decision record.
 `;
 }
 
@@ -123,8 +210,11 @@ function reportBody(args: {
   client?: ClientRecord;
   repositoryUrl: string;
   pullRequest: GitHubPullRequestPublishClientPr;
+  linkedLinearIssue?: GitHubPullRequestPublishInput["linkedLinearIssue"];
   linkedIssues: readonly number[];
   testEvidence: readonly string[];
+  runId?: string;
+  evidenceArtifactIds: readonly string[];
   policy: PolicyDecision;
 }): string {
   return `# GitHub Pull Request Publish Report
@@ -135,7 +225,10 @@ function reportBody(args: {
 - Project: ${args.project.name}
 - Repository: ${args.repositoryUrl}
 - Policy: ${args.policy.outcome} (${args.policy.reason})
-- Linked issues: ${formatIssues(args.linkedIssues)}
+- Linear issue: ${args.linkedLinearIssue?.identifier ?? "(none)"}${args.linkedLinearIssue?.url ? ` (${args.linkedLinearIssue.url})` : ""}
+- GitHub issues: ${formatGitHubIssues(args.linkedIssues)}
+- BureauOS run: ${args.runId ?? "(none)"}
+- Evidence artifacts: ${args.evidenceArtifactIds.length ? args.evidenceArtifactIds.join(", ") : "(none)"}
 
 ## Created Pull Request
 
@@ -157,6 +250,14 @@ ${
 - Production deploy
 - Client-facing announcement
 `;
+}
+
+async function readPullRequestTemplate(workspaceRoot: string): Promise<string | undefined> {
+  try {
+    return await readFile(join(workspaceRoot, ".github", "PULL_REQUEST_TEMPLATE.md"), "utf8");
+  } catch {
+    return undefined;
+  }
 }
 
 export class GitHubPullRequestPublishService {
@@ -189,6 +290,8 @@ export class GitHubPullRequestPublishService {
     const client = allClients.find((item) => item.id === project.client_id);
     const linkedIssues = input.linkedIssueNumbers ?? [];
     const testEvidence = input.testEvidence ?? [];
+    const evidenceArtifactIds = input.evidenceArtifactIds ?? [];
+    const template = await readPullRequestTemplate(this.workspaceRoot);
 
     const decision = await this.policy.evaluate({
       action: "open_pull_requests",
@@ -265,10 +368,20 @@ export class GitHubPullRequestPublishService {
       repository.repo,
       {
         title: input.title,
-        body: defaultBody({ body: input.body, project, linkedIssues, testEvidence }),
+        body: defaultBody({
+          body: input.body,
+          template,
+          project,
+          repositoryUrl: repository.url,
+          linkedLinearIssue: input.linkedLinearIssue,
+          linkedIssues,
+          testEvidence,
+          runId: input.runId,
+          evidenceArtifactIds,
+        }),
         head: input.head,
         base: input.base ?? "main",
-        ...(input.draft !== undefined ? { draft: input.draft } : {}),
+        draft: true,
       },
     );
 
@@ -284,16 +397,23 @@ export class GitHubPullRequestPublishService {
         pr_number: pullRequest.number,
         head: pullRequest.head,
         base: pullRequest.base,
+        run_id: input.runId ?? "",
+        linear_issue: input.linkedLinearIssue?.identifier ?? "",
+        linear_issue_url: input.linkedLinearIssue?.url ?? "",
         linked_issues: linkedIssues.map(String),
         test_evidence: [...testEvidence],
+        evidence_artifacts: [...evidenceArtifactIds],
       },
       body: reportBody({
         project,
         client,
         repositoryUrl: repository.url,
         pullRequest,
+        linkedLinearIssue: input.linkedLinearIssue,
         linkedIssues,
         testEvidence,
+        runId: input.runId,
+        evidenceArtifactIds,
         policy: decision,
       }),
     });

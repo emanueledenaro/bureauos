@@ -80,9 +80,15 @@ describe("GitHubPullRequestPublishService", () => {
       title: "Implement booking website",
       head: "feature/booking-website",
       base: "main",
+      linkedLinearIssue: {
+        identifier: "SER-29",
+        url: "https://linear.app/serium/issue/SER-29/open-draft-github-pr",
+      },
       linkedIssueNumbers: [12],
       testEvidence: ["npm test -- booking passed"],
-      draft: true,
+      runId: "run_pr_1",
+      evidenceArtifactIds: ["art_plan", "art_tests"],
+      draft: false,
     });
 
     expect(result.status).toBe("created");
@@ -93,8 +99,14 @@ describe("GitHubPullRequestPublishService", () => {
       base: "main",
     });
     expect(result.report?.type).toBe("github-pr-publish-report");
-    expect(githubClient.created[0]?.input.body).toContain("Linked issues: #12");
+    expect(githubClient.created[0]?.input.body).toContain("## Summary");
+    expect(githubClient.created[0]?.input.body).toContain("## Linked Issue");
+    expect(githubClient.created[0]?.input.body).toContain("## Verification");
+    expect(githubClient.created[0]?.input.body).toContain("[SER-29]");
+    expect(githubClient.created[0]?.input.body).toContain("GitHub: #12");
+    expect(githubClient.created[0]?.input.body).toContain("BureauOS run: run_pr_1");
     expect(githubClient.created[0]?.input.body).toContain("npm test -- booking passed");
+    expect(githubClient.created[0]?.input.body).toContain("art_tests");
     expect(githubClient.created[0]?.input.draft).toBe(true);
 
     const updatedProject = await new ProjectRegistry(dir).get(project.slug);
@@ -104,6 +116,9 @@ describe("GitHubPullRequestPublishService", () => {
     expect(reports).toHaveLength(1);
     const written = await new ArtifactStore(dir).read(reports[0]!.id);
     expect(written?.body).toContain("GitHub Pull Request Publish Report");
+    expect(written?.body).toContain("SER-29");
+    expect(written?.body).toContain("run_pr_1");
+    expect(written?.body).toContain("art_plan");
     expect(written?.body).toContain("Merge pull request");
 
     const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
