@@ -1366,6 +1366,10 @@ const handleApprovalsList: Handler = async () => {
   }
   for (const a of pending) {
     process.stdout.write(`${a.id}  ${a.action.padEnd(24)}  ${a.target}\n`);
+    if (a.scope) process.stdout.write(`  scope: ${a.scope}\n`);
+    if (a.source) process.stdout.write(`  source: ${a.source}\n`);
+    if (a.limit) process.stdout.write(`  limit: ${a.limit}\n`);
+    if (a.expires_at) process.stdout.write(`  expires: ${a.expires_at}\n`);
   }
   return 0;
 };

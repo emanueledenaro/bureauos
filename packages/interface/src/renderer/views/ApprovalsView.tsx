@@ -145,6 +145,13 @@ export function ApprovalsView({
         <div className="min-w-0">
           <div className="text-body truncate text-foreground">{approval.scope}</div>
           <div className="text-meta mt-0.5 truncate">{approval.target}</div>
+          {approval.source || approval.limit ? (
+            <div className="text-meta mt-0.5 truncate text-muted-foreground/80">
+              {approval.source ? `Source: ${approval.source}` : ""}
+              {approval.source && approval.limit ? " · " : ""}
+              {approval.limit ? `Limit: ${approval.limit}` : ""}
+            </div>
+          ) : null}
         </div>
       ),
     },
@@ -292,6 +299,15 @@ export function ApprovalsView({
                           <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground/80">
                             {approval.id} · {approval.target}
                           </div>
+                          {approval.source || approval.limit || approval.expires_at ? (
+                            <div className="mt-1 grid gap-0.5 text-[10px] text-muted-foreground/80">
+                              {approval.source ? <div>Source: {approval.source}</div> : null}
+                              {approval.limit ? <div>Limit: {approval.limit}</div> : null}
+                              {approval.expires_at ? (
+                                <div>Expires {approval.expires_at.slice(0, 10)}</div>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </div>
                         <div className="flex items-center justify-start gap-2 lg:justify-end">
                           {decisionButtons(approval)}

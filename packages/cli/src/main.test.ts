@@ -3,7 +3,7 @@ import { constants as FS } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { DaemonStateStore } from "@bureauos/core";
+import { ApprovalRegistry, DaemonStateStore } from "@bureauos/core";
 import { main } from "./main.js";
 
 async function exists(path: string): Promise<boolean> {
@@ -71,6 +71,28 @@ describe("bureau cli", () => {
     expect(result.code).toBe(0);
     expect(result.output).toContain("Autonomy: Level 2 (Branch and PR)");
     expect(result.output).toContain("Outcome:  require_approval");
+  });
+
+  it("prints approval source limit and expiry in approvals list", async () => {
+    await main(["node", "bureau", "init"]);
+    await new ApprovalRegistry(dir).request({
+      action: "send_final_proposals",
+      actor: "supreme_coordinator",
+      target: "opp_123",
+      scope: "Send final proposal to Acme.",
+      source: "revenue.pipeline:art_123",
+      limit: "Draft value $12,000; client send only",
+      expiresAt: "2026-06-01T10:00:00.000Z",
+      riskLevel: "high",
+    });
+
+    const result = await captureStdout(() => main(["node", "bureau", "approvals", "list"]));
+
+    expect(result.code).toBe(0);
+    expect(result.output).toContain("send_final_proposals");
+    expect(result.output).toContain("source: revenue.pipeline:art_123");
+    expect(result.output).toContain("limit: Draft value $12,000; client send only");
+    expect(result.output).toContain("expires: 2026-06-01T10:00:00.000Z");
   });
 
   it("refuses to overwrite without --force", async () => {

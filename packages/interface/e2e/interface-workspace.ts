@@ -112,6 +112,9 @@ async function seedWorkspace(
     actor: "supreme_coordinator",
     target: "Website Refresh for Acme Labs",
     scope: "Send final proposal to the client.",
+    source: "revenue.pipeline:seeded-compliance-review",
+    limit: "Draft value $12,000; client send only",
+    expiresAt: "2026-06-01T10:00:00.000Z",
     riskLevel: "high",
     body: "Seed approval used by risk and approvals screens.",
   });

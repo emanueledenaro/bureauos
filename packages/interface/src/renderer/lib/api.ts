@@ -256,6 +256,8 @@ export interface ApprovalRecord {
   actor: string;
   target: string;
   scope: string;
+  source?: string;
+  limit?: string;
   run_id?: string;
   risk_level?: string;
   status: string;
@@ -582,6 +584,8 @@ export interface GrowthContentPipelineResult {
   pipeline_value: number;
   open_opportunities: number;
   drafts: GrowthContentPipelineDraft[];
+  compliance_review?: ArtifactRecord;
+  approvals: ApprovalRecord[];
   report: ArtifactRecord;
   next_actions: string[];
 }
@@ -595,6 +599,7 @@ export interface RevenuePipelineItem {
   risks: string[];
   next_action: string;
   artifacts: ArtifactRecord[];
+  approvals: ApprovalRecord[];
 }
 export interface RevenuePipelineResult {
   generated_at: string;

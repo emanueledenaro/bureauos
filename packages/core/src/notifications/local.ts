@@ -45,6 +45,8 @@ export interface ApprovalNotificationInput {
   actor: string;
   target: string;
   scope: string;
+  source?: string;
+  limit?: string;
   risk_level: ApprovalRiskLevel;
   run_id?: string;
 }
@@ -77,6 +79,7 @@ function approvalNotificationBody(approval: ApprovalNotificationInput): string {
 - Actor: ${approval.actor}
 - Target: ${approval.target}
 - Scope: ${approval.scope}
+${approval.source ? `- Source: ${approval.source}\n` : ""}${approval.limit ? `- Limit: ${approval.limit}\n` : ""}
 - Risk: ${approval.risk_level}
 ${approval.run_id ? `- Run: ${approval.run_id}\n` : ""}
 BureauOS is waiting for an owner decision before continuing this approval-gated work.

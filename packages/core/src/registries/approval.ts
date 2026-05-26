@@ -14,6 +14,8 @@ export interface ApprovalRecord extends FrontMatter {
   actor: string;
   target: string;
   scope: string;
+  source: string;
+  limit: string;
   run_id: string;
   risk_level: ApprovalRiskLevel;
   status: ApprovalStatus;
@@ -32,6 +34,8 @@ export interface CreateApprovalInput {
   actor: string;
   target: string;
   scope: string;
+  source?: string;
+  limit?: string;
   runId?: string;
   riskLevel?: ApprovalRiskLevel;
   expiresAt?: string;
@@ -147,6 +151,8 @@ export class ApprovalRegistry {
       actor: input.actor,
       target: input.target,
       scope: input.scope,
+      source: input.source ?? "",
+      limit: input.limit ?? "",
       run_id: input.runId ?? "",
       risk_level:
         input.riskLevel ?? inferApprovalRiskLevel(input.action, input.target, input.scope),

@@ -169,6 +169,31 @@ test.describe("Operating Room retry blockers", () => {
   });
 });
 
+test.describe("Operating Room external commitment approvals", () => {
+  let workspace: InterfaceWorkspace;
+
+  test.beforeAll(async () => {
+    workspace = await createInterfaceWorkspace("seeded");
+  });
+
+  test.afterAll(async () => {
+    await workspace.close();
+  });
+
+  test("shows approval source limit and expiry for serious external gates", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openWorkspace(page, workspace);
+    await openDesktopView(page, "Approvals");
+
+    const main = page.locator("main");
+    await expect(main).toContainText("Send Final Proposals");
+    await expect(main).toContainText("Source: revenue.pipeline:seeded-compliance-review");
+    await expect(main).toContainText("Limit: Draft value $12,000; client send only");
+    await expect(main).toContainText("Expires 2026-06-01");
+    await expectNoHorizontalOverflow(page);
+  });
+});
+
 test.describe("Operating Room revenue pulse", () => {
   let workspace: InterfaceWorkspace;
 
