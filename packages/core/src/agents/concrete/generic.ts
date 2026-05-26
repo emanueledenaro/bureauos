@@ -89,7 +89,6 @@ ${def.mustNot.map((r) => `- ${r}`).join("\n")}
 const ROLE_ARTIFACT: ReadonlyArray<[string, ArtifactType]> = [
   ["supreme_coordinator", "executive-report"],
   ["ux", "design-spec"],
-  ["reviewer", "pr-review"],
   ["release", "run-report"],
   ["visibility", "brand-brief"],
   ["content", "social-post-brief"],

@@ -18,6 +18,7 @@ import { workspacePaths } from "../../paths.js";
 import type { AgentCapabilityCheckInput } from "../runtime.js";
 import { DevelopmentAgent } from "./development.js";
 import { buildDefaultAgentRegistry } from "./index.js";
+import { ReviewerAgent } from "./reviewer.js";
 
 class FakeRuntime implements RuntimeAdapter {
   public readonly id = "codex-test";
@@ -65,6 +66,7 @@ describe("concrete agents", () => {
       qa: "test-plan",
       security: "security-review",
       compliance: "compliance-review",
+      reviewer: "pr-review",
     };
 
     for (const [roleId, expectedType] of Object.entries(expectedArtifactTypes)) {
@@ -90,7 +92,6 @@ describe("concrete agents", () => {
     const templated: Record<string, string> = {
       supreme_coordinator: "executive-report",
       ux: "design-spec",
-      reviewer: "pr-review",
       release: "run-report",
       visibility: "brand-brief",
       content: "social-post-brief",
@@ -240,6 +241,78 @@ describe("concrete agents", () => {
     expect(out.decisions).toContain("runtime_blocked");
     const log = await readAudit(dir);
     expect(log).toContain("agent.development.runtime_blocked");
+  });
+
+  it("writes structured reviewer findings from diff and test artifacts", async () => {
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const artifacts = new ArtifactStore(dir);
+    const policy = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
+    const agent = new ReviewerAgent({ artifacts, audit, policy });
+
+    const out = await agent.execute({
+      context: {
+        runId: "run_review",
+        scope: "Review PR for auth callback changes",
+        briefing: [
+          "Changed files:",
+          "- packages/core/src/auth/oauth-callback.ts",
+          "Test evidence: (none)",
+          "Diff note: TODO remove temporary console.log before merge.",
+        ].join("\n"),
+      },
+      capabilities: new Map(),
+    });
+
+    expect(out.ok).toBe(false);
+    expect(out.decisions).toContain("review:changes_requested");
+    expect(out.blockers).toContain(
+      "The diff touches sensitive auth, secret, payment, billing, or security surface.",
+    );
+
+    const written = await artifacts.read(out.artifactIds[0]!);
+    expect(written?.record.type).toBe("pr-review");
+    expect(written?.record.finding_count).toBe(3);
+    expect(written?.record.finding_severities).toEqual(["medium", "high", "low"]);
+    expect(written?.record.comment_capabilities).toEqual(["github.comment", "linear.comment"]);
+    expect(written?.body).toContain("Severity: high");
+    expect(written?.body).toContain("File/area: packages/core/src/auth/oauth-callback.ts");
+    expect(written?.body).toContain("Rationale:");
+    expect(written?.body).toContain("Recommendation:");
+    expect(written?.body).toContain("github.comment");
+    expect(written?.body).toContain("linear.comment");
+  });
+
+  it("states residual risks when reviewer finds no issues", async () => {
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const artifacts = new ArtifactStore(dir);
+    const policy = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
+    const agent = new ReviewerAgent({ artifacts, audit, policy });
+
+    const out = await agent.execute({
+      context: {
+        runId: "run_clean_review",
+        scope: "Review PR for timeline copy update",
+        briefing: [
+          "Changed files:",
+          "- packages/interface/src/renderer/views/TimelineView.tsx",
+          "Test evidence: pnpm --filter @bureauos/interface test passed",
+        ].join("\n"),
+      },
+      capabilities: new Map(),
+    });
+
+    expect(out.ok).toBe(true);
+    expect(out.decisions).toContain("review:approve_with_residual_risk");
+    expect(out.blockers).toEqual([]);
+    expect(out.notes).toContain("explicit residual risks");
+
+    const written = await artifacts.read(out.artifactIds[0]!);
+    expect(written?.record.finding_count).toBe(0);
+    expect(written?.body).toContain("No structured findings");
+    expect(written?.body).toContain("Residual Risks");
+    expect(written?.body).toContain(
+      "Merge and deployment still require separate policy-gated approval",
+    );
   });
 });
 

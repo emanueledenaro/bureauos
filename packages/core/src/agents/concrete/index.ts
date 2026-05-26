@@ -6,6 +6,7 @@ import { DevelopmentAgent } from "./development.js";
 import { QaAgent } from "./qa.js";
 import { SecurityAgent } from "./security.js";
 import { ComplianceAgent } from "./compliance.js";
+import { ReviewerAgent } from "./reviewer.js";
 import { templateAgents } from "./generic.js";
 
 export { ProjectManagerAgent } from "./project-manager.js";
@@ -14,6 +15,8 @@ export { DevelopmentAgent } from "./development.js";
 export { QaAgent } from "./qa.js";
 export { SecurityAgent } from "./security.js";
 export { ComplianceAgent } from "./compliance.js";
+export { ReviewerAgent, analyzeReviewInput } from "./reviewer.js";
+export type { ReviewAnalysis, ReviewFinding, ReviewFindingSeverity } from "./reviewer.js";
 export { templateAgents } from "./generic.js";
 
 /**
@@ -35,6 +38,7 @@ export function buildDefaultAgentRegistry(deps: AgentDeps): AgentRegistry {
     new QaAgent(deps),
     new SecurityAgent(deps),
     new ComplianceAgent(deps),
+    new ReviewerAgent(deps),
   ];
   for (const agent of handwritten) registry.register(agent);
   for (const agent of templateAgents(deps)) registry.register(agent);
