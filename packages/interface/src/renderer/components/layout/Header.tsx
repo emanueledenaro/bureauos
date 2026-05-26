@@ -86,29 +86,32 @@ export function Header({
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-3">
           <div className="min-w-0">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+            <div className="truncate whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
               Operating Room
             </div>
             <h1 className="truncate text-[15px] font-semibold text-foreground">
               {MODE_LABELS[mode]}
             </h1>
           </div>
-          <div className="hidden items-center gap-1 text-[11px] text-muted-foreground md:flex">
+          <div className="hidden items-center gap-1 text-[11px] text-muted-foreground lg:flex">
             <span aria-hidden>·</span>
             {QUICK_MODES.map((item, index) => (
-              <button
-                key={item.id}
-                onClick={() => onModeChange(item.id)}
-                className={cn(
-                  "transition-colors hover:text-foreground focus-ring rounded-sm px-1",
-                  mode === item.id ? "font-medium text-foreground" : "text-muted-foreground",
-                )}
-              >
-                {item.label}
+              <div key={item.id} className="flex items-center gap-1">
+                <button
+                  onClick={() => onModeChange(item.id)}
+                  className={cn(
+                    "h-7 rounded-md px-2 transition-colors hover:bg-surface-subtle hover:text-foreground focus-ring",
+                    mode === item.id ? "font-medium text-foreground" : "text-muted-foreground",
+                  )}
+                >
+                  {item.label}
+                </button>
                 {index < QUICK_MODES.length - 1 ? (
-                  <span className="ml-1 text-border">/</span>
+                  <span className="text-border" aria-hidden>
+                    /
+                  </span>
                 ) : null}
-              </button>
+              </div>
             ))}
           </div>
         </div>

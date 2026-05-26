@@ -4,7 +4,7 @@ import { cn } from "../../lib/utils";
 import type { Tone } from "../../lib/tone";
 
 const baseCardVariants = cva(
-  "group flex flex-col gap-3 rounded-lg border border-border/70 bg-surface-subtle/45 text-card-foreground transition-colors",
+  "group flex min-w-0 flex-col gap-3 rounded-lg border border-border/70 bg-surface-subtle/45 text-card-foreground transition-colors",
   {
     variants: {
       variant: {
@@ -67,12 +67,12 @@ export function BaseCardHeader({
   className?: string;
 }) {
   return (
-    <div className={cn("flex items-start justify-between gap-3", className)}>
-      <div className="min-w-0">
+    <div className={cn("flex min-w-0 flex-wrap items-start justify-between gap-3", className)}>
+      <div className="min-w-0 flex-1 basis-40">
         <div className="text-card-title truncate">{title}</div>
         {subtitle ? <div className="text-meta mt-1 line-clamp-2">{subtitle}</div> : null}
       </div>
-      {children ? <div className="flex shrink-0 items-center gap-2">{children}</div> : null}
+      {children ? <div className="flex min-w-0 shrink-0 items-center gap-2">{children}</div> : null}
     </div>
   );
 }
