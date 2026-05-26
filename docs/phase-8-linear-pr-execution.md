@@ -13,7 +13,7 @@ BureauOS already has several required foundations:
 - `RunEngine` creates run records, writes artifacts, applies policy, and can execute an injected dispatcher while preserving an explicit stub mode.
 - `dispatchRun()` can run specialist agents and attach model/provider context; `bureau run new` uses the coordinator dispatcher by default and keeps the local stub path behind `--stub`.
 - `DevelopmentAgent` can produce planning artifacts; real code execution remains Phase 8 work.
-- `CodexRuntimeAdapter` is still conservative and must not perform unbounded edits.
+- `CodexRuntimeAdapter` validates workspace/run context, supports an injected execution runner, normalizes evidence, and blocks merge/deploy/secrets/destructive git actions.
 - `CapabilityUseService` gates capability use and includes Linear policy mappings.
 - `GitHubPullRequestPublishService` can create policy-gated PRs when linked issue and test evidence are present.
 

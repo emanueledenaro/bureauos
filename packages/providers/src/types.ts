@@ -65,6 +65,7 @@ export interface RuntimeContext {
 export interface RuntimeTask {
   intent: string;
   scope: string;
+  capability?: string;
   inputs?: Record<string, unknown>;
 }
 
@@ -72,7 +73,12 @@ export interface RuntimeResult {
   ok: boolean;
   artifacts: readonly string[];
   evidence?: string;
+  changedFiles?: readonly string[];
+  commands?: readonly string[];
+  blocked?: boolean;
+  blockers?: readonly string[];
   error?: string;
+  exitCode?: number;
 }
 
 export interface RuntimeAdapter {

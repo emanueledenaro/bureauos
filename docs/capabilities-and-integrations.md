@@ -41,6 +41,11 @@ Useful for:
 - using local tools
 - using project-specific skills
 
+The v1 adapter validates workspace/run context, accepts a host-provided runner,
+returns structured artifacts/evidence/changed-file metadata, and blocks merge,
+production deploy, secret-file, and destructive git actions before they can be
+treated as successful execution.
+
 Recommended assignment:
 
 ```yaml
