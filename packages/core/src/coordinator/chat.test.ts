@@ -398,6 +398,92 @@ describe("CoordinatorChatService", () => {
     await expect(auditText(dir)).resolves.toContain("coordinator_tool.create_intake");
   });
 
+  it("answers existing project status questions without creating new intake records", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    const clients = new ClientRegistry(dir);
+    const projects = new ProjectRegistry(dir);
+    const opportunities = new OpportunityRegistry(dir);
+    const approvals = new ApprovalRegistry(dir);
+    const artifacts = new ArtifactStore(dir);
+    const client = await clients.create({ name: "Pizzeria Amodeo" });
+    const project = await projects.create({
+      name: "Pizzeria Amodeo Website",
+      clientId: client.id,
+      status: "intake",
+      stack: "HTML CSS",
+    });
+    const opportunity = await opportunities.create({
+      title: "Website for Pizzeria Amodeo",
+      source: "owner_chat",
+      clientId: client.id,
+    });
+    await artifacts.write({
+      type: "project-brief",
+      createdBy: "supreme_coordinator",
+      clientId: client.id,
+      projectId: project.id,
+      body: "Draft landing page for pizza Margherita.",
+    });
+    await approvals.request({
+      action: "send_final_proposals",
+      actor: "supreme_coordinator",
+      target: opportunity.id,
+      scope: "Send final proposal for Website for Pizzeria Amodeo",
+      riskLevel: "high",
+    });
+    const service = new CoordinatorChatService(dir, { config: defaultConfig("freelancer") });
+
+    const result = await service.process({
+      source: "test",
+      message: "il sito di amodeo che ho richiesto?",
+    });
+
+    expect(result.mode).toBe("answer");
+    expect(result.result).toBeUndefined();
+    expect(result.provider.reason).toBe("project_status_lookup");
+    expect(result.coordinatorMessage.text).toContain("Pizzeria Amodeo Website");
+    expect(result.coordinatorMessage.text).toContain("Website for Pizzeria Amodeo");
+    expect(result.coordinatorMessage.text).toContain("1 approvazioni pending");
+    expect(result.coordinatorMessage.text).not.toContain("Non ho creato");
+    expect(result.coordinatorMessage.text).not.toContain("ho solo letto");
+    expect(result.coordinatorMessage.meta?.statusLookup).toMatchObject({
+      clientId: client.id,
+      projectId: project.id,
+      opportunityId: opportunity.id,
+      pendingApprovals: 1,
+      artifacts: 1,
+    });
+    await expect(clients.list()).resolves.toHaveLength(1);
+    await expect(projects.list()).resolves.toHaveLength(1);
+    await expect(opportunities.list()).resolves.toHaveLength(1);
+    await expect(approvals.listPending()).resolves.toHaveLength(1);
+    await expect(auditText(dir)).resolves.toContain("coordinator.status_lookup");
+    await expect(auditText(dir)).resolves.not.toContain("coordinator_tool.create_intake");
+  });
+
+  it("asks for clarification instead of creating fallback leads for unmatched status questions", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    const service = new CoordinatorChatService(dir, { config: defaultConfig("freelancer") });
+
+    const result = await service.process({
+      source: "test",
+      message: "il sito di amodeo che ho richiesto?",
+    });
+
+    expect(result.mode).toBe("answer");
+    expect(result.result).toBeUndefined();
+    expect(result.provider.reason).toBe("project_status_lookup_no_match");
+    expect(result.coordinatorMessage.text).toContain("Non trovo un lavoro salvato");
+    expect(result.coordinatorMessage.text).toContain("ti do lo stato operativo");
+    expect(result.coordinatorMessage.text).not.toContain("Non ho creato");
+    await expect(new ClientRegistry(dir).list()).resolves.toEqual([]);
+    await expect(new ProjectRegistry(dir).list()).resolves.toEqual([]);
+    await expect(new OpportunityRegistry(dir).list()).resolves.toEqual([]);
+    await expect(new ApprovalRegistry(dir).listPending()).resolves.toEqual([]);
+    await expect(auditText(dir)).resolves.toContain("coordinator.status_lookup");
+    await expect(auditText(dir)).resolves.not.toContain("coordinator_tool.create_intake");
+  });
+
   it("lets the provider choose the create_intake tool before opening project scope", async () => {
     const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
     let providerWasAsked = false;

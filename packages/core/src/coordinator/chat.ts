@@ -5,12 +5,16 @@ import {
   type ProviderAdapter,
 } from "@bureauos/providers";
 import { configureAgentProviderRouting, selectAgentModel } from "../agents/provider-routing.js";
+import { ArtifactStore, type ArtifactRecord } from "../artifacts/store.js";
 import { AuditLog } from "../audit/log.js";
 import type { BureauConfig } from "../config/schema.js";
 import { defaultConfig } from "../config/loader.js";
 import { CoordinatorGlobalMemoryService } from "../memory/global.js";
 import { workspacePaths } from "../paths.js";
+import { ApprovalRegistry, type ApprovalRecord } from "../registries/approval.js";
 import { ClientRegistry, type ClientRecord } from "../registries/client.js";
+import { OpportunityRegistry, type OpportunityRecord } from "../registries/opportunity.js";
+import { ProjectRegistry, type ProjectRecord } from "../registries/project.js";
 import {
   CoordinatorIntakeService,
   isClientOnlySaveRequest,
@@ -68,6 +72,10 @@ export interface CoordinatorChatDeps {
   messages?: CoordinatorMessageStore;
   intake?: CoordinatorIntakeService;
   clients?: ClientRegistry;
+  projects?: ProjectRegistry;
+  opportunities?: OpportunityRegistry;
+  approvals?: ApprovalRegistry;
+  artifacts?: ArtifactStore;
   memory?: CoordinatorGlobalMemoryService;
   audit?: AuditLog;
   tools?: CoordinatorToolRuntime;
@@ -94,6 +102,14 @@ interface CoordinatorToolPlanningResult {
   provider: CoordinatorChatProviderMeta;
 }
 
+interface ProjectStatusLookup {
+  client?: ClientRecord;
+  project?: ProjectRecord;
+  opportunity?: OpportunityRecord;
+  approvals: ApprovalRecord[];
+  artifacts: ArtifactRecord[];
+}
+
 const DEFAULT_PROVIDER_TIMEOUT_MS = 12_000;
 const DEFAULT_TOOL_PLANNING_TIMEOUT_MS = 3_000;
 const DEFAULT_TOOL_PLANNING_DEGRADED_TTL_MS = 30_000;
@@ -108,6 +124,68 @@ const toolPlanningDegradedProviders = new Map<string, ToolPlanningDegradedState>
 function includesAny(message: string, words: readonly string[]): boolean {
   const lower = message.toLowerCase();
   return words.some((word) => lower.includes(word));
+}
+
+function normalizeReferenceText(input: string): string {
+  return input
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+const GENERIC_REFERENCE_TOKENS = new Set([
+  "azienda",
+  "brand",
+  "business",
+  "cliente",
+  "client",
+  "lead",
+  "new",
+  "nuovo",
+  "nuova",
+  "pizzeria",
+  "project",
+  "progetto",
+  "ristorante",
+  "sito",
+  "website",
+]);
+
+function referenceTokens(input: string): string[] {
+  return normalizeReferenceText(input)
+    .split(/\s+/)
+    .filter((token) => token.length >= 3)
+    .filter((token) => !GENERIC_REFERENCE_TOKENS.has(token));
+}
+
+function referenceScore(message: string, name: string): number {
+  const normalizedMessage = ` ${normalizeReferenceText(message)} `;
+  const normalizedName = normalizeReferenceText(name);
+  if (!normalizedMessage.trim() || !normalizedName) return 0;
+  if (normalizedMessage.includes(` ${normalizedName} `)) return 100 + normalizedName.length;
+  return referenceTokens(name).reduce((score, token) => {
+    if (!normalizedMessage.includes(` ${token} `)) return score;
+    return score + Math.max(6, token.length);
+  }, 0);
+}
+
+function projectKindScore(message: string, project: ProjectRecord): number {
+  const normalizedMessage = normalizeReferenceText(message);
+  const normalizedProject = normalizeReferenceText(`${project.name} ${project.stack}`);
+  let score = 0;
+  if (/\b(sito|website|html|css)\b/.test(normalizedMessage)) {
+    if (/\b(sito|website|frontend|html|css)\b/.test(normalizedProject)) score += 10;
+  }
+  if (/\b(app|mobile)\b/.test(normalizedMessage)) {
+    if (/\b(app|mobile|ios|android)\b/.test(normalizedProject)) score += 10;
+  }
+  if (/\b(prenot|booking)\b/.test(normalizedMessage)) {
+    if (/\b(prenot|booking)\b/.test(normalizedProject)) score += 8;
+  }
+  return score;
 }
 
 function messageAttachments(
@@ -274,7 +352,55 @@ function hasStatusIntent(message: string): boolean {
     "a che punto",
     "funziona",
     "che succede",
+    "che fine ha fatto",
+    "novita",
+    "novità",
+    "aggiornament",
   ].some((signal) => lower.includes(signal));
+}
+
+function isProjectStatusQuestion(
+  message: string,
+  attachments: readonly CoordinatorAttachmentInput[],
+): boolean {
+  if (attachments.length > 0) return false;
+  const lower = message.toLowerCase();
+  const hasWorkNoun = includesAny(lower, [
+    "app",
+    "lavoro",
+    "opportunit",
+    "project",
+    "progetto",
+    "richiesta",
+    "sito",
+    "website",
+  ]);
+  if (hasStatusIntent(lower) && (hasWorkNoun || lower.includes("?"))) return true;
+  if (/\b(?:che\s+(?:ti\s+)?ho\s+(?:richiesto|chiesto)|che\s+avevo\s+chiesto)\b/i.test(lower)) {
+    return hasWorkNoun;
+  }
+  const creationSignals = [
+    "apri",
+    "avvia",
+    "crea",
+    "creare",
+    "fai",
+    "fare",
+    "mi ha chiesto",
+    "mi hanno chiesto",
+    "serve un",
+    "vogliono un",
+    "vorrebbe",
+    "vuole un",
+    "wants a",
+  ];
+  const looksLikeQuestion = lower.trim().endsWith("?") || lower.includes(" che ");
+  return (
+    looksLikeQuestion &&
+    hasWorkNoun &&
+    /\b(?:di|per|for)\b/.test(lower) &&
+    !creationSignals.some((signal) => lower.includes(signal))
+  );
 }
 
 function isLowContextMessage(
@@ -435,6 +561,7 @@ function toolPlanningPrompt(
     "- Extract the clean client name. Do not include trailing request text such as 'lo puoi salvare'.",
     "- If the owner only names a client/lead and asks to save, remember, register, or add it, choose save_client with only the clean business name.",
     "- If the owner asks how many clients exist or asks to list saved clients, choose list_clients.",
+    "- If the owner asks for status, updates, or 'the site/project I requested', choose answer and do not create intake.",
     "- If the owner says the client wants a website/app/booking/proposal, choose create_intake.",
     "- If unclear, choose answer and ask one concise clarification.",
     "",
@@ -600,6 +727,10 @@ export class CoordinatorChatService {
   private readonly messages: CoordinatorMessageStore;
   private readonly intake: CoordinatorIntakeService;
   private readonly clients: ClientRegistry;
+  private readonly projects: ProjectRegistry;
+  private readonly opportunities: OpportunityRegistry;
+  private readonly approvals: ApprovalRegistry;
+  private readonly artifacts: ArtifactStore;
   private readonly memory: CoordinatorGlobalMemoryService;
   private readonly audit: AuditLog;
   private readonly tools: CoordinatorToolRuntime;
@@ -618,6 +749,10 @@ export class CoordinatorChatService {
     this.intake =
       deps.intake ?? new CoordinatorIntakeService(workspaceRoot, { config: this.config });
     this.clients = deps.clients ?? new ClientRegistry(workspaceRoot);
+    this.projects = deps.projects ?? new ProjectRegistry(workspaceRoot);
+    this.opportunities = deps.opportunities ?? new OpportunityRegistry(workspaceRoot);
+    this.approvals = deps.approvals ?? new ApprovalRegistry(workspaceRoot);
+    this.artifacts = deps.artifacts ?? new ArtifactStore(workspaceRoot);
     this.memory = deps.memory ?? new CoordinatorGlobalMemoryService(workspaceRoot);
     this.audit = deps.audit ?? new AuditLog(workspacePaths(workspaceRoot).auditLog);
     this.tools =
@@ -710,6 +845,158 @@ export class CoordinatorChatService {
     await this.tools.recordRejectedToolPlan(reason);
   }
 
+  private async projectStatusLookup(message: string): Promise<ProjectStatusLookup> {
+    const [clients, projects, opportunities, approvals] = await Promise.all([
+      this.clients.list(),
+      this.projects.list(),
+      this.opportunities.list(),
+      this.approvals.listPending(),
+    ]);
+    const client = clients
+      .map((candidate) => ({ candidate, score: referenceScore(message, candidate.name) }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score)[0]?.candidate;
+
+    const projectCandidates = projects
+      .map((candidate) => {
+        const clientBoost = client && candidate.client_id === client.id ? 25 : 0;
+        const activeBoost = candidate.status === "cancelled" ? -20 : 5;
+        return {
+          candidate,
+          score:
+            referenceScore(message, candidate.name) +
+            projectKindScore(message, candidate) +
+            clientBoost +
+            activeBoost,
+        };
+      })
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score);
+    const project = projectCandidates[0]?.candidate;
+    const resolvedClient =
+      client ?? clients.find((candidate) => candidate.id === project?.client_id);
+    const clientOpportunities = opportunities
+      .filter((opportunity) => opportunity.client_id === resolvedClient?.id)
+      .sort((a, b) => {
+        const scoreA = referenceScore(message, a.title);
+        const scoreB = referenceScore(message, b.title);
+        if (scoreA !== scoreB) return scoreB - scoreA;
+        return b.updated.localeCompare(a.updated);
+      });
+    const opportunity = clientOpportunities[0];
+    const targets = new Set([project?.id, opportunity?.id].filter(Boolean));
+    const pendingApprovals = approvals.filter((approval) => targets.has(approval.target));
+    const projectArtifacts = project
+      ? await this.artifacts.list({ project_id: project.id })
+      : resolvedClient
+        ? await this.artifacts.list({ client_id: resolvedClient.id })
+        : [];
+    return {
+      client: resolvedClient,
+      project,
+      opportunity,
+      approvals: pendingApprovals,
+      artifacts: projectArtifacts,
+    };
+  }
+
+  private projectStatusAnswer(message: string, lookup: ProjectStatusLookup): string {
+    if (!lookup.client && !lookup.project) {
+      return [
+        "Non trovo un lavoro salvato che corrisponda a questa richiesta.",
+        "Indicami il nome esatto del cliente o del progetto e ti do lo stato operativo.",
+      ].join("\n");
+    }
+    if (lookup.client && !lookup.project) {
+      return [
+        `Ho trovato il cliente ${lookup.client.name}, ma non trovo un progetto collegato che combaci con "${message}".`,
+        "Dimmi quale progetto intendi e ti do stato, blocchi e prossima mossa.",
+      ].join("\n");
+    }
+
+    const project = lookup.project;
+    const clientName = lookup.client?.name ?? "cliente collegato";
+    const opportunityLine = lookup.opportunity
+      ? `Opportunità: ${lookup.opportunity.title} (${lookup.opportunity.status}).`
+      : "Opportunità: non trovo ancora una scheda opportunità collegata.";
+    const artifactLine =
+      lookup.artifacts.length > 0
+        ? `Materiali interni: ${lookup.artifacts.length} artifact/bozze salvati.`
+        : "Materiali interni: non vedo ancora artifact collegati al progetto.";
+    const approvalLine =
+      lookup.approvals.length > 0
+        ? `Blocco attuale: ${lookup.approvals.length} approvazioni pending prima di impegni esterni.`
+        : "Blocco attuale: nessuna approvazione pending trovata per questo lavoro.";
+    const nextMove =
+      lookup.approvals.length > 0
+        ? "Prossima mossa: rivedo le approvazioni e preparo scope/prezzo/client-send solo quando mi dai via libera."
+        : "Prossima mossa: porto avanti il prossimo step operativo e tengo separati delivery, proposta e comunicazione cliente.";
+
+    return [
+      `Sì: per ${clientName} ho aperto ${project?.name}.`,
+      `Stato progetto: ${project?.status}. ${opportunityLine}`,
+      `${artifactLine} ${approvalLine}`,
+      nextMove,
+    ].join("\n");
+  }
+
+  private async answerProjectStatusQuestion(input: {
+    message: string;
+    attachments: readonly CoordinatorAttachmentInput[];
+    memory: CoordinatorChatResult["memory"];
+    toolPlanningProvider?: CoordinatorChatProviderMeta;
+  }): Promise<CoordinatorChatResult> {
+    const lookup = await this.projectStatusLookup(input.message);
+    const provider = providerMeta(
+      "unavailable",
+      undefined,
+      undefined,
+      lookup.project ? "project_status_lookup" : "project_status_lookup_no_match",
+    );
+    const answer = this.projectStatusAnswer(input.message, lookup);
+    await this.audit.append({
+      actor: "supreme_coordinator",
+      action: "coordinator.status_lookup",
+      target: lookup.project?.id ?? lookup.client?.id ?? "unmatched_status_question",
+      capability: "coordinator.memory_read",
+      result: "ok",
+    });
+    const { ownerMessage, coordinatorMessage } = requireMessagePair(
+      await this.messages.appendMany([
+        {
+          role: "owner",
+          text: input.message,
+          attachments: messageAttachments(input.attachments),
+          meta: { mode: "answer" },
+        },
+        {
+          role: "coordinator",
+          text: answer,
+          meta: {
+            mode: "answer",
+            provider,
+            memory: input.memory,
+            ...(input.toolPlanningProvider ? { planningProvider: input.toolPlanningProvider } : {}),
+            statusLookup: {
+              clientId: lookup.client?.id,
+              projectId: lookup.project?.id,
+              opportunityId: lookup.opportunity?.id,
+              pendingApprovals: lookup.approvals.length,
+              artifacts: lookup.artifacts.length,
+            },
+          },
+        },
+      ]),
+    );
+    return {
+      mode: "answer",
+      ownerMessage,
+      coordinatorMessage,
+      provider,
+      memory: input.memory,
+    };
+  }
+
   async *stream(input: CoordinatorChatInput): AsyncGenerator<CoordinatorChatStreamEvent> {
     yield { type: "status", status: "started" };
     const message = input.message.trim();
@@ -717,6 +1004,7 @@ export class CoordinatorChatService {
     const attachments = input.attachments ?? [];
 
     if (
+      isProjectStatusQuestion(message, attachments) ||
       hasCoordinatorToolIntent(message, attachments) ||
       isLowContextMessage(message, attachments)
     ) {
@@ -816,6 +1104,10 @@ export class CoordinatorChatService {
     let plannedIntakeProvider: CoordinatorChatProviderMeta | undefined;
     let plannedIntakePlan: CoordinatorToolPlan | undefined;
     let toolPlanningProvider: CoordinatorChatProviderMeta | undefined;
+    if (isProjectStatusQuestion(message, attachments)) {
+      return this.answerProjectStatusQuestion({ message, attachments, memory });
+    }
+
     if (
       hasCoordinatorToolIntent(message, attachments) &&
       !isLowContextMessage(message, attachments)
