@@ -136,7 +136,7 @@ Every major capability described in the docs must become one of:
 | GitHub PR creation | `GitHubPullRequestPublishService`, `github create-pr`, `/github/create-pr`, `github-pr-publish-report`, policy gates for linked issue and test evidence | partial |
 | Development branch creation | `DevelopmentBranchService`, deterministic `bureauos/...` branch naming, policy-gated `create_branches`, conflict fallback/blocking, and audit events | partial |
 | Project test evidence | `ProjectTestRunnerService`, structured/discovered test commands, subprocess execution boundary, `test-evidence-report` artifacts, and PR gate evidence only for passing tests | partial |
-| Linear work-item MCP | `linear` capability registry boundary and `CapabilityUseService` policy mappings for read/create/comment/update issue actions; runtime MCP calls are provided by the host assistant/client | partial |
+| Linear work-item MCP | `linear` capability registry boundary, `CapabilityUseService` policy mappings for read/create/comment/update issue actions, and `LinearIssueReaderService` adapter boundary for capability-gated read/list flows; runtime MCP calls are provided by the host assistant/client | partial |
 | Linear issue ingestion | `LinearIssueIngestionService`, `linearIssueToRunScope`, `project-dispatch-packet` artifacts, and Linear read capability checks | implemented |
 | OpenAI Codex OAuth provider | separate `openai-codex` provider, browser PKCE OAuth, ChatGPT Codex backend `generateText`/SSE `stream`, persisted token refresh, Codex-compatible `instructions`/`store=false` request body, no API fallback | implemented |
 | OpenAI API provider | separate `openai` provider, SDK-backed API-key adapter with `generateText`/`stream` | implemented |

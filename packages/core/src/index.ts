@@ -301,12 +301,21 @@ export type {
 
 // Linear work scope ingestion
 export { LinearIssueIngestionService } from "./linear/issue-ingestion.js";
+export { LinearIssueReaderService } from "./linear/issue-reader.js";
 export { linearIssueToRunScope } from "./linear/work-scope.js";
 export type {
   LinearIssueIngestionDeps,
   LinearIssueIngestionInput,
   LinearIssueIngestionResult,
 } from "./linear/issue-ingestion.js";
+export type {
+  LinearIssueAdapter,
+  LinearIssueListInput,
+  LinearIssueListResult,
+  LinearIssueReaderDeps,
+  LinearIssueReadInput,
+  LinearIssueReadResult,
+} from "./linear/issue-reader.js";
 export type { LinearIssueRunScope, LinearIssueScopeInput } from "./linear/work-scope.js";
 
 // Source work item metadata
