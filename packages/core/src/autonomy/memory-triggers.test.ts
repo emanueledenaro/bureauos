@@ -29,10 +29,7 @@ describe("MemoryTriggerService", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  async function patchClient(
-    client: ClientRecord,
-    patch: Partial<ClientRecord>,
-  ): Promise<void> {
+  async function patchClient(client: ClientRecord, patch: Partial<ClientRecord>): Promise<void> {
     const path = join(workspacePaths(dir).clientsDir, client.slug, "CLIENT.md");
     const doc = await readDoc<ClientRecord>(path);
     await writeDoc(path, { ...doc.front, ...patch }, doc.body);

@@ -335,6 +335,7 @@ Goal: scheduler and event watchers so BureauOS works while the owner is offline.
 Goal: a development agent can implement scoped work end to end under policy.
 
 - [ ] Wire the Codex runtime adapter to the development agent.
+- [ ] Use Linear issues as policy-gated work-item scope when a Linear MCP connector is available.
 - [ ] Implement branch creation per run.
 - [ ] Implement scoped file edits with the policy `max_files_changed_without_human_review` enforced.
 - [ ] Implement the test-command runner per project.

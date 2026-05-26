@@ -67,6 +67,12 @@ const POLICY_ACTIONS: Readonly<Record<string, string>> = {
   "github.read_checks": "observe_signals",
   "github.read_issues": "observe_signals",
   "github.read_prs": "observe_signals",
+  "linear.comment": "comment_on_issues",
+  "linear.create_issues": "create_issues",
+  "linear.read_issues": "observe_signals",
+  "linear.read_projects": "observe_signals",
+  "linear.set_issue_state": "comment_on_issues",
+  "linear.update_issues": "comment_on_issues",
   "mcp.inspect": "observe_signals",
   "skills.inspect": "observe_signals",
   "skills.use_skill": "observe_signals",
@@ -82,7 +88,10 @@ function capabilityConfig(config: BureauConfig): Record<string, CapabilityConfig
 
 function policyActionFor(input: CapabilityUseInput): string {
   if (input.policyAction) return input.policyAction;
-  return POLICY_ACTIONS[`${input.capabilityId}.${input.action}`] ?? `${input.capabilityId}.${input.action}`;
+  return (
+    POLICY_ACTIONS[`${input.capabilityId}.${input.action}`] ??
+    `${input.capabilityId}.${input.action}`
+  );
 }
 
 function auditPolicyResult(

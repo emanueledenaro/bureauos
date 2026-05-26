@@ -120,10 +120,7 @@ function TableGrid<Row>({
   const content = (
     <div style={{ minWidth: `${minWidth}px` }}>
       <div
-        className={cn(
-          "grid bg-surface-subtle/60 text-eyebrow",
-          rowPadding,
-        )}
+        className={cn("grid bg-surface-subtle/60 text-eyebrow", rowPadding)}
         style={{ gridTemplateColumns: gridTemplate }}
       >
         {columns.map((column) => (
@@ -168,14 +165,16 @@ function MobileCard<Row>({
 }) {
   return (
     <div className={cn("flex flex-col gap-2", className)}>
-      {columns.filter((column) => !column.hideOnMobile).map((column) => (
-        <Fragment key={column.id}>
-          <div className="flex flex-col gap-0.5">
-            <span className="text-eyebrow">{column.mobileLabel ?? column.header}</span>
-            <div className="text-body">{column.render(row)}</div>
-          </div>
-        </Fragment>
-      ))}
+      {columns
+        .filter((column) => !column.hideOnMobile)
+        .map((column) => (
+          <Fragment key={column.id}>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-eyebrow">{column.mobileLabel ?? column.header}</span>
+              <div className="text-body">{column.render(row)}</div>
+            </div>
+          </Fragment>
+        ))}
     </div>
   );
 }

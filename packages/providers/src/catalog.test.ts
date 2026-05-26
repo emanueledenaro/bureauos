@@ -32,9 +32,7 @@ describe("provider connector catalog", () => {
     const connectors = listProviderConnectors();
 
     expect(connectors.map((connector) => connector.id)).toContain("anthropic");
-    expect(connectors.find((connector) => connector.id === "openai")?.defaultModel).toBe(
-      "gpt-5.5",
-    );
+    expect(connectors.find((connector) => connector.id === "openai")?.defaultModel).toBe("gpt-5.5");
     expect(connectors.find((connector) => connector.id === "openai-codex")?.defaultModel).toBe(
       "gpt-5.5",
     );

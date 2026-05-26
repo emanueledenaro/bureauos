@@ -191,7 +191,9 @@ export class ProjectRepositoryVerificationService {
           repository,
           parsed_repository: parsed.repository,
           status: "unverified",
-          reasons: ["GitHub client is not configured; repository shape was parsed but live state was not checked"],
+          reasons: [
+            "GitHub client is not configured; repository shape was parsed but live state was not checked",
+          ],
           issues_count: 0,
           pull_requests_count: 0,
           checks_count: 0,

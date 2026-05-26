@@ -24,9 +24,7 @@ export function ClientAccountCard({ item }: { item: ClientIntelligenceItem }) {
       <span className="font-mono">{item.client.slug}</span>
       <span aria-hidden>·</span>
       <span>
-        {item.latest_activity_at
-          ? `Updated ${timeAgo(item.latest_activity_at)}`
-          : "No activity"}
+        {item.latest_activity_at ? `Updated ${timeAgo(item.latest_activity_at)}` : "No activity"}
       </span>
     </span>
   );

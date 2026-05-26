@@ -26,7 +26,9 @@ export function clientName(clients: ClientRecord[], clientId: string): string {
   return clients.find((client) => client.id === clientId)?.name ?? "No client";
 }
 
-export function sortNewest<T extends { created?: string; updated?: string }>(items: readonly T[]): T[] {
+export function sortNewest<T extends { created?: string; updated?: string }>(
+  items: readonly T[],
+): T[] {
   return [...items].sort((a, b) => {
     const left = Date.parse(a.updated || a.created || "");
     const right = Date.parse(b.updated || b.created || "");

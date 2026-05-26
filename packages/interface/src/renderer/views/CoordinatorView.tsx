@@ -17,10 +17,7 @@ import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import { cn } from "../lib/utils";
 import { formatLabel, formatMoney, timeAgo } from "../lib/format";
 import { sortNewest } from "../lib/builders";
-import type {
-  CoordinatorAttachmentInput,
-  CoordinatorChatResult,
-} from "../lib/api";
+import type { CoordinatorAttachmentInput, CoordinatorChatResult } from "../lib/api";
 import type { AdaptiveMode, DashboardState } from "../lib/types";
 
 /**
@@ -148,7 +145,9 @@ function ContextColumn({
         <ScrollArea className="min-h-0 flex-1">
           <div className="flex flex-col gap-2 pr-2">
             {recentArtifacts.length === 0 ? (
-              <div className="text-meta">No artifacts yet. They appear after the coordinator runs.</div>
+              <div className="text-meta">
+                No artifacts yet. They appear after the coordinator runs.
+              </div>
             ) : (
               recentArtifacts.map((artifact) => (
                 <div
@@ -189,9 +188,7 @@ function ContextColumn({
               </AvatarFallback>
             </Avatar>
           ))}
-          {state.agents.length === 0 ? (
-            <span className="text-meta">No agents loaded</span>
-          ) : null}
+          {state.agents.length === 0 ? <span className="text-meta">No agents loaded</span> : null}
         </div>
       </BaseCard>
     </aside>

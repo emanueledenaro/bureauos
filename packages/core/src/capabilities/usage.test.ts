@@ -44,6 +44,52 @@ describe("CapabilityUseService", () => {
     expect(audit).toContain("capability.use.allowed");
   });
 
+  it("allows Linear issue reads through the observe-signals policy path", async () => {
+    const result = await new CapabilityUseService(dir, {
+      config: defaultConfig("agency"),
+    }).check({
+      agent: "project_manager",
+      capabilityId: "linear",
+      action: "read_issues",
+      target: "linear://team/ENG",
+    });
+
+    expect(result.status).toBe("allowed");
+    expect(result.policy.action).toBe("observe_signals");
+    expect(result.artifact.type).toBe("capability-audit");
+
+    const written = await new ArtifactStore(dir).read(result.artifact.id);
+    expect(written?.body).toContain("linear");
+    expect(written?.body).toContain("read_issues");
+  });
+
+  it("maps Linear issue writes to existing issue/comment policy gates", async () => {
+    const create = await new CapabilityUseService(dir, {
+      config: defaultConfig("agency"),
+    }).check({
+      agent: "project_manager",
+      capabilityId: "linear",
+      action: "create_issues",
+      target: "linear://team/ENG",
+    });
+
+    expect(create.status).toBe("allowed");
+    expect(create.policy.action).toBe("create_issues");
+
+    const config = defaultConfig("agency");
+    config.autonomy.comment_on_issues = false;
+    const comment = await new CapabilityUseService(dir, { config }).check({
+      agent: "development",
+      capabilityId: "linear",
+      action: "comment",
+      target: "linear://issue/BOS-42",
+    });
+
+    expect(comment.status).toBe("blocked");
+    expect(comment.policy.action).toBe("comment_on_issues");
+    expect(comment.approval?.action).toBe("comment_on_issues");
+  });
+
   it("blocks agents that are not assigned to a capability", async () => {
     const result = await new CapabilityUseService(dir, {
       config: defaultConfig("agency"),

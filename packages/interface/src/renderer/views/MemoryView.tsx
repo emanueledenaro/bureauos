@@ -79,14 +79,23 @@ export function MemoryView({ state }: { state: DashboardState }) {
             />
           </div>
           <Button size="sm" onClick={() => void search()} disabled={loading || !query.trim()}>
-            {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+            {loading ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Search className="h-3 w-3" />
+            )}
             {loading ? "Searching" : "Search"}
           </Button>
         </div>
       }
     >
       <KpiBar columns={4}>
-        <MetricTile label="Clients" value={String(state.clients.length)} detail="Profiles" icon={Database} />
+        <MetricTile
+          label="Clients"
+          value={String(state.clients.length)}
+          detail="Profiles"
+          icon={Database}
+        />
         <MetricTile
           label="Projects"
           value={String(state.projects.length)}

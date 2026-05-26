@@ -50,10 +50,7 @@ export function Composer({
   };
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="border-t border-border bg-surface-subtle/40 p-3"
-    >
+    <form onSubmit={handleSubmit} className="border-t border-border bg-surface-subtle/40 p-3">
       {attachments.length > 0 ? (
         <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
           {attachments.map((attachment) => (

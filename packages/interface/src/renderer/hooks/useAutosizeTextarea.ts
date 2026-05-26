@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 /**
  * Auto-resize per <textarea> tra `minRows` e `maxRows` linee. Oltre `maxRows`
@@ -13,7 +13,7 @@ export function useAutosizeTextarea(
   const { minRows = 1, maxRows = 12 } = options;
   const frame = useRef<number>();
 
-  const resize = (): void => {
+  const resize = useCallback((): void => {
     const el = ref.current;
     if (!el) return;
     const style = window.getComputedStyle(el);
@@ -30,7 +30,7 @@ export function useAutosizeTextarea(
     const next = Math.max(min, Math.min(max, el.scrollHeight));
     el.style.height = `${next}px`;
     el.style.overflowY = el.scrollHeight > max ? "auto" : "hidden";
-  };
+  }, [maxRows, minRows, ref]);
 
   useLayoutEffect(() => {
     if (frame.current) cancelAnimationFrame(frame.current);
@@ -38,8 +38,7 @@ export function useAutosizeTextarea(
     return () => {
       if (frame.current) cancelAnimationFrame(frame.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
+  }, [resize, value]);
 
   useEffect(() => {
     const el = ref.current;
@@ -47,6 +46,5 @@ export function useAutosizeTextarea(
     const observer = new ResizeObserver(() => resize());
     observer.observe(el);
     return () => observer.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [ref, resize]);
 }

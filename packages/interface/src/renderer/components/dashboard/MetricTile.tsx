@@ -53,11 +53,7 @@ export function MetricTile({
       </div>
       {(detail || trend) && (
         <div className="flex items-center justify-between gap-2 text-[11px]">
-          {detail ? (
-            <span className="truncate text-muted-foreground">{detail}</span>
-          ) : (
-            <span />
-          )}
+          {detail ? <span className="truncate text-muted-foreground">{detail}</span> : <span />}
           {trend ? (
             <span className={cn("font-medium", toneTextClass[trend.tone ?? tone])}>
               {trend.value}

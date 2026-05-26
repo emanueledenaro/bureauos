@@ -253,8 +253,8 @@ describe("OpenAICodexOAuthAdapter", () => {
       fetch: async () => sseResponse("never called"),
     });
 
-    await expect(
-      adapter.generateText({ model: "gpt-5.3-codex", prompt: "hello" }),
-    ).rejects.toThrow(OpenAICodexOAuthError);
+    await expect(adapter.generateText({ model: "gpt-5.3-codex", prompt: "hello" })).rejects.toThrow(
+      OpenAICodexOAuthError,
+    );
   });
 });

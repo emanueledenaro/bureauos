@@ -64,12 +64,20 @@ function daysBetween(now: Date, iso: string): number | undefined {
 }
 
 function latestRunAt(runs: readonly RunRecord[]): string {
-  return runs.map((run) => run.updated || run.created).filter(Boolean).sort().at(-1) ?? "";
+  return (
+    runs
+      .map((run) => run.updated || run.created)
+      .filter(Boolean)
+      .sort()
+      .at(-1) ?? ""
+  );
 }
 
 function approvalMatchesProject(scope: string, target: string, project: ProjectRecord): boolean {
   const haystack = `${scope} ${target}`.toLowerCase();
-  return haystack.includes(project.id.toLowerCase()) || haystack.includes(project.name.toLowerCase());
+  return (
+    haystack.includes(project.id.toLowerCase()) || haystack.includes(project.name.toLowerCase())
+  );
 }
 
 function riskFor(args: {
@@ -130,7 +138,8 @@ function reasonsFor(args: {
   if (args.ageDays !== undefined && args.ageDays >= 7) {
     reasons.push(`project memory has not changed for ${args.ageDays} day(s)`);
   }
-  if (args.openPipelineValue > 0) reasons.push(`client has ${money(args.openPipelineValue)} open pipeline`);
+  if (args.openPipelineValue > 0)
+    reasons.push(`client has ${money(args.openPipelineValue)} open pipeline`);
   if (reasons.length === 0) reasons.push("no immediate delivery risk detected");
   return reasons;
 }

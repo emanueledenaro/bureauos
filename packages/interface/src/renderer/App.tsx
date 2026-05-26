@@ -19,7 +19,6 @@ import { AgentsView } from "./views/AgentsView";
 import { ReportsView } from "./views/ReportsView";
 import { SettingsView } from "./views/SettingsView";
 import { TimelineView } from "./views/TimelineView";
-import { PendingApprovalsView } from "./views/PendingApprovalsView";
 import { RevenuePulseView } from "./views/RevenuePulseView";
 import { useDashboard } from "./hooks/useDashboard";
 import { adaptiveDefaultMode } from "./lib/builders";

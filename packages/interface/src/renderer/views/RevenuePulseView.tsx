@@ -1,5 +1,13 @@
 import { useState } from "react";
-import { Activity, ChevronRight, DollarSign, Loader2, Target, TrendingUp, Wallet } from "lucide-react";
+import {
+  Activity,
+  ChevronRight,
+  DollarSign,
+  Loader2,
+  Target,
+  TrendingUp,
+  Wallet,
+} from "lucide-react";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { MetricTile } from "../components/dashboard/MetricTile";
@@ -86,7 +94,11 @@ export function RevenuePulseView({
             onClick={() => void generate()}
             disabled={busy}
           >
-            {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <ChevronRight className="h-3 w-3" />}
+            {busy ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <ChevronRight className="h-3 w-3" />
+            )}
             {busy ? "Generating" : "View full report"}
           </Button>
           {report ? (

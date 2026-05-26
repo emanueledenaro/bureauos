@@ -76,7 +76,11 @@ describe("ProjectRepositoryVerificationService", () => {
 
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), "bureauos-repo-verification-"));
-    await initWorkspace({ root: dir, organizationName: "Repository Verification", preset: "agency" });
+    await initWorkspace({
+      root: dir,
+      organizationName: "Repository Verification",
+      preset: "agency",
+    });
   });
 
   afterEach(async () => {

@@ -279,14 +279,7 @@ describe("bureau cli", () => {
       "--status",
       "active",
     ]);
-    const clientPath = join(
-      dir,
-      ".bureauos",
-      "memory",
-      "clients",
-      "pizzeria-aurora",
-      "CLIENT.md",
-    );
+    const clientPath = join(dir, ".bureauos", "memory", "clients", "pizzeria-aurora", "CLIENT.md");
     const clientDoc = await readFile(clientPath, "utf8");
     await writeFile(
       clientPath,
@@ -404,7 +397,16 @@ describe("bureau cli", () => {
 
   it("runs the revenue pipeline from CLI", async () => {
     await main(["node", "bureau", "init", "--name", "BOS"]);
-    await main(["node", "bureau", "client", "create", "--name", "Nebula Studios", "--status", "active"]);
+    await main([
+      "node",
+      "bureau",
+      "client",
+      "create",
+      "--name",
+      "Nebula Studios",
+      "--status",
+      "active",
+    ]);
     await main([
       "node",
       "bureau",
@@ -672,7 +674,9 @@ describe("bureau cli", () => {
     expect(code).toBe(0);
     const artifacts = await readdir(join(dir, ".bureauos", "memory", "artifacts"));
     const bodies = await Promise.all(
-      artifacts.map((file) => readFile(join(dir, ".bureauos", "memory", "artifacts", file), "utf8")),
+      artifacts.map((file) =>
+        readFile(join(dir, ".bureauos", "memory", "artifacts", file), "utf8"),
+      ),
     );
     expect(bodies.some((body) => body.includes("Capability Use Audit"))).toBe(true);
 

@@ -1,9 +1,6 @@
 import { ArtifactStore, type ArtifactRecord } from "../artifacts/store.js";
 import { AuditLog } from "../audit/log.js";
-import {
-  ClientIntelligenceService,
-  type ClientIntelligenceItem,
-} from "../clients/intelligence.js";
+import { ClientIntelligenceService, type ClientIntelligenceItem } from "../clients/intelligence.js";
 import { workspacePaths } from "../paths.js";
 import { ClientRegistry, type ClientRecord } from "../registries/client.js";
 import {

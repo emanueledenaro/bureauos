@@ -478,7 +478,12 @@ export class CoordinatorChatService {
     let answer = "";
     let provider = providerMeta("unavailable", undefined, undefined, "no_valid_provider_route");
     if (isLowContextMessage(message, attachments)) {
-      const provider = providerMeta("unavailable", undefined, undefined, "low_context_current_message");
+      const provider = providerMeta(
+        "unavailable",
+        undefined,
+        undefined,
+        "low_context_current_message",
+      );
       const answer = idleAnswer(provider);
       const { ownerMessage, coordinatorMessage } = requireMessagePair(
         await this.messages.appendMany([

@@ -16,9 +16,7 @@ interface UseAsyncActionState<R> {
  * <Button onClick={() => void verify.run()} disabled={verify.busy}>…</Button>
  * {verify.error && <ActionBanner tone="danger" title={verify.error} />}
  */
-export function useAsyncAction<Args extends unknown[], R>(
-  fn: (...args: Args) => Promise<R>,
-) {
+export function useAsyncAction<Args extends unknown[], R>(fn: (...args: Args) => Promise<R>) {
   const [state, setState] = useState<UseAsyncActionState<R>>({ busy: false });
   // Tenere il riferimento all'ultima fn evita re-render inutili quando il caller la ricrea.
   const fnRef = useRef(fn);

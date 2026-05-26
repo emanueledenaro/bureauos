@@ -90,10 +90,8 @@ export function PendingApprovalsView({
       <div className="flex items-center gap-2 border-t border-border/60 px-5 py-3 text-[11px] text-muted-foreground">
         <span className="h-1.5 w-1.5 rounded-full bg-success" />
         Autonomous mode is handling{" "}
-        <span className="text-foreground">
-          {Math.max(0, 100 - approvals.length * 5)}%
-        </span>{" "}
-        of operations.
+        <span className="text-foreground">{Math.max(0, 100 - approvals.length * 5)}%</span> of
+        operations.
       </div>
     </Card>
   );

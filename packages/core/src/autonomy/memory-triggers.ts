@@ -1,9 +1,6 @@
 import { ArtifactStore, type ArtifactRecord } from "../artifacts/store.js";
 import { AuditLog } from "../audit/log.js";
-import {
-  ClientIntelligenceService,
-  type ClientIntelligenceItem,
-} from "../clients/intelligence.js";
+import { ClientIntelligenceService, type ClientIntelligenceItem } from "../clients/intelligence.js";
 import { ClientSuccessStatusService } from "../clients/success-status.js";
 import type { PolicyDecision, PolicyEngine } from "../policy/engine.js";
 import { dispatchRun, type CoordinatorDeps } from "../runs/coordinator.js";

@@ -74,7 +74,9 @@ export function Header({
                 )}
               >
                 {item.label}
-                {index < QUICK_MODES.length - 1 ? <span className="ml-1 text-border">/</span> : null}
+                {index < QUICK_MODES.length - 1 ? (
+                  <span className="ml-1 text-border">/</span>
+                ) : null}
               </button>
             ))}
           </div>
@@ -131,7 +133,12 @@ export function Header({
 
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" className="hidden sm:inline-flex" aria-label="Theme">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="hidden sm:inline-flex"
+              aria-label="Theme"
+            >
               <Moon className="h-4 w-4" />
             </Button>
           </TooltipTrigger>

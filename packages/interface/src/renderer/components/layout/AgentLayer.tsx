@@ -47,9 +47,7 @@ export function AgentLayer({ agents }: { agents: AgentDefinition[] }) {
     <section className="flex h-14 items-center gap-4 border-t border-border/60 bg-surface px-5">
       <div className="hidden min-w-[180px] sm:block">
         <div className="text-[12px] font-semibold text-foreground">Agent Layer</div>
-        <div className="text-[10px] text-muted-foreground">
-          {agents.length} autonomous roles
-        </div>
+        <div className="text-[10px] text-muted-foreground">{agents.length} autonomous roles</div>
       </div>
       <div className="flex flex-1 items-center gap-2 overflow-x-auto no-scrollbar gradient-mask-fade">
         {visible.length > 0 ? (

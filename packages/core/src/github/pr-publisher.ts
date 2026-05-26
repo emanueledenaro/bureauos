@@ -260,13 +260,17 @@ export class GitHubPullRequestPublishService {
       };
     }
 
-    const pullRequest = await this.githubClient.createPullRequest(repository.owner, repository.repo, {
-      title: input.title,
-      body: defaultBody({ body: input.body, project, linkedIssues, testEvidence }),
-      head: input.head,
-      base: input.base ?? "main",
-      ...(input.draft !== undefined ? { draft: input.draft } : {}),
-    });
+    const pullRequest = await this.githubClient.createPullRequest(
+      repository.owner,
+      repository.repo,
+      {
+        title: input.title,
+        body: defaultBody({ body: input.body, project, linkedIssues, testEvidence }),
+        head: input.head,
+        base: input.base ?? "main",
+        ...(input.draft !== undefined ? { draft: input.draft } : {}),
+      },
+    );
 
     const report = await this.artifacts.write({
       type: "github-pr-publish-report",

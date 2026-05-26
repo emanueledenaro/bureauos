@@ -2,7 +2,6 @@ import { Activity, AlarmClock, ArrowRight, ListChecks, RefreshCw, ShieldAlert } 
 import { SectionShell } from "../components/dashboard/SectionShell";
 import { MetricTile } from "../components/dashboard/MetricTile";
 import { StatusPill } from "../components/dashboard/StatusPill";
-import { EmptyState } from "../components/dashboard/EmptyState";
 import { Button } from "../components/ui/button";
 import { ActionBanner } from "../components/dashboard/ActionBanner";
 import { KpiBar } from "../components/dashboard/KpiBar";
@@ -39,7 +38,9 @@ export function TodayView({
       header: "Source",
       width: "110px",
       mobileLabel: "Source",
-      render: (action) => <span className="text-body font-medium text-foreground">{action.source}</span>,
+      render: (action) => (
+        <span className="text-body font-medium text-foreground">{action.source}</span>
+      ),
     },
     {
       id: "state",

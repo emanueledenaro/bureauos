@@ -264,7 +264,9 @@ function attachmentMetadata(
   }));
 }
 
-function githubSignalClient(client: ApiServerOptions["githubClient"]): GitHubSignalClient | undefined {
+function githubSignalClient(
+  client: ApiServerOptions["githubClient"],
+): GitHubSignalClient | undefined {
   if (
     client &&
     typeof client.listIssues === "function" &&
@@ -986,7 +988,9 @@ const ROUTES: Record<string, RouteHandler> = {
       projectSlug: body.projectSlug,
       owner: body.owner,
       ...(typeof body.repo === "string" ? { repo: body.repo } : {}),
-      ...(body.ownerType === "org" || body.ownerType === "user" ? { ownerType: body.ownerType } : {}),
+      ...(body.ownerType === "org" || body.ownerType === "user"
+        ? { ownerType: body.ownerType }
+        : {}),
       ...(typeof body.private === "boolean" ? { private: body.private } : {}),
       ...(typeof body.description === "string" ? { description: body.description } : {}),
       ...(typeof body.autoInit === "boolean" ? { autoInit: body.autoInit } : {}),

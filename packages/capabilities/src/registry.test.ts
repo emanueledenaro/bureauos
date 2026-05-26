@@ -40,6 +40,48 @@ describe("CapabilityRegistry", () => {
     });
   });
 
+  it("registers Linear as a policy-gated MCP work-item capability", () => {
+    const registry = CapabilityRegistry.fromConfig();
+
+    expect(registry.get("linear")).toMatchObject({
+      id: "linear",
+      type: "mcp",
+      connector: "linear",
+      risk_class: "medium",
+      audit_required: true,
+    });
+
+    expect(
+      registry.check({
+        capability_id: "linear",
+        agent: "project_manager",
+        action: "read_issues",
+      }),
+    ).toMatchObject({ allowed: true });
+
+    expect(
+      registry.check({
+        capability_id: "linear",
+        agent: "ads",
+        action: "create_issues",
+      }),
+    ).toMatchObject({
+      allowed: false,
+      reason: 'agent "ads" is not assigned to capability "linear"',
+    });
+
+    expect(
+      registry.check({
+        capability_id: "linear",
+        agent: "development",
+        action: "delete_issue",
+      }),
+    ).toMatchObject({
+      allowed: false,
+      reason: 'action "delete_issue" is disabled for capability "linear"',
+    });
+  });
+
   it("merges workspace capability config over built-in definitions", () => {
     const registry = CapabilityRegistry.fromConfig({
       github: {

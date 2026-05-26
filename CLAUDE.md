@@ -4,7 +4,7 @@ You are working on BureauOS, also called BOS.
 
 BureauOS is an open-source Autonomous Agency as a Service: an autonomous AI agency operating system for owner-operators who need to sell, manage clients, deliver software, grow visibility, and protect business risk while staying in control of important decisions.
 
-This repository is currently a protocol and architecture foundation. Do not treat it as a working runtime yet.
+This repository started as a protocol and architecture foundation and now includes a working local-first runtime foundation. Do not treat it as a complete autonomous agency OS yet.
 
 ## What BureauOS Is
 
@@ -33,7 +33,7 @@ BureauOS is not:
 - an unsafe automation tool
 - a promise that AI can run a company without boundaries
 - a dashboard without an operating kernel
-- a working runtime yet
+- a complete end-to-end autonomous agency runtime yet
 
 Do not write public copy that claims BureauOS already fully automates a business. The accurate current framing is: protocol-first, local-first, model-agnostic, policy-driven, open-source foundation.
 
@@ -63,7 +63,9 @@ It should track clients, projects, revenue, value, risk, relationship health, ap
 
 ## Current Repository State
 
-The repo currently contains:
+The repo currently contains both the protocol documentation and a working local-first runtime foundation.
+
+The documentation layer contains:
 
 - product positioning
 - architecture docs
@@ -84,16 +86,31 @@ The repo currently contains:
 - founder intent transcription
 - BOS Kernel infrastructure specification
 
-The repo does not yet contain:
+The runtime layer now contains:
 
-- runtime packages
+- TypeScript pnpm workspace packages
+- local BOS Kernel package
 - CLI implementation
-- provider router implementation
-- memory engine implementation
-- daemon implementation
-- ElectronJS desktop interface implementation
-- GitHub adapter code
-- automated tests
+- Markdown-backed memory store
+- company, client, project, opportunity, approval, run, artifact, and audit primitives
+- policy evaluator
+- provider router and provider auth store
+- model adapters for OpenAI, Anthropic, Google, OpenRouter, local OpenAI-compatible endpoints, and OpenAI Codex OAuth
+- capability registry and GitHub capability boundary
+- Octokit-backed GitHub client and policy-gated GitHub workflows
+- local HTTP API server
+- ElectronJS desktop Operating Room foundation
+- scheduler and daemon state foundations
+- automated tests across the main kernel packages
+
+The repo does not yet contain complete end-to-end autonomous agency execution. Important partial or future areas include:
+
+- real Codex runtime execution for development-agent code changes
+- complete autonomous branch, test, commit, and pull request lifecycle
+- production-grade always-on daemon behavior
+- full external business connectors for Gmail, Slack, Drive, Calendar, Stripe, Supabase, Vercel, and ads platforms
+- SQLite/semantic memory indexing and promotion/compaction
+- tamper-evident audit log rotation
 
 ## Read Order
 
@@ -126,13 +143,13 @@ For open-source positioning, read:
 
 ## Architecture Anchor
 
-The first real implementation should be the BOS Kernel:
+The implementation anchor is still the BOS Kernel:
 
 ```text
 Memory + Policy + Providers + Capabilities + Runs + Artifacts + Audit
 ```
 
-Build order:
+The original build order remains the right sequence for new runtime work and gap analysis:
 
 1. Config loader
 2. Memory initializer
@@ -294,13 +311,13 @@ When implementing runtime code later:
 
 ## First Useful Development Target
 
-The first valuable engineering target is:
+The first valuable engineering target was:
 
 ```bash
 bureau init
 ```
 
-It should create:
+It creates:
 
 - `.bureauos/bureauos.yaml`
 - `.bureauos/memory/ROOT.md`
@@ -311,7 +328,7 @@ It should create:
 - audit folder
 - first executive report
 
-The command should not call external providers or take external actions in the first version.
+The command should not call external providers or take external actions by default.
 
 ## Tone for Public Work
 

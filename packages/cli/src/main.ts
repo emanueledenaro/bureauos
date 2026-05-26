@@ -659,9 +659,9 @@ const handleProjectHealth: Handler = async (args) => {
   );
   for (const item of result.projects) {
     process.stdout.write(
-      `${item.project.slug.padEnd(28)}  ${item.risk.padEnd(12)}  score=${String(
-        item.score,
-      ).padEnd(4)}  next=${item.next_action}\n`,
+      `${item.project.slug.padEnd(28)}  ${item.risk.padEnd(12)}  score=${String(item.score).padEnd(
+        4,
+      )}  next=${item.next_action}\n`,
     );
   }
   return 0;
@@ -1125,7 +1125,8 @@ const handleGitHubCreatePr: Handler = async (args) => {
     test: { type: "string" },
   });
   if (typeof flags === "string") return err(`github create-pr: ${flags}`);
-  if (typeof flags.project !== "string") return err("github create-pr: --project <slug> is required");
+  if (typeof flags.project !== "string")
+    return err("github create-pr: --project <slug> is required");
   if (typeof flags.owner !== "string") return err("github create-pr: --owner required");
   if (typeof flags.repo !== "string") return err("github create-pr: --repo required");
   if (typeof flags.title !== "string") return err("github create-pr: --title required");
@@ -1645,8 +1646,7 @@ const handleCapabilitiesCheck: Handler = async (args) => {
   });
   if (typeof flags === "string") return err(`capabilities check: ${flags}`);
   if (typeof flags.agent !== "string") return err("capabilities check: --agent required");
-  if (typeof flags.capability !== "string")
-    return err("capabilities check: --capability required");
+  if (typeof flags.capability !== "string") return err("capabilities check: --capability required");
   if (typeof flags.action !== "string") return err("capabilities check: --action required");
 
   const config = await loadWorkspaceConfig(process.cwd()).catch(() => defaultConfig("freelancer"));
@@ -1655,9 +1655,7 @@ const handleCapabilitiesCheck: Handler = async (args) => {
     capabilityId: flags.capability,
     action: flags.action,
     ...(typeof flags.target === "string" ? { target: flags.target } : {}),
-    ...(typeof flags["policy-action"] === "string"
-      ? { policyAction: flags["policy-action"] }
-      : {}),
+    ...(typeof flags["policy-action"] === "string" ? { policyAction: flags["policy-action"] } : {}),
     ...(typeof flags.issue === "number" ? { linkedIssueNumbers: [flags.issue] } : {}),
     ...(typeof flags.test === "string" ? { testEvidence: [flags.test] } : {}),
     ...(typeof flags.approval === "string" ? { approvalIds: [flags.approval] } : {}),

@@ -281,11 +281,7 @@ export type {
 
 // Growth reviews
 export { GrowthReviewService } from "./growth/review.js";
-export type {
-  GrowthReviewDeps,
-  GrowthReviewInput,
-  GrowthReviewResult,
-} from "./growth/review.js";
+export type { GrowthReviewDeps, GrowthReviewInput, GrowthReviewResult } from "./growth/review.js";
 
 // Capability usage
 export { CapabilityUseService } from "./capabilities/usage.js";
@@ -294,6 +290,16 @@ export type {
   CapabilityUseInput,
   CapabilityUseResult,
 } from "./capabilities/usage.js";
+
+// Linear work scope ingestion
+export { LinearIssueIngestionService } from "./linear/issue-ingestion.js";
+export { linearIssueToRunScope } from "./linear/work-scope.js";
+export type {
+  LinearIssueIngestionDeps,
+  LinearIssueIngestionInput,
+  LinearIssueIngestionResult,
+} from "./linear/issue-ingestion.js";
+export type { LinearIssueRunScope, LinearIssueScopeInput } from "./linear/work-scope.js";
 
 // Provider auth
 export {

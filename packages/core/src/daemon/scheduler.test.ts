@@ -213,8 +213,7 @@ describe("Scheduler", () => {
     expect(realPlans).toHaveLength(1);
     const accountReviewRun = (await runs.list()).find(
       (run) =>
-        run.trigger_source === "client_account_review" &&
-        run.artifacts.includes(realPlans[0]!.id),
+        run.trigger_source === "client_account_review" && run.artifacts.includes(realPlans[0]!.id),
     );
     expect(accountReviewRun).toBeDefined();
   });
@@ -293,7 +292,8 @@ describe("Scheduler", () => {
     expect(verificationReports).toHaveLength(1);
     expect(
       lines.some(
-        (line) => line.includes("repository verification") && line.includes("checked 1 repositories"),
+        (line) =>
+          line.includes("repository verification") && line.includes("checked 1 repositories"),
       ),
     ).toBe(true);
 

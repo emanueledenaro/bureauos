@@ -3,13 +3,7 @@ import { cn } from "../../lib/utils";
 import { toneIndicatorClass, toneProgressClass, toneTextClass } from "../../lib/tone";
 import type { Workstream } from "../../lib/types";
 
-export function WorkstreamCard({
-  item,
-  laneIndex,
-}: {
-  item: Workstream;
-  laneIndex: number;
-}) {
+export function WorkstreamCard({ item, laneIndex }: { item: Workstream; laneIndex: number }) {
   return (
     <div className="relative">
       {laneIndex > 0 ? (

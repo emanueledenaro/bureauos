@@ -4,7 +4,13 @@ import { SectionShell } from "../components/dashboard/SectionShell";
 import { ResponsiveTable } from "../components/dashboard/ResponsiveTable";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
 import { Badge } from "../components/ui/badge";
 import { cn } from "../lib/utils";
 import { enabledCount } from "../lib/builders";
@@ -196,7 +202,10 @@ export function SettingsView({
   };
 
   return (
-    <SectionShell title="Settings" description="Provider authentication, autonomy policy, and routing.">
+    <SectionShell
+      title="Settings"
+      description="Provider authentication, autonomy policy, and routing."
+    >
       <div className="grid gap-3 rounded-lg border border-border/70 bg-surface-subtle/60 p-4 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
         <div className="flex flex-col gap-1">
           <label className="text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -281,9 +290,7 @@ export function SettingsView({
                 </Badge>
                 <Badge variant="outline">Default {connector.defaultModel}</Badge>
                 <Badge variant="outline">{connector.models.length} models</Badge>
-                {modelList ? (
-                  <Badge variant="outline">Models from {modelList.source}</Badge>
-                ) : null}
+                {modelList ? <Badge variant="outline">Models from {modelList.source}</Badge> : null}
                 {selectedModel ? (
                   <Badge variant="info">{formatLabel(selectedModel.budgetTier)} budget</Badge>
                 ) : null}
@@ -369,7 +376,9 @@ export function SettingsView({
           >
             <div className="text-[11px] text-muted-foreground">
               Model{" "}
-              <span className="font-mono text-foreground">{settings.supreme_coordinator.model}</span>
+              <span className="font-mono text-foreground">
+                {settings.supreme_coordinator.model}
+              </span>
             </div>
             <div className="mt-3 flex flex-wrap gap-1.5">
               <Badge variant="outline">

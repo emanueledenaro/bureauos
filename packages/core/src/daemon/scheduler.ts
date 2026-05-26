@@ -188,9 +188,7 @@ export class Scheduler {
                 accountPlans.plans.map((plan) => plan.id),
               );
             }
-            this.log(
-              `scheduler: generated ${accountPlans.plans.length} client account plan(s)`,
-            );
+            this.log(`scheduler: generated ${accountPlans.plans.length} client account plan(s)`);
           }
           this.log(
             `scheduler: ran ${job.name} -> ${run.id} (${run.status}, ${result.steps.length} steps)`,
@@ -219,29 +217,35 @@ export class Scheduler {
     }
 
     if (repositories.size === 0) {
-      const verification = await new ProjectRepositoryVerificationService(this.options.workspaceRoot, {
-        ...(this.options.coordinator
-          ? {
-              audit: this.options.coordinator.audit,
-              artifacts: this.options.coordinator.artifacts,
-            }
-          : {}),
-      }).verify();
+      const verification = await new ProjectRepositoryVerificationService(
+        this.options.workspaceRoot,
+        {
+          ...(this.options.coordinator
+            ? {
+                audit: this.options.coordinator.audit,
+                artifacts: this.options.coordinator.artifacts,
+              }
+            : {}),
+        },
+      ).verify();
       this.log(
         `scheduler: repository verification ${verification.report.id} found no linked GitHub repositories`,
       );
       return;
     }
 
-    const verification = await new ProjectRepositoryVerificationService(this.options.workspaceRoot, {
-      ...(this.options.githubClient ? { githubClient: this.options.githubClient } : {}),
-      ...(this.options.coordinator
-        ? {
-            audit: this.options.coordinator.audit,
-            artifacts: this.options.coordinator.artifacts,
-          }
-        : {}),
-    }).verify({
+    const verification = await new ProjectRepositoryVerificationService(
+      this.options.workspaceRoot,
+      {
+        ...(this.options.githubClient ? { githubClient: this.options.githubClient } : {}),
+        ...(this.options.coordinator
+          ? {
+              audit: this.options.coordinator.audit,
+              artifacts: this.options.coordinator.artifacts,
+            }
+          : {}),
+      },
+    ).verify({
       staleDays: this.options.config.triggers.thresholds.stale_pr_hours / 24,
     });
 

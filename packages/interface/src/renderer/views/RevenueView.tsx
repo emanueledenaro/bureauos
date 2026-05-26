@@ -2,7 +2,6 @@ import { Activity, DollarSign, Percent, WandSparkles } from "lucide-react";
 import { SectionShell } from "../components/dashboard/SectionShell";
 import { MetricTile } from "../components/dashboard/MetricTile";
 import { StatusPill } from "../components/dashboard/StatusPill";
-import { EmptyState } from "../components/dashboard/EmptyState";
 import { ActionBanner } from "../components/dashboard/ActionBanner";
 import { KpiBar } from "../components/dashboard/KpiBar";
 import { ViewToolbar } from "../components/dashboard/ViewToolbar";

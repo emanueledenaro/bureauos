@@ -124,7 +124,11 @@ export function QuickChatPopover({
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button size="sm" onClick={() => void send()} disabled={busy || !draft.trim()}>
-                  {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                  {busy ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Send className="h-3 w-3" />
+                  )}
                   {busy ? "Sending" : "Send"}
                 </Button>
               </TooltipTrigger>

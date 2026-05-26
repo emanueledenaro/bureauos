@@ -160,13 +160,29 @@ const CONNECTORS: readonly ProviderConnector[] = [
       {
         id: "gpt-5.4-mini",
         name: "GPT-5.4 Mini",
-        capabilities: ["chat", "reasoning", "coding", "vision", "streaming", "tool-use", "low-latency"],
+        capabilities: [
+          "chat",
+          "reasoning",
+          "coding",
+          "vision",
+          "streaming",
+          "tool-use",
+          "low-latency",
+        ],
         budgetTier: "standard",
       },
       {
         id: "gpt-5.4-nano",
         name: "GPT-5.4 Nano",
-        capabilities: ["chat", "reasoning", "vision", "streaming", "tool-use", "low-latency", "low-cost"],
+        capabilities: [
+          "chat",
+          "reasoning",
+          "vision",
+          "streaming",
+          "tool-use",
+          "low-latency",
+          "low-cost",
+        ],
         budgetTier: "low",
       },
       {
@@ -232,7 +248,15 @@ const CONNECTORS: readonly ProviderConnector[] = [
       {
         id: "gemini-3.5-flash",
         name: "Gemini 3.5 Flash",
-        capabilities: ["chat", "reasoning", "coding", "vision", "streaming", "tool-use", "low-latency"],
+        capabilities: [
+          "chat",
+          "reasoning",
+          "coding",
+          "vision",
+          "streaming",
+          "tool-use",
+          "low-latency",
+        ],
         budgetTier: "standard",
       },
       {

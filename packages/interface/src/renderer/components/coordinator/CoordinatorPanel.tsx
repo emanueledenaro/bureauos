@@ -190,10 +190,7 @@ export function CoordinatorPanel({
         </div>
       </header>
 
-      <div
-        ref={scrollRef}
-        className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4"
-      >
+      <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
         {messages.length === 0 && !busy ? (
           <EmptyState
             title="No coordinator thread yet"
@@ -218,7 +215,12 @@ export function CoordinatorPanel({
         ) : null}
 
         {error ? (
-          <ActionBanner tone="danger" title="Coordinator request failed" detail={error} onDismiss={() => setError(undefined)} />
+          <ActionBanner
+            tone="danger"
+            title="Coordinator request failed"
+            detail={error}
+            onDismiss={() => setError(undefined)}
+          />
         ) : null}
       </div>
 

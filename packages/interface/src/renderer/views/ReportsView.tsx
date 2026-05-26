@@ -1,7 +1,7 @@
 import { FileText } from "lucide-react";
 import { SectionShell } from "../components/dashboard/SectionShell";
 import { EmptyState } from "../components/dashboard/EmptyState";
-import { BaseCard, BaseCardHeader } from "../components/dashboard/BaseCard";
+import { BaseCard } from "../components/dashboard/BaseCard";
 import { Badge } from "../components/ui/badge";
 import { sortNewest } from "../lib/builders";
 import { formatLabel, timeAgo } from "../lib/format";

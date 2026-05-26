@@ -401,8 +401,9 @@ export class ClientIntelligenceService {
       const stalledOpportunities = clientOpportunities.filter(
         (opportunity) => opportunity.status === "stalled",
       ).length;
-      const repositoriesLinked = clientProjects.filter((project) => Boolean(project.repository))
-        .length;
+      const repositoriesLinked = clientProjects.filter((project) =>
+        Boolean(project.repository),
+      ).length;
       const risk = riskForClient({
         blockedProjects: blockedProjects.length,
         followUpDue,

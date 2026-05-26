@@ -343,11 +343,7 @@ describe("API server", () => {
         expectedMargin: 40,
       }),
     });
-    const clientPath = join(
-      workspacePaths(dir).clientsDir,
-      "pizzeria-aurora",
-      "CLIENT.md",
-    );
+    const clientPath = join(workspacePaths(dir).clientsDir, "pizzeria-aurora", "CLIENT.md");
     const clientDoc = await readFile(clientPath, "utf8");
     await writeFile(
       clientPath,
@@ -388,9 +384,7 @@ describe("API server", () => {
     expect(listed.status).toBe(200);
     const reports = (await listed.json()) as Array<{ type: string }>;
     expect(reports).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ type: "client-success-status-report" }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ type: "client-success-status-report" })]),
     );
 
     const audit = await readFile(workspacePaths(dir).auditLog, "utf8");

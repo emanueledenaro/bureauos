@@ -51,10 +51,7 @@ export function MessageBubble({ message }: { message: CoordinatorMessageRecord }
               )}
             >
               {message.attachments.map((attachment) => (
-                <div
-                  key={attachment.name}
-                  className="text-meta flex items-center gap-1.5"
-                >
+                <div key={attachment.name} className="text-meta flex items-center gap-1.5">
                   <FileText className="h-3 w-3 shrink-0" />
                   <span className="truncate">{attachment.name}</span>
                   <span className="text-muted-foreground/70">{formatBytes(attachment.size)}</span>

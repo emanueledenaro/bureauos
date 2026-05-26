@@ -281,10 +281,7 @@ export class AutonomousRetryService {
         retry_attempts: candidate.nextAttempt,
         last_retry_at: now.toISOString(),
         ...(retryRun.status === "completed" ? { retry_recovered_at: now.toISOString() } : {}),
-        retry_child_runs: [
-          ...stringList(candidate.run["retry_child_runs"]),
-          retryRun.id,
-        ],
+        retry_child_runs: [...stringList(candidate.run["retry_child_runs"]), retryRun.id],
       });
       knownSources.add(candidate.triggerSource);
       triggered.push({

@@ -6,10 +6,7 @@ import {
   type ClientIntelligenceSummary,
 } from "../clients/intelligence.js";
 import { workspacePaths } from "../paths.js";
-import {
-  OpportunityRegistry,
-  type OpportunityRecord,
-} from "../registries/opportunity.js";
+import { OpportunityRegistry, type OpportunityRecord } from "../registries/opportunity.js";
 import { GrowthMemoryService, type GrowthMemorySummary } from "./memory.js";
 
 export type GrowthContentDraftKind = "social" | "campaign" | "creative" | "ads";
@@ -170,7 +167,7 @@ function contextBlock(args: {
 - Brand memory: ${oneLine(args.brand, "not configured")}
 - Offer memory: ${oneLine(args.offer, "not configured")}
 - Channel memory: ${oneLine(args.channels, "not configured")}
-- Focus: ${args.focus ? args.focus : args.opportunity?.title ?? "general visibility"}
+- Focus: ${args.focus ? args.focus : (args.opportunity?.title ?? "general visibility")}
 - Opportunity: ${args.opportunity ? `${args.opportunity.title} (${formatMoney(args.opportunity.expected_value || 0)} pipeline)` : "(none)"}
 - Client memory: ${args.client ? `${args.client.client.name} (${args.client.risk}, value score ${args.client.value_score.score})` : "(none)"}
 `;
@@ -369,8 +366,7 @@ ${
   args.drafts.length
     ? args.drafts
         .map(
-          (draft) =>
-            `- ${draft.kind}: ${draft.title} (${draft.channel}) -> ${draft.artifact.id}`,
+          (draft) => `- ${draft.kind}: ${draft.title} (${draft.channel}) -> ${draft.artifact.id}`,
         )
         .join("\n")
     : "- No drafts created."
