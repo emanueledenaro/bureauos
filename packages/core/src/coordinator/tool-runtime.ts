@@ -9,7 +9,11 @@ import {
 } from "./intake.js";
 import type { CoordinatorImplementedToolAction, CoordinatorToolPlan } from "./tool-planning.js";
 
-export type CoordinatorToolExecutionSource = "provider_plan" | "safety_fallback" | "api_endpoint";
+export type CoordinatorToolExecutionSource =
+  | "provider_plan"
+  | "safety_fallback"
+  | "api_endpoint"
+  | "cli";
 
 export interface CoordinatorToolMeta {
   name: CoordinatorImplementedToolAction;

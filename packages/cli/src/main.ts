@@ -11,7 +11,7 @@ import {
   ClientRegistry,
   ClientSuccessStatusService,
   ConfigError,
-  CoordinatorIntakeService,
+  CoordinatorToolRuntime,
   DaemonStateStore,
   DaemonLifecycleSupervisor,
   GitHubIssueDraftService,
@@ -357,8 +357,8 @@ const handleIntake: Handler = async (args) => {
   if (typeof flags === "string") return err(`intake: ${flags}`);
   if (typeof flags.message !== "string") return err("intake: --message is required");
   const config = await loadWorkspaceConfig(process.cwd());
-  const service = new CoordinatorIntakeService(process.cwd(), { config });
-  const result = await service.process({
+  const runtime = new CoordinatorToolRuntime(process.cwd(), { config });
+  const execution = await runtime.executeCreateIntake({
     message: flags.message,
     source: typeof flags.source === "string" ? flags.source : "cli",
     ...(typeof flags.client === "string" ? { clientName: flags.client } : {}),
@@ -366,7 +366,9 @@ const handleIntake: Handler = async (args) => {
     ...(typeof flags.industry === "string" ? { industry: flags.industry } : {}),
     ...(typeof flags.value === "number" ? { expectedValue: flags.value } : {}),
     ...(typeof flags.margin === "number" ? { expectedMargin: flags.margin } : {}),
+    toolSource: "cli",
   });
+  const result = execution.result;
 
   process.stdout.write(`bureau: ${result.summary}\n`);
   process.stdout.write(`client:      ${result.client.id} (${result.client.slug})\n`);

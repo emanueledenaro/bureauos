@@ -11,7 +11,7 @@ describe("coordinator tool planning contract", () => {
     const inventory = listCoordinatorMutationPathInventory();
     const classes = new Set(inventory.map((item) => item.classification));
 
-    expect(classes).toEqual(new Set(["agentic_tool_path", "safety_fallback", "legacy"]));
+    expect(classes).toEqual(new Set(["agentic_tool_path", "safety_fallback"]));
     expect(inventory).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -31,7 +31,7 @@ describe("coordinator tool planning contract", () => {
         }),
         expect.objectContaining({
           id: "cli.bureau_intake",
-          classification: "legacy",
+          classification: "agentic_tool_path",
           tool: "create_intake",
         }),
       ]),

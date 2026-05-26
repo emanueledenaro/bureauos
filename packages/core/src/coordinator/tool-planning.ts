@@ -144,10 +144,10 @@ export const COORDINATOR_MUTATION_PATH_INVENTORY: readonly CoordinatorMutationPa
     {
       id: "cli.bureau_intake",
       entrypoint: "bureau intake",
-      classification: "legacy",
+      classification: "agentic_tool_path",
       tool: "create_intake",
       rationale:
-        "CLI command still calls CoordinatorIntakeService directly and should become an explicit tool-runtime entrypoint.",
+        "CLI command builds an explicit create_intake tool execution and runs it through the shared Coordinator tool runtime.",
     },
   ];
 

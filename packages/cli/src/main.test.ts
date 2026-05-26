@@ -115,6 +115,7 @@ describe("bureau cli", () => {
 
     const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
     expect(audit).toContain("coordinator.intake.completed");
+    expect(audit).toContain("coordinator_tool.create_intake");
   });
 
   it("generates business reports from CLI", async () => {
