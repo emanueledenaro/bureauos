@@ -104,7 +104,7 @@ export function AgentLayer({
     setOpen(true);
   };
   return (
-    <section className="border-t border-border/60 bg-surface px-3 py-2 sm:px-5">
+    <section className="min-w-0 border-t border-border/60 bg-surface px-3 py-2 sm:px-5">
       <div className="flex items-center gap-3 sm:hidden">
         <Button
           variant="outline"
@@ -122,12 +122,12 @@ export function AgentLayer({
           <span className="text-muted-foreground">{agents.length}</span>
         </Button>
       </div>
-      <div className="hidden h-10 items-center gap-4 sm:flex">
-        <div className="hidden min-w-[180px] md:block">
+      <div className="hidden h-10 min-w-0 items-center gap-4 sm:flex">
+        <div className="hidden min-w-[180px] shrink-0 md:block">
           <div className="text-[12px] font-semibold text-foreground">Agent Layer</div>
           <div className="text-[10px] text-muted-foreground">{agents.length} autonomous roles</div>
         </div>
-        <div className="flex flex-1 items-center gap-2 overflow-x-auto no-scrollbar gradient-mask-fade">
+        <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto no-scrollbar gradient-mask-fade">
           {visible.length > 0 ? (
             visible.map((agent) => {
               const Icon = roleIcon(agent.id);
