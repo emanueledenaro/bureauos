@@ -11,10 +11,12 @@ import type { BureauConfig } from "../config/schema.js";
 import { defaultConfig } from "../config/loader.js";
 import { CoordinatorGlobalMemoryService } from "../memory/global.js";
 import { workspacePaths } from "../paths.js";
+import { PolicyEngine } from "../policy/engine.js";
 import { ApprovalRegistry, type ApprovalRecord } from "../registries/approval.js";
 import { ClientRegistry, type ClientRecord } from "../registries/client.js";
 import { OpportunityRegistry, type OpportunityRecord } from "../registries/opportunity.js";
 import { ProjectRegistry, type ProjectRecord } from "../registries/project.js";
+import { RunEngine, type RunRecord } from "../runs/engine.js";
 import {
   CoordinatorIntakeService,
   isClientOnlySaveRequest,
@@ -76,6 +78,7 @@ export interface CoordinatorChatDeps {
   opportunities?: OpportunityRegistry;
   approvals?: ApprovalRegistry;
   artifacts?: ArtifactStore;
+  runs?: RunEngine;
   memory?: CoordinatorGlobalMemoryService;
   audit?: AuditLog;
   tools?: CoordinatorToolRuntime;
@@ -110,6 +113,14 @@ interface ProjectStatusLookup {
   artifacts: ArtifactRecord[];
 }
 
+interface CompanyStatusSnapshot {
+  clients: ClientRecord[];
+  projects: ProjectRecord[];
+  opportunities: OpportunityRecord[];
+  approvals: ApprovalRecord[];
+  runs: RunRecord[];
+}
+
 const DEFAULT_PROVIDER_TIMEOUT_MS = 12_000;
 const DEFAULT_TOOL_PLANNING_TIMEOUT_MS = 3_000;
 const DEFAULT_TOOL_PLANNING_DEGRADED_TTL_MS = 30_000;
@@ -124,6 +135,12 @@ const toolPlanningDegradedProviders = new Map<string, ToolPlanningDegradedState>
 function includesAny(message: string, words: readonly string[]): boolean {
   const lower = message.toLowerCase();
   return words.some((word) => lower.includes(word));
+}
+
+function formatEuro(value: number): string {
+  return `€${Math.round(value)
+    .toString()
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
 }
 
 function normalizeReferenceText(input: string): string {
@@ -357,6 +374,38 @@ function hasStatusIntent(message: string): boolean {
     "novità",
     "aggiornament",
   ].some((signal) => lower.includes(signal));
+}
+
+function isCompanyStatusQuestion(
+  message: string,
+  attachments: readonly CoordinatorAttachmentInput[],
+): boolean {
+  if (attachments.length > 0) return false;
+  const lower = message.toLowerCase().trim();
+  if (!hasStatusIntent(lower)) return false;
+  const specificWorkSignals = [
+    "app",
+    "cliente",
+    "client",
+    "lavoro",
+    "opportunit",
+    "project",
+    "progetto",
+    "richiesta",
+    "sito",
+    "website",
+  ];
+  if (specificWorkSignals.some((signal) => lower.includes(signal))) return false;
+  return includesAny(lower, [
+    "come siamo messi",
+    "dove siamo",
+    "a che punto",
+    "stato",
+    "status",
+    "cosa manca",
+    "che succede",
+    "aggiornament",
+  ]);
 }
 
 function isProjectStatusQuestion(
@@ -731,6 +780,7 @@ export class CoordinatorChatService {
   private readonly opportunities: OpportunityRegistry;
   private readonly approvals: ApprovalRegistry;
   private readonly artifacts: ArtifactStore;
+  private readonly runs: RunEngine;
   private readonly memory: CoordinatorGlobalMemoryService;
   private readonly audit: AuditLog;
   private readonly tools: CoordinatorToolRuntime;
@@ -755,6 +805,13 @@ export class CoordinatorChatService {
     this.artifacts = deps.artifacts ?? new ArtifactStore(workspaceRoot);
     this.memory = deps.memory ?? new CoordinatorGlobalMemoryService(workspaceRoot);
     this.audit = deps.audit ?? new AuditLog(workspacePaths(workspaceRoot).auditLog);
+    this.runs =
+      deps.runs ??
+      new RunEngine(workspaceRoot, {
+        audit: this.audit,
+        artifacts: this.artifacts,
+        policy: new PolicyEngine(this.config, this.approvals),
+      });
     this.tools =
       deps.tools ??
       new CoordinatorToolRuntime(workspaceRoot, {
@@ -900,6 +957,98 @@ export class CoordinatorChatService {
     };
   }
 
+  private async companyStatusSnapshot(): Promise<CompanyStatusSnapshot> {
+    const [clients, projects, opportunities, approvals, runs] = await Promise.all([
+      this.clients.list(),
+      this.projects.list(),
+      this.opportunities.list(),
+      this.approvals.listPending(),
+      this.runs.list(),
+    ]);
+    return { clients, projects, opportunities, approvals, runs };
+  }
+
+  private companyStatusAnswer(snapshot: CompanyStatusSnapshot): string {
+    const openProjects = snapshot.projects.filter(
+      (project) => project.status !== "cancelled" && project.status !== "delivered",
+    );
+    const blockedProjects = openProjects.filter((project) => project.status === "blocked");
+    const openOpportunities = snapshot.opportunities.filter(
+      (opportunity) => !["lost", "won"].includes(opportunity.status),
+    );
+    const pipelineValue = openOpportunities.reduce(
+      (sum, opportunity) => sum + (opportunity.expected_value || 0),
+      0,
+    );
+    const runsNeedingAttention = snapshot.runs.filter((run) =>
+      ["blocked", "needs_human", "failed"].includes(run.status),
+    );
+    const nextMove =
+      snapshot.approvals.length > 0
+        ? "Prossima mossa: chiudo prima le decisioni owner aperte, poi mando avanti delivery o revenue."
+        : blockedProjects.length > 0
+          ? "Prossima mossa: sblocco i progetti fermi e aggiorno priorità operative."
+          : openOpportunities.length > 0
+            ? "Prossima mossa: porto avanti l'opportunità più vicina a proposta, consegna o incasso."
+            : "Prossima mossa: creare o importare una nuova opportunità qualificata.";
+
+    return [
+      `Siamo così: ${snapshot.clients.length} clienti attivi/lead, ${openProjects.length} progetti aperti, ${openOpportunities.length} opportunità aperte (${formatEuro(pipelineValue)} pipeline).`,
+      `Rischio operativo: ${snapshot.approvals.length} decisioni owner pending, ${blockedProjects.length} progetti bloccati, ${runsNeedingAttention.length} run da attenzione.`,
+      nextMove,
+    ].join("\n");
+  }
+
+  private async answerCompanyStatusQuestion(input: {
+    message: string;
+    attachments: readonly CoordinatorAttachmentInput[];
+    memory: CoordinatorChatResult["memory"];
+  }): Promise<CoordinatorChatResult> {
+    const snapshot = await this.companyStatusSnapshot();
+    const provider = providerMeta("unavailable", undefined, undefined, "company_status_lookup");
+    const answer = this.companyStatusAnswer(snapshot);
+    await this.audit.append({
+      actor: "supreme_coordinator",
+      action: "coordinator.company_status_lookup",
+      target: "company",
+      capability: "coordinator.memory_read",
+      result: "ok",
+    });
+    const { ownerMessage, coordinatorMessage } = requireMessagePair(
+      await this.messages.appendMany([
+        {
+          role: "owner",
+          text: input.message,
+          attachments: messageAttachments(input.attachments),
+          meta: { mode: "answer" },
+        },
+        {
+          role: "coordinator",
+          text: answer,
+          meta: {
+            mode: "answer",
+            provider,
+            memory: input.memory,
+            companyStatus: {
+              clients: snapshot.clients.length,
+              projects: snapshot.projects.length,
+              opportunities: snapshot.opportunities.length,
+              approvals: snapshot.approvals.length,
+              runs: snapshot.runs.length,
+            },
+          },
+        },
+      ]),
+    );
+    return {
+      mode: "answer",
+      ownerMessage,
+      coordinatorMessage,
+      provider,
+      memory: input.memory,
+    };
+  }
+
   private projectStatusAnswer(message: string, lookup: ProjectStatusLookup): string {
     if (!lookup.client && !lookup.project) {
       return [
@@ -1004,6 +1153,7 @@ export class CoordinatorChatService {
     const attachments = input.attachments ?? [];
 
     if (
+      isCompanyStatusQuestion(message, attachments) ||
       isProjectStatusQuestion(message, attachments) ||
       hasCoordinatorToolIntent(message, attachments) ||
       isLowContextMessage(message, attachments)
@@ -1104,6 +1254,10 @@ export class CoordinatorChatService {
     let plannedIntakeProvider: CoordinatorChatProviderMeta | undefined;
     let plannedIntakePlan: CoordinatorToolPlan | undefined;
     let toolPlanningProvider: CoordinatorChatProviderMeta | undefined;
+    if (isCompanyStatusQuestion(message, attachments)) {
+      return this.answerCompanyStatusQuestion({ message, attachments, memory });
+    }
+
     if (isProjectStatusQuestion(message, attachments)) {
       return this.answerProjectStatusQuestion({ message, attachments, memory });
     }

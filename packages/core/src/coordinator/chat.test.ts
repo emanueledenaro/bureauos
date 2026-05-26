@@ -484,6 +484,64 @@ describe("CoordinatorChatService", () => {
     await expect(auditText(dir)).resolves.not.toContain("coordinator_tool.create_intake");
   });
 
+  it("answers generic company status questions from BOS registries without creating intake", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    const clients = new ClientRegistry(dir);
+    const projects = new ProjectRegistry(dir);
+    const opportunities = new OpportunityRegistry(dir);
+    const approvals = new ApprovalRegistry(dir);
+    const client = await clients.create({ name: "Pizzeria Amodeo" });
+    await projects.create({
+      name: "Pizzeria Amodeo Website",
+      clientId: client.id,
+      status: "intake",
+      stack: "HTML CSS",
+    });
+    const opportunity = await opportunities.create({
+      title: "Website for Pizzeria Amodeo",
+      source: "owner_chat",
+      clientId: client.id,
+      expectedValue: 4_500,
+    });
+    await approvals.request({
+      action: "send_final_proposals",
+      actor: "supreme_coordinator",
+      target: opportunity.id,
+      scope: "Send final proposal for Website for Pizzeria Amodeo",
+      riskLevel: "high",
+    });
+    const service = new CoordinatorChatService(dir, { config: defaultConfig("freelancer") });
+
+    const result = await service.process({
+      source: "test",
+      message: "come siamo messi?",
+    });
+
+    expect(result.mode).toBe("answer");
+    expect(result.result).toBeUndefined();
+    expect(result.provider.reason).toBe("company_status_lookup");
+    expect(result.coordinatorMessage.text).toContain("1 clienti attivi/lead");
+    expect(result.coordinatorMessage.text).toContain("1 progetti aperti");
+    expect(result.coordinatorMessage.text).toContain("1 opportunità aperte");
+    expect(result.coordinatorMessage.text).toContain("€4.500");
+    expect(result.coordinatorMessage.text).toContain("1 decisioni owner pending");
+    expect(result.coordinatorMessage.text).toContain("Prossima mossa");
+    expect(result.coordinatorMessage.text).not.toContain("Non trovo un lavoro salvato");
+    expect(result.coordinatorMessage.text).not.toContain("Non ho creato");
+    expect(result.coordinatorMessage.meta?.companyStatus).toMatchObject({
+      clients: 1,
+      projects: 1,
+      opportunities: 1,
+      approvals: 1,
+    });
+    await expect(clients.list()).resolves.toHaveLength(1);
+    await expect(projects.list()).resolves.toHaveLength(1);
+    await expect(opportunities.list()).resolves.toHaveLength(1);
+    await expect(approvals.listPending()).resolves.toHaveLength(1);
+    await expect(auditText(dir)).resolves.toContain("coordinator.company_status_lookup");
+    await expect(auditText(dir)).resolves.not.toContain("coordinator_tool.create_intake");
+  });
+
   it("lets the provider choose the create_intake tool before opening project scope", async () => {
     const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
     let providerWasAsked = false;
