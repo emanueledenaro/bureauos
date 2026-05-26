@@ -117,6 +117,52 @@ test.describe("Operating Room memory browser", () => {
   });
 });
 
+test.describe("Operating Room portfolio modes", () => {
+  let workspace: InterfaceWorkspace;
+
+  test.beforeAll(async () => {
+    workspace = await createInterfaceWorkspace("seeded");
+  });
+
+  test.afterAll(async () => {
+    await workspace.close();
+  });
+
+  test("renders workload gantt kanban tabs and stable filters from local state", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openWorkspace(page, workspace);
+    await openDesktopView(page, "Home");
+
+    const main = page.locator("main");
+    await main.getByRole("tab", { name: /Workload/i }).click();
+    await expect(main).toContainText("assigned record");
+    await expect(main).toContainText("Development");
+    await expectNoHorizontalOverflow(page);
+
+    await main.getByRole("tab", { name: /Gantt/i }).click();
+    await expect(main).toContainText("Timeline evidence");
+    await expect(main).toContainText("Acme Website Refresh");
+    await expectNoHorizontalOverflow(page);
+
+    await main.getByRole("tab", { name: /Kanban/i }).click();
+    await expect(main).toContainText("In Progress");
+    await expect(main).toContainText("Feature");
+    await expectNoHorizontalOverflow(page);
+
+    await main.getByLabel("Status filter").click();
+    await page.getByRole("option", { name: "Completed" }).click();
+    await expect(main).toContainText("Completed");
+    await expectNoHorizontalOverflow(page);
+
+    await main.getByRole("button", { name: "Reset", exact: true }).click();
+    await main.getByRole("button", { name: /Active risk only/i }).click();
+    await expect(main).toContainText("Blocked");
+    await expectNoHorizontalOverflow(page);
+  });
+});
+
 test.describe("Operating Room policy explain", () => {
   let workspace: InterfaceWorkspace;
 
