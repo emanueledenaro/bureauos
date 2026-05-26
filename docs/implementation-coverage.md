@@ -2,6 +2,11 @@
 
 This file maps the BureauOS documentation to runtime functionality.
 
+The release readiness source of truth is
+[`docs/v1-acceptance-checklist.md`](./v1-acceptance-checklist.md). Use this
+coverage file for capability status detail, and use the v1 checklist to decide
+whether a capability is required, deferred, or v1+.
+
 Every major capability described in the docs must become one of:
 
 - kernel module

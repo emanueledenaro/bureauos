@@ -53,7 +53,8 @@ After `bureau init` the directory contains:
 - `approvals/` — pending and resolved approval records
 
 See `docs/bos-kernel-infrastructure.md` for the full layout and
-[`BACKLOG.md`](./BACKLOG.md) for what's shipped and what's next.
+[`BACKLOG.md`](./BACKLOG.md) for what's shipped and what's next. v1 readiness is
+tracked in [`docs/v1-acceptance-checklist.md`](./docs/v1-acceptance-checklist.md).
 
 ### Build, test, typecheck
 
