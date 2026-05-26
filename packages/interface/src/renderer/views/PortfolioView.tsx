@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import {
+  Archive,
   CircleAlert,
   KanbanSquare,
   LayoutGrid,
@@ -66,6 +67,7 @@ interface PortfolioFilters {
   status: string;
   agent: string;
   riskOnly: boolean;
+  includeClosed: boolean;
 }
 
 const ALL = "all";
@@ -74,6 +76,7 @@ const DEFAULT_FILTERS: PortfolioFilters = {
   status: ALL,
   agent: ALL,
   riskOnly: false,
+  includeClosed: false,
 };
 
 const ACTIVE_RUN_STATUSES = new Set([
@@ -88,6 +91,15 @@ const ACTIVE_RUN_STATUSES = new Set([
 const RISK_RUN_STATUSES = new Set(["needs_human", "blocked", "failed"]);
 const RISK_OPPORTUNITY_STATUSES = new Set(["stalled"]);
 const GANTT_GRID_TEMPLATE = "minmax(160px, 260px) minmax(0, 1fr)";
+const CLOSED_PORTFOLIO_STATUSES = new Set([
+  "cancelled",
+  "canceled",
+  "completed",
+  "delivered",
+  "done",
+  "lost",
+  "won",
+]);
 
 export function PortfolioView({ state }: { state: DashboardState }) {
   const [tab, setTab] = useState<PortfolioTab>("map");
@@ -95,20 +107,26 @@ export function PortfolioView({ state }: { state: DashboardState }) {
   const lanes = useMemo(() => buildPortfolioLanes(state), [state]);
   const capacitySegments = useMemo(() => buildCapacitySegments(state), [state]);
   const records = useMemo(() => buildPortfolioRecords(state), [state]);
+  const scopedRecords = useMemo(
+    () => (filters.includeClosed ? records : records.filter((record) => !isClosedRecord(record))),
+    [filters.includeClosed, records],
+  );
   const filteredRecords = useMemo(
-    () => records.filter((record) => matchesFilters(record, filters)),
-    [filters, records],
+    () => scopedRecords.filter((record) => matchesFilters(record, filters)),
+    [filters, scopedRecords],
   );
   const filteredLanes = useMemo(
     () => filterPortfolioLanes(lanes, filteredRecords),
     [filteredRecords, lanes],
   );
   const filterOptions = useMemo(() => buildFilterOptions(records), [records]);
+  const closedRecordCount = records.filter(isClosedRecord).length;
   const activeFilterCount = [
     filters.client !== ALL,
     filters.status !== ALL,
     filters.agent !== ALL,
     filters.riskOnly,
+    filters.includeClosed,
   ].filter(Boolean).length;
   const mapStreamCount = filteredLanes.reduce((sum, lane) => sum + lane.streams.length, 0);
 
@@ -165,6 +183,7 @@ export function PortfolioView({ state }: { state: DashboardState }) {
             options={filterOptions}
             activeFilterCount={activeFilterCount}
             resultCount={filteredRecords.length}
+            closedRecordCount={closedRecordCount}
             onChange={setFilters}
             onReset={() => setFilters(DEFAULT_FILTERS)}
           />
@@ -176,7 +195,9 @@ export function PortfolioView({ state }: { state: DashboardState }) {
               lanes={filteredLanes}
               loading={state.loading}
               filtered={activeFilterCount > 0}
+              includeClosed={filters.includeClosed}
               visibleStreams={mapStreamCount}
+              closedRecordCount={closedRecordCount}
             />
           </TabsContent>
 
@@ -204,6 +225,7 @@ function PortfolioFilterBar({
   options,
   activeFilterCount,
   resultCount,
+  closedRecordCount,
   onChange,
   onReset,
 }: {
@@ -215,38 +237,48 @@ function PortfolioFilterBar({
   };
   activeFilterCount: number;
   resultCount: number;
+  closedRecordCount: number;
   onChange: (filters: PortfolioFilters) => void;
   onReset: () => void;
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-      <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
         <FilterSelect
           label="Client"
           value={filters.client}
           onValueChange={(client) => onChange({ ...filters, client })}
-          items={[{ value: ALL, label: "All clients" }, ...options.clients.map((client) => ({
-            value: client.id,
-            label: client.label,
-          }))]}
+          items={[
+            { value: ALL, label: "All clients" },
+            ...options.clients.map((client) => ({
+              value: client.id,
+              label: client.label,
+            })),
+          ]}
         />
         <FilterSelect
           label="Status"
           value={filters.status}
           onValueChange={(status) => onChange({ ...filters, status })}
-          items={[{ value: ALL, label: "All statuses" }, ...options.statuses.map((status) => ({
-            value: status,
-            label: formatLabel(status),
-          }))]}
+          items={[
+            { value: ALL, label: "All statuses" },
+            ...options.statuses.map((status) => ({
+              value: status,
+              label: formatLabel(status),
+            })),
+          ]}
         />
         <FilterSelect
           label="Agent"
           value={filters.agent}
           onValueChange={(agent) => onChange({ ...filters, agent })}
-          items={[{ value: ALL, label: "All agents" }, ...options.agents.map((agent) => ({
-            value: agent,
-            label: formatLabel(agent),
-          }))]}
+          items={[
+            { value: ALL, label: "All agents" },
+            ...options.agents.map((agent) => ({
+              value: agent,
+              label: formatLabel(agent),
+            })),
+          ]}
         />
         <div className="flex flex-col gap-1">
           <div className="text-eyebrow">Risk</div>
@@ -260,10 +292,22 @@ function PortfolioFilterBar({
             Active risk only
           </Button>
         </div>
+        <div className="flex flex-col gap-1">
+          <div className="text-eyebrow">Scope</div>
+          <Button
+            variant={filters.includeClosed ? "default" : "outline"}
+            size="sm"
+            className="h-8 justify-start"
+            onClick={() => onChange({ ...filters, includeClosed: !filters.includeClosed })}
+          >
+            <Archive className="h-3.5 w-3.5" />
+            {filters.includeClosed ? "Showing closed" : "Active only"}
+          </Button>
+        </div>
       </div>
       <div className="flex items-center justify-between gap-3 lg:justify-end">
         <span className="text-meta">
-          {resultCount} record{resultCount === 1 ? "" : "s"}
+          {resultCount} record{resultCount === 1 ? "" : "s"} · {closedRecordCount} closed
         </span>
         <Button variant="ghost" size="sm" disabled={activeFilterCount === 0} onClick={onReset}>
           Reset
@@ -307,22 +351,34 @@ function PortfolioMapContent({
   lanes,
   loading,
   filtered,
+  includeClosed,
   visibleStreams,
+  closedRecordCount,
 }: {
   lanes: PortfolioLane[];
   loading: boolean;
   filtered: boolean;
+  includeClosed: boolean;
   visibleStreams: number;
+  closedRecordCount: number;
 }) {
   if (lanes.length === 0) {
     return (
       <EmptyState
-        title={loading ? "Loading company memory" : filtered ? "No matching workstreams" : "No active workstreams"}
+        title={
+          loading
+            ? "Loading company memory"
+            : filtered
+              ? "No matching workstreams"
+              : "No active workstreams"
+        }
         description={
           loading
             ? "The Operating Room is reading local BureauOS state."
             : filtered
-              ? "Adjust filters to include more clients, statuses, agents, or risk states."
+              ? includeClosed || closedRecordCount === 0
+                ? "Adjust filters to include more clients, statuses, agents, or risk states."
+                : "Show closed work to include completed, cancelled, won, or lost records."
               : "Send an intake message to create the first client, project, opportunity, and approval trail."
         }
       />
@@ -334,8 +390,14 @@ function PortfolioMapContent({
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="text-section-title">Portfolio Map</h3>
-          <p className="text-meta mt-0.5">{visibleStreams} visible project and revenue streams.</p>
+          <p className="text-meta mt-0.5">
+            {visibleStreams} visible {includeClosed ? "total" : "active"} project and revenue
+            streams.
+          </p>
         </div>
+        {!includeClosed && closedRecordCount > 0 ? (
+          <Badge variant="outline">{closedRecordCount} closed hidden</Badge>
+        ) : null}
       </div>
       <div className="grid grid-cols-1 gap-x-7 gap-y-4 md:grid-cols-2 xl:grid-cols-4">
         {lanes.map((lane, laneIndex) => (
@@ -399,7 +461,10 @@ function WorkloadContent({ records }: { records: PortfolioRecord[] }) {
           </div>
           <div className="flex flex-col gap-2">
             {group.records.slice(0, 5).map((record) => (
-              <PortfolioRecordRow key={`${group.agent}:${record.kind}:${record.id}`} record={record} />
+              <PortfolioRecordRow
+                key={`${group.agent}:${record.kind}:${record.id}`}
+                record={record}
+              />
             ))}
           </div>
         </BaseCard>
@@ -511,13 +576,7 @@ function KanbanContent({ records }: { records: PortfolioRecord[] }) {
   );
 }
 
-function PortfolioRecordRow({
-  record,
-  framed,
-}: {
-  record: PortfolioRecord;
-  framed?: boolean;
-}) {
+function PortfolioRecordRow({ record, framed }: { record: PortfolioRecord; framed?: boolean }) {
   return (
     <div
       className={cn(
@@ -542,9 +601,7 @@ function PortfolioRecordRow({
             style={{ width: `${record.progress}%` }}
           />
         </div>
-        <span className="w-9 text-right text-[10px] text-muted-foreground">
-          {record.progress}%
-        </span>
+        <span className="w-9 text-right text-[10px] text-muted-foreground">{record.progress}%</span>
       </div>
       <div className="mt-1 truncate text-[10px] text-muted-foreground">{record.meta}</div>
     </div>
@@ -609,7 +666,9 @@ function buildPortfolioRecords(state: DashboardState): PortfolioRecord[] {
       clientName: clientName(state.clients, project.client_id),
       projectId: project.id,
       agents,
-      risk: project.status === "blocked" || hasMatchingApproval(project.name, project.id, state.approvals),
+      risk:
+        project.status === "blocked" ||
+        hasMatchingApproval(project.name, project.id, state.approvals),
       meta: project.repository || project.stack || "Project memory",
       created: project.created,
       updated: project.updated,
@@ -617,45 +676,49 @@ function buildPortfolioRecords(state: DashboardState): PortfolioRecord[] {
     };
   });
 
-  const opportunityRecords = state.opportunities.map((opportunity): PortfolioRecord => ({
-    id: opportunity.id,
-    kind: "opportunity",
-    title: opportunity.title,
-    status: opportunity.status,
-    tone: opportunityTone(opportunity.status),
-    progress: opportunityProgress(opportunity.status),
-    clientId: opportunity.client_id,
-    clientName: clientName(state.clients, opportunity.client_id),
-    agents: ["sales", "pricing", "project_manager"],
-    risk:
-      RISK_OPPORTUNITY_STATUSES.has(opportunity.status) ||
-      hasMatchingApproval(opportunity.title, opportunity.id, state.approvals),
-    value: opportunity.expected_value,
-    meta:
-      opportunity.next_action ||
-      `${formatMoney(opportunity.expected_value || 0)} · ${Math.round(opportunity.expected_margin || 0)}% margin`,
-    created: opportunity.created,
-    updated: opportunity.updated,
-    sortDate: opportunity.updated ?? opportunity.created,
-  }));
+  const opportunityRecords = state.opportunities.map(
+    (opportunity): PortfolioRecord => ({
+      id: opportunity.id,
+      kind: "opportunity",
+      title: opportunity.title,
+      status: opportunity.status,
+      tone: opportunityTone(opportunity.status),
+      progress: opportunityProgress(opportunity.status),
+      clientId: opportunity.client_id,
+      clientName: clientName(state.clients, opportunity.client_id),
+      agents: ["sales", "pricing", "project_manager"],
+      risk:
+        RISK_OPPORTUNITY_STATUSES.has(opportunity.status) ||
+        hasMatchingApproval(opportunity.title, opportunity.id, state.approvals),
+      value: opportunity.expected_value,
+      meta:
+        opportunity.next_action ||
+        `${formatMoney(opportunity.expected_value || 0)} · ${Math.round(opportunity.expected_margin || 0)}% margin`,
+      created: opportunity.created,
+      updated: opportunity.updated,
+      sortDate: opportunity.updated ?? opportunity.created,
+    }),
+  );
 
-  const runRecords = state.runs.map((run): PortfolioRecord => ({
-    id: run.id,
-    kind: "run",
-    title: `${formatLabel(run.type)} · ${run.scope}`,
-    status: run.status,
-    tone: runTone(run.status),
-    progress: ACTIVE_RUN_STATUSES.has(run.status) ? 55 : run.status === "completed" ? 100 : 25,
-    clientId: run.client_id,
-    clientName: run.client_id ? clientName(state.clients, run.client_id) : "No client",
-    projectId: run.project_id,
-    agents: uniqueCompact([run.created_by, "supreme_coordinator"]),
-    risk: RISK_RUN_STATUSES.has(run.status),
-    meta: run.source_work_item_id || run.trigger_source || run.trigger_type || "BureauOS run",
-    created: run.created,
-    updated: run.updated ?? run.completed,
-    sortDate: run.updated ?? run.created,
-  }));
+  const runRecords = state.runs.map(
+    (run): PortfolioRecord => ({
+      id: run.id,
+      kind: "run",
+      title: `${formatLabel(run.type)} · ${run.scope}`,
+      status: run.status,
+      tone: runTone(run.status),
+      progress: ACTIVE_RUN_STATUSES.has(run.status) ? 55 : run.status === "completed" ? 100 : 25,
+      clientId: run.client_id,
+      clientName: run.client_id ? clientName(state.clients, run.client_id) : "No client",
+      projectId: run.project_id,
+      agents: uniqueCompact([run.created_by, "supreme_coordinator"]),
+      risk: RISK_RUN_STATUSES.has(run.status),
+      meta: run.source_work_item_id || run.trigger_source || run.trigger_type || "BureauOS run",
+      created: run.created,
+      updated: run.updated ?? run.completed,
+      sortDate: run.updated ?? run.created,
+    }),
+  );
 
   return [...projectRecords, ...opportunityRecords, ...runRecords].sort((left, right) =>
     (right.sortDate ?? "").localeCompare(left.sortDate ?? ""),
@@ -668,6 +731,10 @@ function matchesFilters(record: PortfolioRecord, filters: PortfolioFilters): boo
   if (filters.agent !== ALL && !record.agents.includes(filters.agent)) return false;
   if (filters.riskOnly && !record.risk) return false;
   return true;
+}
+
+function isClosedRecord(record: PortfolioRecord): boolean {
+  return CLOSED_PORTFOLIO_STATUSES.has(record.status.toLowerCase());
 }
 
 function buildFilterOptions(records: PortfolioRecord[]): {
@@ -731,8 +798,9 @@ function buildWorkloadGroups(records: PortfolioRecord[]): {
       agent,
       records: groupRecords,
       riskCount: groupRecords.filter((record) => record.risk).length,
-      activeCount: groupRecords.filter((record) => !["completed", "won", "lost", "delivered"].includes(record.status))
-        .length,
+      activeCount: groupRecords.filter(
+        (record) => !["completed", "won", "lost", "delivered"].includes(record.status),
+      ).length,
       runCount: groupRecords.filter((record) => record.kind === "run").length,
       clientCount: new Set(groupRecords.map((record) => record.clientId).filter(Boolean)).size,
     }))
@@ -780,7 +848,10 @@ function buildStatusGroups(records: PortfolioRecord[]): {
       tone: highestTone(groupRecords),
       records: groupRecords,
     }))
-    .sort((left, right) => right.records.length - left.records.length || left.status.localeCompare(right.status));
+    .sort(
+      (left, right) =>
+        right.records.length - left.records.length || left.status.localeCompare(right.status),
+    );
 }
 
 function highestTone(records: PortfolioRecord[]): Tone {
@@ -795,10 +866,16 @@ function hasMatchingApproval(title: string, id: string, approvals: ApprovalRecor
   const needle = `${title} ${id}`.toLowerCase();
   return approvals.some((approval) => {
     const haystack = `${approval.target} ${approval.scope} ${approval.run_id ?? ""}`.toLowerCase();
-    return title ? haystack.includes(title.toLowerCase()) || needle.includes(approval.target.toLowerCase()) : haystack.includes(id.toLowerCase());
+    return title
+      ? haystack.includes(title.toLowerCase()) || needle.includes(approval.target.toLowerCase())
+      : haystack.includes(id.toLowerCase());
   });
 }
 
 function uniqueCompact(values: Array<string | undefined>): string[] {
-  return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value))));
+  return Array.from(
+    new Set(
+      values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)),
+    ),
+  );
 }

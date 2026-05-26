@@ -136,6 +136,8 @@ test.describe("Operating Room portfolio modes", () => {
     await openDesktopView(page, "Home");
 
     const main = page.locator("main");
+    await expect(main).toContainText("Active only");
+    await expect(main).toContainText("closed hidden");
     await main.getByRole("tab", { name: /Workload/i }).click();
     await expect(main).toContainText("assigned record");
     await expect(main).toContainText("Development");
@@ -151,6 +153,8 @@ test.describe("Operating Room portfolio modes", () => {
     await expect(main).toContainText("Feature");
     await expectNoHorizontalOverflow(page);
 
+    await main.getByRole("button", { name: /Active only/i }).click();
+    await expect(main).toContainText("Showing closed");
     await main.getByLabel("Status filter").click();
     await page.getByRole("option", { name: "Completed" }).click();
     await expect(main).toContainText("Completed");

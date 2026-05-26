@@ -303,8 +303,11 @@ export function buildPortfolioLanes(state: DashboardState): PortfolioLane[] {
     laneMap.set(client.id, { client, streams: [] });
   }
 
+  const laneKey = (clientId?: string): string =>
+    clientId && clientsById.has(clientId) ? clientId : "unassigned";
+
   for (const project of state.projects) {
-    const key = project.client_id || "unassigned";
+    const key = laneKey(project.client_id);
     if (!laneMap.has(key)) laneMap.set(key, { streams: [] });
     const ownership = ownershipByProjectId.get(project.id);
     const manager = ownership?.manager_agent_id ?? "project_manager";
@@ -326,7 +329,7 @@ export function buildPortfolioLanes(state: DashboardState): PortfolioLane[] {
   }
 
   for (const opportunity of state.opportunities) {
-    const key = opportunity.client_id || "unassigned";
+    const key = laneKey(opportunity.client_id);
     if (!laneMap.has(key)) laneMap.set(key, { streams: [] });
     laneMap.get(key)?.streams.push({
       id: opportunity.id,
