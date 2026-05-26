@@ -19,6 +19,7 @@ import {
   type CoordinatorMessageRecord,
 } from "./messages.js";
 import { coordinatorIdleAnswer } from "./idle.js";
+import { sanitizeCoordinatorVisibleText } from "./sanitize.js";
 
 export interface CoordinatorChatInput {
   message: string;
@@ -307,40 +308,8 @@ function idleAnswer(provider: CoordinatorChatProviderMeta): string {
   return coordinatorIdleAnswer(providerIssue);
 }
 
-const INTERNAL_REASONING_MARKERS = [
-  "i need to",
-  "i should",
-  "i'm thinking",
-  "the user",
-  "developer prefers",
-  "need to respond",
-  "crafting",
-  "hidden reasoning",
-  "scratchpad",
-];
-
-function stripInternalReasoningPreamble(answer: string): string {
-  const trimmed = answer.trim();
-  const markdownPreamble = trimmed.match(/^\*\*[^*]+\*\*\s+([\s\S]+)$/);
-  if (!markdownPreamble) return trimmed;
-
-  const body = markdownPreamble[1]?.trim() ?? "";
-  const probe = body.slice(0, 700).toLowerCase();
-  if (!INTERNAL_REASONING_MARKERS.some((marker) => probe.includes(marker))) return trimmed;
-
-  const starts = ["Ciao", "Ok", "Va bene", "Ricevuto", "Sono operativo", "Emanuele"];
-  const indexes = starts
-    .map((start) => body.indexOf(start))
-    .filter((index) => index >= 0)
-    .sort((a, b) => a - b);
-  return indexes[0] !== undefined ? body.slice(indexes[0]).trim() : "";
-}
-
 function sanitizeCoordinatorAnswer(answer: string): string {
-  return stripInternalReasoningPreamble(answer)
-    .replace(/\p{Extended_Pictographic}/gu, "")
-    .replace(/[ \t]+\n/g, "\n")
-    .trim();
+  return sanitizeCoordinatorVisibleText(answer);
 }
 
 function deterministicAnswer(

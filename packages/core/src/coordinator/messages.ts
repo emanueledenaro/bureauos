@@ -4,6 +4,7 @@ import { newId } from "../ids.js";
 import { workspacePaths } from "../paths.js";
 import type { CoordinatorIntakeResult } from "./intake.js";
 import { coordinatorIdleAnswer, isLegacyLowContextCoordinatorAnswer } from "./idle.js";
+import { sanitizeCoordinatorMessageText } from "./sanitize.js";
 
 export interface CoordinatorMessageAttachment {
   name: string;
@@ -42,15 +43,33 @@ function parseLine(line: string): CoordinatorMessageRecord | undefined {
 }
 
 function normalizeMessage(record: CoordinatorMessageRecord): CoordinatorMessageRecord {
-  if (!isLegacyLowContextCoordinatorAnswer(record)) return record;
+  if (isLegacyLowContextCoordinatorAnswer(record)) {
+    return {
+      ...record,
+      text: coordinatorIdleAnswer(),
+      meta: {
+        ...record.meta,
+        migrated_from: "legacy_low_context_idle_answer",
+      },
+    };
+  }
+
+  if (record.role !== "coordinator") return record;
+  const text = sanitizeCoordinatorMessageText(record.text);
+  if (text === record.text) return record;
   return {
     ...record,
-    text: coordinatorIdleAnswer(),
+    text,
     meta: {
       ...record.meta,
-      migrated_from: "legacy_low_context_idle_answer",
+      sanitized_visible_text: true,
     },
   };
+}
+
+function visibleText(input: CoordinatorMessageInput): string {
+  const text = input.text.trim();
+  return input.role === "coordinator" ? sanitizeCoordinatorMessageText(text) : text;
 }
 
 export class CoordinatorMessageStore {
@@ -64,7 +83,7 @@ export class CoordinatorMessageStore {
     const record: CoordinatorMessageRecord = {
       id: newId("msg"),
       role: input.role,
-      text: input.text.trim(),
+      text: visibleText(input),
       created: input.created ?? new Date().toISOString(),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
       ...(input.result ? { result: input.result } : {}),
@@ -81,7 +100,7 @@ export class CoordinatorMessageStore {
     const records = inputs.map((input) => ({
       id: newId("msg"),
       role: input.role,
-      text: input.text.trim(),
+      text: visibleText(input),
       created: input.created ?? new Date().toISOString(),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
       ...(input.result ? { result: input.result } : {}),

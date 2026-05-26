@@ -22,6 +22,8 @@ messages. Keep public claims conservative and aligned with
 
 - Private-context scan for local agent/operator artifacts before public PRs.
 - Security audit is now part of the release gate.
+- Coordinator chat messages are sanitized so hidden reasoning, prompts, and
+  provider traces are not shown or persisted as user-visible replies.
 - Electron upgraded to the patched 39.8.x line so the high-severity audit gate
   no longer reports Electron advisories.
 - Vite, Vitest, electron-vite, and the React Vite plugin upgraded to a patched

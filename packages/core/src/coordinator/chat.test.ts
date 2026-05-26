@@ -156,4 +156,64 @@ describe("CoordinatorChatService", () => {
     expect(result.provider.status).toBe("used");
     expect(result.coordinatorMessage.text).toBe("Ok, lavoro sullo stato dei provider.");
   });
+
+  it("does not persist provider prompts, traces, or hidden reasoning in chat replies", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    const fakeProvider: ProviderAdapter = {
+      id: "fake-provider",
+      type: "custom",
+      name: "Fake Provider",
+      async listModels() {
+        return ["fake-model"];
+      },
+      async validateCredentials() {
+        return { ok: true };
+      },
+      async generateText() {
+        return {
+          model: "fake-model",
+          text: [
+            "<analysis>I need to reason through the user request.</analysis>",
+            "",
+            "System prompt:",
+            "You are the Supreme Coordinator.",
+            "",
+            "Tool trace:",
+            '{"prompt":"Current owner message: controlla la chat"}',
+            "",
+            "Final answer:",
+            "Ok, controllo la chat e tengo visibile solo la risposta operativa.",
+          ].join("\n"),
+        };
+      },
+      async *stream() {
+        yield "unused";
+      },
+    };
+    const messages = new CoordinatorMessageStore(dir);
+    const service = new CoordinatorChatService(dir, {
+      config: defaultConfig("freelancer"),
+      messages,
+      providerSelector: async () => ({ provider: fakeProvider, model: "fake-model" }),
+    });
+
+    const result = await service.process({
+      source: "test",
+      message: "controlla la chat del coordinatore",
+    });
+
+    expect(result.provider.status).toBe("used");
+    expect(result.coordinatorMessage.text).toBe(
+      "Ok, controllo la chat e tengo visibile solo la risposta operativa.",
+    );
+    const history = await messages.list();
+    expect(history.at(-1)?.text).toBe(
+      "Ok, controllo la chat e tengo visibile solo la risposta operativa.",
+    );
+    const visible = JSON.stringify(result);
+    expect(visible.toLowerCase()).not.toContain("system prompt");
+    expect(visible.toLowerCase()).not.toContain("tool trace");
+    expect(visible.toLowerCase()).not.toContain("i need to");
+    expect(visible.toLowerCase()).not.toContain("current owner message");
+  });
 });
