@@ -388,6 +388,7 @@ export class GitHubPullRequestPublishService {
     const report = await this.artifacts.write({
       type: "github-pr-publish-report",
       createdBy: "supreme_coordinator",
+      ...(input.runId ? { runId: input.runId } : {}),
       projectId: project.id,
       ...(client ? { clientId: client.id } : {}),
       metadata: {
