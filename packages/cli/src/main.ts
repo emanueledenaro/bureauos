@@ -1289,7 +1289,10 @@ const handleAutonomyRetryScan: Handler = async (args) => {
     );
   }
   for (const item of result.escalated) {
-    process.stdout.write(`escalated: ${item.run.id} attempts=${item.attempts}\n`);
+    process.stdout.write(
+      `escalated: ${item.run.id} attempts=${item.attempts} reason=${item.reason} approval=${item.approval?.id ?? "none"}\n`,
+    );
+    process.stdout.write(`blocker: ${item.blocker}\n`);
   }
   return 0;
 };

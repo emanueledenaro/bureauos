@@ -14,6 +14,7 @@ import type {
   AutonomousRetryResult,
   PolicyExplainDecision,
   PolicyExplainOutcome,
+  RunRecord,
 } from "../lib/api";
 import type { Tone } from "../lib/tone";
 import type { DashboardState } from "../lib/types";
@@ -35,6 +36,35 @@ function policyOutcomeLabel(outcome: PolicyExplainOutcome): string {
 function decisionTitle(decision: PolicyExplainDecision): string {
   const capability = [decision.capability, decision.action].filter(Boolean).join(".");
   return capability || decision.policy_action;
+}
+
+function stringList(value: string[] | string | undefined): string[] {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (typeof value === "string" && value.trim()) return [value];
+  return [];
+}
+
+function runBlocker(run: RunRecord): string {
+  return (
+    run.retry_blocker_reason ||
+    run.blocking_reason ||
+    run.dispatch_error ||
+    run.error ||
+    [...stringList(run.dispatch_blockers), ...stringList(run.blockers)].join(", ")
+  );
+}
+
+function retryLineage(run: RunRecord): string {
+  if (run.retry_parent_run_id) {
+    return `Retry ${run.retry_attempt ?? "?"}/${run.retry_max_attempts ?? "?"} of ${run.retry_parent_run_id}`;
+  }
+  if (run.retry_child_runs?.length) {
+    return `${run.retry_child_runs.length} retry run${run.retry_child_runs.length === 1 ? "" : "s"} started`;
+  }
+  if (run.retry_escalated_at) return `Escalated ${timeAgo(run.retry_escalated_at)}`;
+  if (run.retry_attempts)
+    return `${run.retry_attempts} attempt${run.retry_attempts === 1 ? "" : "s"} used`;
+  return "";
 }
 
 export function RiskView({
@@ -244,6 +274,24 @@ export function RiskView({
             </BaseCardHeader>
             <div className="text-body-secondary text-muted-foreground">{run.scope}</div>
             <div className="text-meta font-mono">{run.id}</div>
+            {retryLineage(run) ? (
+              <div className="text-meta text-muted-foreground">{retryLineage(run)}</div>
+            ) : null}
+            {runBlocker(run) ? (
+              <div className="line-clamp-2 text-[11px] leading-relaxed text-warning">
+                {runBlocker(run)}
+              </div>
+            ) : null}
+            {run.retry_blocker_approval_id ? (
+              <div className="text-meta font-mono text-warning">
+                Approval {run.retry_blocker_approval_id}
+              </div>
+            ) : null}
+            {run.next_retry_at ? (
+              <div className="text-meta text-muted-foreground">
+                Next retry {timeAgo(run.next_retry_at)}
+              </div>
+            ) : null}
           </BaseCard>
         ))}
 

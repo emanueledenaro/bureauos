@@ -186,6 +186,35 @@ async function seedWorkspace(
     body: "# GitHub Signal\n\nStale work signal.",
   });
   await runs.attachArtifacts(staleRun.id, [staleSignal.id]);
+  const retryBlockedRun = await runs.start({
+    type: "bug",
+    triggerType: "threshold",
+    triggerSource: "bureauos.retry:seeded-checkout:2",
+    scope: "Recover failed checkout flow.",
+    clientId: client.id,
+    projectId: project.id,
+  });
+  const retryApproval = await approvals.request({
+    action: "resolve_retry_blocker",
+    actor: "supreme_coordinator",
+    target: retryBlockedRun.id,
+    scope: "Resolve retry blocker for seeded checkout flow.",
+    runId: retryBlockedRun.id,
+    riskLevel: "medium",
+    body: "Seed retry blocker approval used by Risk view E2E tests.",
+  });
+  await runs.patch(retryBlockedRun.id, {
+    status: "blocked",
+    completed: "",
+    retry_attempts: 2,
+    retry_child_runs: ["run_seed_retry_1", "run_seed_retry_2"],
+    retry_escalated_at: "2026-05-26T12:00:00.000Z",
+    retry_escalation_reason: "max_attempts_reached",
+    retry_classification: "retryable_failure",
+    retry_blocker_reason:
+      "Retry limit reached after 2 attempt(s). Owner intervention required before another retry.",
+    retry_blocker_approval_id: retryApproval.id,
+  });
   await capabilities.check({
     agent: "development",
     capabilityId: "codex",

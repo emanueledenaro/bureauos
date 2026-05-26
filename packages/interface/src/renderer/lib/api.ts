@@ -285,10 +285,24 @@ export interface RunRecord {
   decisions?: string[];
   dispatch_status?: string;
   blockers?: string[] | string;
+  dispatch_blockers?: string[] | string;
   blocking_reason?: string;
   dispatch_error?: string;
   error?: string;
   next_action?: string;
+  retry_attempts?: number;
+  retry_child_runs?: string[];
+  retry_parent_run_id?: string;
+  retry_attempt?: number;
+  retry_max_attempts?: number;
+  retry_classification?: string;
+  retry_report_id?: string;
+  retry_blocker_reason?: string;
+  retry_blocker_approval_id?: string;
+  retry_escalation_reason?: string;
+  retry_escalated_at?: string;
+  last_retry_at?: string;
+  next_retry_at?: string;
   source_work_item_type?: string;
   source_work_item_id?: string;
   source_work_item_url?: string;
@@ -657,7 +671,9 @@ export interface AutonomousRetryResult {
   escalated: Array<{
     run: RunRecord;
     attempts: number;
-    reason: "max_attempts_reached";
+    reason: "max_attempts_reached" | "non_retryable_failure";
+    blocker: string;
+    approval?: ApprovalRecord;
   }>;
   skipped: Array<{
     run: RunRecord;

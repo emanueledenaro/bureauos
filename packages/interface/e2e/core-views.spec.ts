@@ -144,6 +144,31 @@ test.describe("Operating Room policy explain", () => {
   });
 });
 
+test.describe("Operating Room retry blockers", () => {
+  let workspace: InterfaceWorkspace;
+
+  test.beforeAll(async () => {
+    workspace = await createInterfaceWorkspace("seeded");
+  });
+
+  test.afterAll(async () => {
+    await workspace.close();
+  });
+
+  test("shows retry lineage and the current owner-visible blocker", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openWorkspace(page, workspace);
+    await openDesktopView(page, "Risk");
+
+    const main = page.locator("main");
+    await expect(main).toContainText("Recover failed checkout flow.");
+    await expect(main).toContainText("2 retry runs started");
+    await expect(main).toContainText("Retry limit reached after 2 attempt");
+    await expect(main).toContainText("Approval appr_");
+    await expectNoHorizontalOverflow(page);
+  });
+});
+
 test.describe("Operating Room agent layer detail", () => {
   let workspace: InterfaceWorkspace;
 
