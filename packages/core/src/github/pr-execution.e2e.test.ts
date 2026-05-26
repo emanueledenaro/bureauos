@@ -374,6 +374,8 @@ describe("Phase 8 PR execution E2E", () => {
     expect(log).toContain("execution.tests.passed");
     expect(log).toContain("github.pr_publish.created");
     expect(log).toContain("run.dispatch_completed");
+    expect(log).not.toContain("merge_pull_requests");
+    expect(log).not.toContain("deploy_production");
   });
 
   it("blocks before fake runtime and GitHub calls when PR work is disabled by policy", async () => {

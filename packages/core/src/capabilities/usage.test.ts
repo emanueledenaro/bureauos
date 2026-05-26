@@ -137,6 +137,126 @@ describe("CapabilityUseService", () => {
     expect(allowed.missing_gates).toEqual([]);
   });
 
+  it("blocks merge and production deploy by default with owner-visible approval records", async () => {
+    const service = new CapabilityUseService(dir, {
+      config: defaultConfig("agency"),
+    });
+
+    const merge = await service.check({
+      agent: "project_manager",
+      capabilityId: "github",
+      action: "merge_pr",
+      target: "github.com/acme/web/pull/42",
+      linkedIssueNumbers: [42],
+      testEvidence: ["pnpm test passed"],
+    });
+    const deploy = await service.check({
+      agent: "release",
+      capabilityId: "deployment",
+      action: "deploy_production",
+      target: "vercel://project/acme-web/production",
+      linkedIssueNumbers: [42],
+      testEvidence: ["pnpm test passed"],
+    });
+
+    expect(merge.status).toBe("blocked");
+    expect(merge.capability.reason).toContain('action "merge_pr" is disabled');
+    expect(merge.policy.action).toBe("merge_pull_requests");
+    expect(merge.approval?.action).toBe("merge_pull_requests");
+    expect(deploy.status).toBe("blocked");
+    expect(deploy.capability.reason).toContain('action "deploy_production" is disabled');
+    expect(deploy.policy.action).toBe("deploy_production");
+    expect(deploy.approval?.action).toBe("deploy_production");
+
+    const approvals = await new ApprovalRegistry(dir).listPending();
+    expect(approvals.map((approval) => approval.action)).toEqual(
+      expect.arrayContaining(["merge_pull_requests", "deploy_production"]),
+    );
+    expect(approvals.map((approval) => approval.target)).toEqual(
+      expect.arrayContaining([
+        "github.com/acme/web/pull/42",
+        "vercel://project/acme-web/production",
+      ]),
+    );
+
+    const mergeAudit = await new ArtifactStore(dir).read(merge.artifact.id);
+    expect(mergeAudit?.body).toContain("Status: blocked");
+    expect(mergeAudit?.body).toContain("Policy action: merge_pull_requests");
+    expect(mergeAudit?.body).toContain(`Approval: ${merge.approval!.id}`);
+
+    const deployAudit = await new ArtifactStore(dir).read(deploy.artifact.id);
+    expect(deployAudit?.body).toContain("Status: blocked");
+    expect(deployAudit?.body).toContain("Policy action: deploy_production");
+    expect(deployAudit?.body).toContain(`Approval: ${deploy.approval!.id}`);
+
+    const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(audit).toContain("capability.use.blocked");
+    expect(audit).toContain("github.merge_pr");
+    expect(audit).toContain("deployment.deploy_production");
+  });
+
+  it("allows merge and production deploy only with explicit capability config and approved gates", async () => {
+    const config = defaultConfig("agency");
+    config.capabilities.github = {
+      actions: { merge_pr: true },
+      allowed_agents: ["project_manager"],
+      required_approvals: ["merge_approval"],
+    };
+    config.capabilities.deployment = {
+      actions: { deploy_production: true },
+      allowed_agents: ["release"],
+      required_approvals: ["production_deploy"],
+    };
+    const approvals = new ApprovalRegistry(dir);
+    const mergeApproval = await approvals.request({
+      action: "merge_pull_requests",
+      actor: "owner",
+      target: "github.com/acme/web/pull/42",
+      scope: "SER-66 explicit merge approval fixture",
+      oneOff: true,
+    });
+    const deployApproval = await approvals.request({
+      action: "deploy_production",
+      actor: "owner",
+      target: "vercel://project/acme-web/production",
+      scope: "SER-66 explicit production deploy approval fixture",
+      oneOff: true,
+    });
+    await approvals.resolve(mergeApproval.id, "approved", "owner", "SER-66 merge fixture");
+    await approvals.resolve(deployApproval.id, "approved", "owner", "SER-66 deploy fixture");
+
+    const service = new CapabilityUseService(dir, { config, approvals });
+    const merge = await service.check({
+      agent: "project_manager",
+      capabilityId: "github",
+      action: "merge_pr",
+      target: "github.com/acme/web/pull/42",
+      linkedIssueNumbers: [42],
+      testEvidence: ["pnpm test passed"],
+    });
+    const deploy = await service.check({
+      agent: "release",
+      capabilityId: "deployment",
+      action: "deploy_production",
+      target: "vercel://project/acme-web/production",
+      linkedIssueNumbers: [42],
+      testEvidence: ["pnpm test passed"],
+    });
+
+    expect(merge.status).toBe("allowed");
+    expect(merge.policy.action).toBe("merge_pull_requests");
+    expect(merge.policy.approval_id).toBe(mergeApproval.id);
+    expect(deploy.status).toBe("allowed");
+    expect(deploy.policy.action).toBe("deploy_production");
+    expect(deploy.policy.approval_id).toBe(deployApproval.id);
+
+    const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(audit).toContain("capability.use.allowed");
+    expect(audit).toContain("github.merge_pr");
+    expect(audit).toContain("deployment.deploy_production");
+    expect(audit).not.toContain("production deploy executed");
+  });
+
   it("records changed-file counts in capability audit artifacts", async () => {
     const result = await new CapabilityUseService(dir, {
       config: defaultConfig("agency"),
