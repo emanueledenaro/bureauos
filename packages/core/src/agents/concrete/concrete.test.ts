@@ -18,6 +18,7 @@ import { workspacePaths } from "../../paths.js";
 import type { AgentCapabilityCheckInput } from "../runtime.js";
 import { DevelopmentAgent } from "./development.js";
 import { buildDefaultAgentRegistry } from "./index.js";
+import { QaAgent } from "./qa.js";
 import { ReviewerAgent } from "./reviewer.js";
 
 class FakeRuntime implements RuntimeAdapter {
@@ -71,8 +72,16 @@ describe("concrete agents", () => {
 
     for (const [roleId, expectedType] of Object.entries(expectedArtifactTypes)) {
       const agent = registry.get(roleId);
+      const context =
+        roleId === "qa"
+          ? {
+              runId: `run_test_${roleId}`,
+              scope: "Acceptance criteria:\n- smoke test passes",
+              briefing: "PASS: smoke test passes",
+            }
+          : { runId: `run_test_${roleId}`, scope: "smoke test" };
       const out = await agent.execute({
-        context: { runId: `run_test_${roleId}`, scope: "smoke test" },
+        context,
         capabilities: new Map(),
       });
       expect(out.ok).toBe(true);
@@ -241,6 +250,108 @@ describe("concrete agents", () => {
     expect(out.decisions).toContain("runtime_blocked");
     const log = await readAudit(dir);
     expect(log).toContain("agent.development.runtime_blocked");
+  });
+
+  it("verifies QA acceptance criteria with produced artifact evidence", async () => {
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const artifacts = new ArtifactStore(dir);
+    const policy = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
+    await artifacts.write({
+      type: "feature-spec",
+      createdBy: "product",
+      runId: "run_qa_pass",
+      body: [
+        "# Feature Spec",
+        "",
+        "## Acceptance Criteria",
+        "",
+        "- Coordinator chat hides prompts and thoughts from user-facing replies.",
+        "- QA blocks ready-for-review when evidence is missing.",
+      ].join("\n"),
+    });
+    await artifacts.write({
+      type: "test-evidence-report",
+      createdBy: "development",
+      runId: "run_qa_pass",
+      body: [
+        "# Test Evidence",
+        "",
+        "PASS: Coordinator chat hides prompts and thoughts from user-facing replies.",
+        "PASS: QA blocks ready-for-review when evidence is missing.",
+      ].join("\n"),
+    });
+    const agent = new QaAgent({ artifacts, audit, policy });
+
+    const out = await agent.execute({
+      context: {
+        runId: "run_qa_pass",
+        scope: [
+          "SER-31: Wire QA Agent",
+          "",
+          "Acceptance criteria:",
+          "- Coordinator chat hides prompts and thoughts from user-facing replies.",
+          "- QA blocks ready-for-review when evidence is missing.",
+        ].join("\n"),
+      },
+      capabilities: new Map(),
+    });
+
+    expect(out.ok).toBe(true);
+    expect(out.decisions).toContain("qa:ready_for_review");
+    expect(out.blockers).toEqual([]);
+    const written = await artifacts.read(out.artifactIds[0]!);
+    expect(written?.record.type).toBe("test-plan");
+    expect(written?.record.qa_readiness).toBe("ready_for_review");
+    expect(written?.record.acceptance_pass_count).toBe(2);
+    expect(written?.record.acceptance_fail_count).toBe(0);
+    expect(written?.record.acceptance_unknown_count).toBe(0);
+    expect(written?.record.source_artifact_ids).toHaveLength(2);
+    expect(written?.body).toContain("QA Verification Report");
+    expect(written?.body).toContain("Produced Artifacts Reviewed");
+    expect(written?.body).toContain("Status: pass");
+    expect(written?.body).toContain("Ready-for-review is allowed by QA evidence.");
+  });
+
+  it("blocks QA readiness when acceptance evidence fails or is missing", async () => {
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const artifacts = new ArtifactStore(dir);
+    const policy = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
+    await artifacts.write({
+      type: "test-evidence-report",
+      createdBy: "development",
+      runId: "run_qa_fail",
+      body: ["# Test Evidence", "", "FAIL: Missing evidence blocks ready-for-review status."].join(
+        "\n",
+      ),
+    });
+    const agent = new QaAgent({ artifacts, audit, policy });
+
+    const out = await agent.execute({
+      context: {
+        runId: "run_qa_fail",
+        scope: [
+          "Acceptance criteria:",
+          "- Missing evidence blocks ready-for-review status.",
+          "- QA writes verification report with pass/fail/unknown items.",
+        ].join("\n"),
+      },
+      capabilities: new Map(),
+    });
+
+    expect(out.ok).toBe(false);
+    expect(out.decisions).toContain("qa:blocked");
+    expect(out.blockers).toEqual([
+      "failed acceptance criterion: Missing evidence blocks ready-for-review status.",
+      "missing evidence for acceptance criterion: QA writes verification report with pass/fail/unknown items.",
+    ]);
+    const written = await artifacts.read(out.artifactIds[0]!);
+    expect(written?.record.qa_readiness).toBe("blocked");
+    expect(written?.record.acceptance_pass_count).toBe(0);
+    expect(written?.record.acceptance_fail_count).toBe(1);
+    expect(written?.record.acceptance_unknown_count).toBe(1);
+    expect(written?.body).toContain("Status: fail");
+    expect(written?.body).toContain("Status: unknown");
+    expect(written?.body).toContain("Ready-for-review is blocked");
   });
 
   it("writes structured reviewer findings from diff and test artifacts", async () => {

@@ -12,7 +12,13 @@ import { templateAgents } from "./generic.js";
 export { ProjectManagerAgent } from "./project-manager.js";
 export { ProductAgent } from "./product.js";
 export { DevelopmentAgent } from "./development.js";
-export { QaAgent } from "./qa.js";
+export { QaAgent, analyzeQaVerification, extractAcceptanceCriteria } from "./qa.js";
+export type {
+  QaAcceptanceCheck,
+  QaAcceptanceStatus,
+  QaSourceArtifact,
+  QaVerificationAnalysis,
+} from "./qa.js";
 export { SecurityAgent } from "./security.js";
 export { ComplianceAgent } from "./compliance.js";
 export { ReviewerAgent, analyzeReviewInput } from "./reviewer.js";
