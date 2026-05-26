@@ -5,25 +5,31 @@ import {
   type SemanticMemoryHit,
   type SemanticMemoryIndex,
 } from "./semantic.js";
+import { SqliteFtsMemoryIndex } from "./sqlite-index.js";
 
 /**
- * Minimal markdown-backed memory store.
+ * Markdown-backed memory store.
  *
- * Phase 1.3 of the BACKLOG. SQLite FTS5 indexing arrives next; for now the
- * search is a naive scan over the workspace memory tree. This implementation
- * is correct for small workspaces and tests; we trade performance for
- * simplicity at the kernel-bootstrap stage.
+ * Markdown stays the source of truth. SQLite FTS5 is used as an accelerator
+ * when the local Node runtime exposes `node:sqlite`; corrupt or missing indexes
+ * fall back to the plain scan path.
  */
 
 export interface MemoryHit {
   path: string;
+  relativePath?: string;
   snippet: string;
   score: number;
+  updated?: string;
+  source?: "scan" | "sqlite_fts5";
 }
+
+export type MemorySearchBackend = "auto" | "scan" | "sqlite_fts5";
 
 export interface SearchOptions {
   limit?: number;
   includeBody?: boolean;
+  backend?: MemorySearchBackend;
 }
 
 export interface ContextAssemblyOptions extends SearchOptions {
@@ -46,6 +52,8 @@ export class MemoryAccessDeniedError extends Error {
     this.name = "MemoryAccessDeniedError";
   }
 }
+
+const IGNORED_MEMORY_DIRS = new Set([".index", ".git", "node_modules"]);
 
 function toPortablePath(path: string): string {
   return path.split(sep).join("/");
@@ -81,13 +89,24 @@ export class LocalMemoryStore {
   }
 
   /**
-   * Naive keyword search. Scores by number of case-insensitive matches.
-   * Returns the top `limit` hits ordered by score then by path.
+   * Keyword search over Markdown memory.
+   * Uses SQLite FTS5 in `auto` mode when available and safe, then falls back to
+   * a plain scan if the accelerator is missing or unhealthy.
    */
   async search(query: string, options: SearchOptions = {}): Promise<MemoryHit[]> {
     const limit = options.limit ?? 20;
-    const needle = query.toLowerCase();
-    if (!needle) return [];
+    const normalizedQuery = query.trim();
+    if (!normalizedQuery) return [];
+    const backend = options.backend ?? "auto";
+    if (backend !== "scan") {
+      try {
+        const hits = await new SqliteFtsMemoryIndex(this.root).search(normalizedQuery, { limit });
+        if (backend === "sqlite_fts5" || hits.length > 0) return hits;
+      } catch {
+        if (backend === "sqlite_fts5") return [];
+      }
+    }
+    const needle = normalizedQuery.toLowerCase();
     const files = await this.walk(this.root);
     return this.searchFiles(files, needle, limit);
   }
@@ -135,6 +154,7 @@ export class LocalMemoryStore {
           path: file,
           snippet: content.slice(start, end).replace(/\s+/g, " "),
           score,
+          source: "scan",
         });
       }
     }
@@ -157,6 +177,7 @@ export class LocalMemoryStore {
     for (const e of entries) {
       const full = resolve(dir, e.name);
       if (e.isDirectory()) {
+        if (IGNORED_MEMORY_DIRS.has(e.name)) continue;
         const sub = await this.walk(full);
         out.push(...sub);
       } else if (e.isFile()) {
