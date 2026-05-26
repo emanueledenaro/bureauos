@@ -54,6 +54,7 @@ export type ArtifactType =
   | "github-issue-draft"
   | "github-issue-publish-report"
   | "github-pr-publish-report"
+  | "github-agent-evidence-comment-report"
   | "github-signal-report"
   | "linear-issue-action-report"
   | "operational-signal-report"

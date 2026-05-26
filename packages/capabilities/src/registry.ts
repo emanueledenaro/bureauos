@@ -46,7 +46,15 @@ export const DEFAULT_CAPABILITIES: readonly CapabilityDefinition[] = [
     name: "GitHub",
     description: "GitHub issues, labels, pull requests, comments, checks, and repository signals.",
     type: "mcp",
-    allowed_agents: ["supreme_coordinator", "project_manager", "development", "reviewer", "qa"],
+    allowed_agents: [
+      "supreme_coordinator",
+      "project_manager",
+      "development",
+      "reviewer",
+      "qa",
+      "security",
+      "compliance",
+    ],
     actions: {
       create_repositories: true,
       read_issues: true,

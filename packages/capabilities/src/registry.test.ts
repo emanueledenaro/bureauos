@@ -38,6 +38,22 @@ describe("CapabilityRegistry", () => {
       allowed: false,
       reason: 'action "merge_pr" is disabled for capability "github"',
     });
+
+    expect(
+      registry.check({
+        capability_id: "github",
+        agent: "security",
+        action: "comment",
+      }),
+    ).toMatchObject({ allowed: true });
+
+    expect(
+      registry.check({
+        capability_id: "github",
+        agent: "compliance",
+        action: "comment",
+      }),
+    ).toMatchObject({ allowed: true });
   });
 
   it("registers Linear as a policy-gated MCP work-item capability", () => {
