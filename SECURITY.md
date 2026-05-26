@@ -4,6 +4,10 @@ BureauOS is designed for autonomous agents that may read repositories, create is
 
 Security is therefore part of the core design, not an optional plugin.
 
+For the operator-facing v1 trust boundary, policy, credential, approval, audit,
+and draft PR model, see
+[`docs/security-and-policy-model.md`](docs/security-and-policy-model.md).
+
 ## Security Principles
 
 - least privilege by default
@@ -36,4 +40,3 @@ Work involving these areas should require security review:
 Until a formal security contact exists, open a private advisory if the repository is hosted on GitHub and the issue affects runtime behavior.
 
 Do not disclose exploitable vulnerabilities publicly before maintainers have had time to respond.
-
