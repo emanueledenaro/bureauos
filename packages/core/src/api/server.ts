@@ -177,6 +177,19 @@ function ok(res: ServerResponse, payload: unknown, status = 200): void {
   res.end(JSON.stringify(payload));
 }
 
+function startSse(res: ServerResponse): void {
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.write("retry: 5000\n\n");
+}
+
+function writeSse(res: ServerResponse, event: string, payload: unknown): void {
+  res.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`);
+}
+
 function notFound(res: ServerResponse): void {
   res.statusCode = 404;
   res.setHeader("Content-Type", "application/json");
@@ -728,6 +741,38 @@ const ROUTES: Record<string, RouteHandler> = {
       }),
       201,
     );
+  },
+
+  "POST /coordinator/messages/stream": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as {
+      message?: string;
+      source?: string;
+      attachments?: unknown;
+    };
+    if (!body.message || !body.message.trim()) {
+      ok(res, { error: "message required" }, 400);
+      return;
+    }
+    const service = new CoordinatorChatService(options.workspaceRoot, {
+      config: options.config,
+    });
+    startSse(res);
+    try {
+      for await (const event of service.stream({
+        message: body.message,
+        source: body.source ?? "electron",
+        attachments: parseAttachments(body.attachments),
+      })) {
+        writeSse(res, event.type, event);
+      }
+    } catch (error) {
+      writeSse(res, "error", {
+        type: "error",
+        error: error instanceof Error ? error.message : "coordinator stream failed",
+      });
+    } finally {
+      res.end();
+    }
   },
 
   "GET /providers": async ({ res, options }) => {

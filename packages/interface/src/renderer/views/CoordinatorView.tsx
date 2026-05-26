@@ -17,7 +17,11 @@ import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import { cn } from "../lib/utils";
 import { formatLabel, formatMoney, timeAgo } from "../lib/format";
 import { sortNewest } from "../lib/builders";
-import type { CoordinatorAttachmentInput, CoordinatorChatResult } from "../lib/api";
+import type {
+  CoordinatorAttachmentInput,
+  CoordinatorChatResult,
+  CoordinatorChatStreamHandlers,
+} from "../lib/api";
 import type { AdaptiveMode, DashboardState } from "../lib/types";
 
 /**
@@ -31,6 +35,7 @@ import type { AdaptiveMode, DashboardState } from "../lib/types";
 export function CoordinatorView({
   state,
   onMessage,
+  onStreamMessage,
   onModeChange,
 }: {
   state: DashboardState;
@@ -38,13 +43,18 @@ export function CoordinatorView({
     message: string,
     attachments?: CoordinatorAttachmentInput[],
   ) => Promise<CoordinatorChatResult>;
+  onStreamMessage?: (
+    message: string,
+    attachments: CoordinatorAttachmentInput[] | undefined,
+    handlers: CoordinatorChatStreamHandlers,
+  ) => Promise<CoordinatorChatResult>;
   onModeChange: (mode: AdaptiveMode) => void;
 }) {
   return (
     <div className="grid h-full min-h-0 gap-3 lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[260px_minmax(0,1fr)_320px] 2xl:grid-cols-[280px_minmax(0,1fr)_360px]">
       <HistoryColumn className="hidden lg:flex" />
       <div className="flex min-h-0 min-w-0 flex-col">
-        <CoordinatorPanel onMessage={onMessage} />
+        <CoordinatorPanel onMessage={onMessage} onStreamMessage={onStreamMessage} />
       </div>
       <ContextColumn className="hidden xl:flex" state={state} onModeChange={onModeChange} />
     </div>

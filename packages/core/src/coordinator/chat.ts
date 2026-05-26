@@ -46,6 +46,11 @@ export interface CoordinatorChatResult {
   };
 }
 
+export type CoordinatorChatStreamEvent =
+  | { type: "status"; status: "started" | "provider_streaming" | "persisting" }
+  | { type: "delta"; text: string }
+  | { type: "final"; result: CoordinatorChatResult };
+
 export interface CoordinatorChatDeps {
   config?: BureauConfig;
   messages?: CoordinatorMessageStore;
@@ -370,6 +375,43 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
   }
 }
 
+async function collectStreamText(
+  stream: AsyncIterable<string>,
+  timeoutMs: number,
+  label: string,
+): Promise<string> {
+  const iterator = stream[Symbol.asyncIterator]();
+  let text = "";
+  try {
+    while (true) {
+      const next = await withTimeout(iterator.next(), timeoutMs, label);
+      if (next.done) break;
+      text += next.value;
+    }
+    return text;
+  } catch (error) {
+    await iterator.return?.();
+    throw error;
+  }
+}
+
+function visibleDeltas(text: string): string[] {
+  const words = text.match(/\S+\s*/g);
+  if (!words) return text ? [text] : [];
+  const deltas: string[] = [];
+  let current = "";
+  for (const word of words) {
+    if (current && current.length + word.length > 80) {
+      deltas.push(current);
+      current = word;
+    } else {
+      current += word;
+    }
+  }
+  if (current) deltas.push(current);
+  return deltas;
+}
+
 function providerMeta(
   status: CoordinatorChatProviderMeta["status"],
   selection?: { provider: ProviderAdapter; model: string },
@@ -417,6 +459,93 @@ export class CoordinatorChatService {
     this.env = deps.env ?? process.env;
     this.providerSelector = deps.providerSelector ?? selectCoordinatorProvider;
     this.providerTimeoutMs = deps.providerTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
+  }
+
+  async *stream(input: CoordinatorChatInput): AsyncGenerator<CoordinatorChatStreamEvent> {
+    yield { type: "status", status: "started" };
+    const message = input.message.trim();
+    if (!message) throw new Error("coordinator chat requires a message");
+    const attachments = input.attachments ?? [];
+
+    if (hasIntakeIntent(message, attachments) || isLowContextMessage(message, attachments)) {
+      const result = await this.process(input);
+      for (const text of visibleDeltas(result.coordinatorMessage.text)) {
+        yield { type: "delta", text };
+      }
+      yield { type: "final", result };
+      return;
+    }
+
+    const packet = await this.memory.assemble({
+      query: message,
+      limit: 6,
+      source: "coordinator_chat",
+    });
+    const recent = await this.messages.list(12);
+    const memory = memoryMeta(packet);
+
+    let answer = "";
+    let provider = providerMeta("unavailable", undefined, undefined, "no_valid_provider_route");
+    const selection = await this.providerSelector(this.workspaceRoot, this.config, this.env);
+    if (selection) {
+      try {
+        yield { type: "status", status: "provider_streaming" };
+        const streamed = await collectStreamText(
+          selection.provider.stream({
+            model: selection.model,
+            system: systemPrompt(this.config),
+            prompt: userPrompt(message, packet, recent),
+            temperature: 0.2,
+            maxTokens: 1800,
+          }),
+          this.providerTimeoutMs,
+          `provider stream timed out after ${this.providerTimeoutMs}ms`,
+        );
+        const generated: GenerateTextResult = {
+          text: streamed,
+          model: selection.model,
+        };
+        answer = sanitizeCoordinatorAnswer(generated.text);
+        provider = providerMeta("used", selection, generated);
+      } catch (error) {
+        provider = providerMeta(
+          "failed",
+          selection,
+          undefined,
+          error instanceof Error ? error.message : "provider stream failed",
+        );
+      }
+    }
+    if (!answer) answer = deterministicAnswer(message, packet, provider);
+
+    yield { type: "status", status: "persisting" };
+    const { ownerMessage, coordinatorMessage } = requireMessagePair(
+      await this.messages.appendMany([
+        {
+          role: "owner",
+          text: message,
+          attachments: messageAttachments(attachments),
+          meta: { mode: "answer" },
+        },
+        {
+          role: "coordinator",
+          text: answer,
+          meta: { mode: "answer", provider, memory, streamed: true },
+        },
+      ]),
+    );
+
+    const result: CoordinatorChatResult = {
+      mode: "answer",
+      ownerMessage,
+      coordinatorMessage,
+      provider,
+      memory,
+    };
+    for (const text of visibleDeltas(coordinatorMessage.text)) {
+      yield { type: "delta", text };
+    }
+    yield { type: "final", result };
   }
 
   async process(input: CoordinatorChatInput): Promise<CoordinatorChatResult> {

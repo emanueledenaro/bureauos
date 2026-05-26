@@ -15,6 +15,25 @@ import type {
 import { startApiServer, type ApiServer } from "./server.js";
 import type { OpenAICodexOAuthFetch } from "@bureauos/providers";
 
+function parseSseEvents(raw: string): Array<{ event: string; data: unknown }> {
+  return raw
+    .split("\n\n")
+    .map((frame) => frame.trim())
+    .filter((frame) => frame.startsWith("event:"))
+    .map((frame) => {
+      const lines = frame.split(/\r?\n/);
+      const event = lines
+        .find((line) => line.startsWith("event:"))
+        ?.slice("event:".length)
+        .trim();
+      const data = lines
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice("data:".length).trimStart())
+        .join("\n");
+      return { event: event ?? "message", data: JSON.parse(data) as unknown };
+    });
+}
+
 class TestGitHubClient implements GitHubIssuePublishClient {
   created: GitHubIssuePublishClientIssue[] = [];
   createdPullRequests: Array<{
@@ -778,6 +797,38 @@ describe("API server", () => {
 
     const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(audit).toContain("memory.global.search");
+  });
+
+  it("streams coordinator chat messages through SSE and persists the final pair once", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const response = await fetch(`${server.url}/coordinator/messages/stream`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: "Che clienti abbiamo attivi oggi?" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+    const events = parseSseEvents(await response.text());
+    expect(events.map((event) => event.event)).toEqual(
+      expect.arrayContaining(["status", "delta", "final"]),
+    );
+    const deltas = events
+      .filter((event) => event.event === "delta")
+      .map((event) => (event.data as { text: string }).text)
+      .join("");
+    const final = events.find((event) => event.event === "final")?.data as
+      | { result: { coordinatorMessage: { text: string }; provider: { status: string } } }
+      | undefined;
+    expect(final?.result.provider.status).toBe("unavailable");
+    expect(deltas).toBe(final?.result.coordinatorMessage.text);
+    expect(deltas).toContain("memoria locale");
+
+    const messages = (await (await fetch(`${server.url}/coordinator/messages`)).json()) as Array<{
+      role: string;
+    }>;
+    expect(messages.map((message) => message.role)).toEqual(["owner", "coordinator"]);
   });
 
   it("does not answer low-context coordinator chat from historical client context", async () => {

@@ -19,6 +19,8 @@ messages. Keep public claims conservative and aligned with
   startup diagnostics coverage.
 - Codex-style Coordinator chat rendering for paragraphs, lists, inline code,
   and fenced code blocks.
+- SSE-backed Coordinator chat streaming for the Operating Room with durable
+  final-message persistence.
 
 ### Fixed
 

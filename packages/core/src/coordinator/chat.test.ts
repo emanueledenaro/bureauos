@@ -5,7 +5,7 @@ import type { ProviderAdapter } from "@bureauos/providers";
 import { describe, expect, it } from "vitest";
 import { defaultConfig } from "../config/loader.js";
 import { ClientRegistry } from "../registries/client.js";
-import { CoordinatorChatService } from "./chat.js";
+import { CoordinatorChatService, type CoordinatorChatStreamEvent } from "./chat.js";
 import { CoordinatorMessageStore } from "./messages.js";
 
 describe("CoordinatorChatService", () => {
@@ -218,6 +218,54 @@ describe("CoordinatorChatService", () => {
     expect(visible.toLowerCase()).not.toContain("tool trace");
     expect(visible.toLowerCase()).not.toContain("i need to");
     expect(visible.toLowerCase()).not.toContain("current owner message");
+  });
+
+  it("streams sanitized provider answers and persists the final message once", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    let generateTextWasCalled = false;
+    const fakeProvider: ProviderAdapter = {
+      id: "fake-provider",
+      type: "custom",
+      name: "Fake Provider",
+      async listModels() {
+        return ["fake-model"];
+      },
+      async validateCredentials() {
+        return { ok: true };
+      },
+      async generateText() {
+        generateTextWasCalled = true;
+        return { model: "fake-model", text: "unused" };
+      },
+      async *stream() {
+        yield "Analysis:\nI need to think.\n\n";
+        yield "Final answer:\nOk, controllo lo stato operativo.";
+      },
+    };
+    const messages = new CoordinatorMessageStore(dir);
+    const service = new CoordinatorChatService(dir, {
+      config: defaultConfig("freelancer"),
+      messages,
+      providerSelector: async () => ({ provider: fakeProvider, model: "fake-model" }),
+    });
+
+    const events: CoordinatorChatStreamEvent[] = [];
+    for await (const event of service.stream({
+      source: "test",
+      message: "controlla provider e memoria",
+    })) {
+      events.push(event);
+    }
+
+    const deltas = events.filter((event) => event.type === "delta").map((event) => event.text);
+    const final = events.find((event) => event.type === "final");
+    expect(generateTextWasCalled).toBe(false);
+    expect(deltas.join("")).toBe("Ok, controllo lo stato operativo.");
+    expect(JSON.stringify(events).toLowerCase()).not.toContain("i need to");
+    expect(final?.type === "final" ? final.result.provider.status : undefined).toBe("used");
+    const history = await messages.list();
+    expect(history.map((message) => message.role)).toEqual(["owner", "coordinator"]);
+    expect(history[1]?.text).toBe("Ok, controllo lo stato operativo.");
   });
 
   it("falls back when provider generation hangs", async () => {

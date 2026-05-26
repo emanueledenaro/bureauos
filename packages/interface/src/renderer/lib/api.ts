@@ -365,6 +365,15 @@ export interface CoordinatorChatResult {
     hits: Array<{ path: string; snippet: string; score: number }>;
   };
 }
+export type CoordinatorChatStreamEvent =
+  | { type: "status"; status: "started" | "provider_streaming" | "persisting" }
+  | { type: "delta"; text: string }
+  | { type: "final"; result: CoordinatorChatResult }
+  | { type: "error"; error: string };
+export interface CoordinatorChatStreamHandlers {
+  onStatus?: (status: Extract<CoordinatorChatStreamEvent, { type: "status" }>["status"]) => void;
+  onDelta?: (text: string) => void;
+}
 export interface CoordinatorGlobalMemoryPacket {
   rootMemory: string;
   generatedAt: string;
@@ -639,6 +648,21 @@ export interface ProviderOAuthCallbackResult {
   providers?: ProviderConnection[];
 }
 
+function parseSseFrame(frame: string): { event: string; data: unknown } | undefined {
+  const lines = frame.split(/\r?\n/);
+  const event =
+    lines
+      .find((line) => line.startsWith("event:"))
+      ?.slice("event:".length)
+      .trim() ?? "message";
+  const data = lines
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice("data:".length).trimStart())
+    .join("\n");
+  if (!data) return undefined;
+  return { event, data: JSON.parse(data) as unknown };
+}
+
 export const Api = {
   pulse: () => api<CompanyPulse>("/company-pulse"),
   clients: () => api<ClientRecord[]>("/clients"),
@@ -685,6 +709,49 @@ export const Api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+  coordinatorChatStream: async (
+    input: { message: string; attachments?: CoordinatorAttachmentInput[] },
+    handlers: CoordinatorChatStreamHandlers = {},
+  ): Promise<CoordinatorChatResult> => {
+    const base = await getBase();
+    if (!base)
+      throw new Error("API server is not running. Run `bureau serve` or start the desktop app.");
+    const res = await fetch(`${base}/coordinator/messages/stream`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    if (!res.body) throw new Error("Coordinator stream did not return a readable body");
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finalResult: CoordinatorChatResult | undefined;
+
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
+      let boundary = buffer.indexOf("\n\n");
+      while (boundary >= 0) {
+        const frame = buffer.slice(0, boundary).trim();
+        buffer = buffer.slice(boundary + 2);
+        boundary = buffer.indexOf("\n\n");
+        if (!frame || frame.startsWith(":")) continue;
+        const parsed = parseSseFrame(frame);
+        if (!parsed) continue;
+        const event = parsed.data as CoordinatorChatStreamEvent;
+        if (event.type === "status") handlers.onStatus?.(event.status);
+        if (event.type === "delta") handlers.onDelta?.(event.text);
+        if (event.type === "final") finalResult = event.result;
+        if (event.type === "error") throw new Error(event.error);
+      }
+      if (done) break;
+    }
+
+    if (!finalResult) throw new Error("Coordinator stream ended before a final message");
+    return finalResult;
+  },
   coordinatorMemory: (query: string, limit = 12) =>
     api<CoordinatorGlobalMemoryPacket>(
       `/coordinator/memory?query=${encodeURIComponent(query)}&limit=${limit}`,

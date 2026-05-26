@@ -10,6 +10,7 @@ import {
   Api,
   type CoordinatorAttachmentInput,
   type CoordinatorChatResult,
+  type CoordinatorChatStreamHandlers,
   type CoordinatorMessageRecord,
 } from "../../lib/api";
 import type { ChatAttachment } from "../../lib/types";
@@ -50,10 +51,16 @@ async function toCoordinatorAttachment(file: File): Promise<CoordinatorAttachmen
  */
 export function CoordinatorPanel({
   onMessage,
+  onStreamMessage,
 }: {
   onMessage: (
     message: string,
     attachments?: CoordinatorAttachmentInput[],
+  ) => Promise<CoordinatorChatResult>;
+  onStreamMessage?: (
+    message: string,
+    attachments: CoordinatorAttachmentInput[] | undefined,
+    handlers: CoordinatorChatStreamHandlers,
   ) => Promise<CoordinatorChatResult>;
 }) {
   const [messages, setMessages] = useState<CoordinatorMessageRecord[]>([]);
@@ -61,6 +68,7 @@ export function CoordinatorPanel({
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const [streamingMessageId, setStreamingMessageId] = useState<string | undefined>();
   const attachmentsRef = useRef<ChatAttachment[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastScrollHeightRef = useRef(0);
@@ -137,6 +145,7 @@ export function CoordinatorPanel({
       type: item.type,
     }));
     const optimisticId = `${submittedAt}-owner`;
+    const assistantStreamId = `${submittedAt}-coordinator-stream`;
     setMessages((current) => [
       ...current,
       {
@@ -151,12 +160,36 @@ export function CoordinatorPanel({
       const payload = await Promise.all(
         attachments.map((attachment) => toCoordinatorAttachment(attachment.file)),
       );
-      const result = await onMessage(messageText || "Attached files", payload);
+      let streamedText = "";
+      const result = onStreamMessage
+        ? await onStreamMessage(messageText || "Attached files", payload, {
+            onDelta: (text) => {
+              streamedText += text;
+              setStreamingMessageId(assistantStreamId);
+              setMessages((current) => {
+                const existing = current.some((message) => message.id === assistantStreamId);
+                const next = {
+                  id: assistantStreamId,
+                  role: "coordinator" as const,
+                  text: streamedText,
+                  created: new Date().toISOString(),
+                  meta: { streaming: true },
+                };
+                return existing
+                  ? current.map((message) => (message.id === assistantStreamId ? next : message))
+                  : [...current, next];
+              });
+            },
+          })
+        : await onMessage(messageText || "Attached files", payload);
       setMessages((current) => [
-        ...current.filter((message) => message.id !== optimisticId),
+        ...current.filter(
+          (message) => message.id !== optimisticId && message.id !== assistantStreamId,
+        ),
         result.ownerMessage,
         result.coordinatorMessage,
       ]);
+      setStreamingMessageId(undefined);
       setDraft("");
       setAttachments((current) => {
         current.forEach((item) => {
@@ -166,6 +199,7 @@ export function CoordinatorPanel({
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      setStreamingMessageId(undefined);
     } finally {
       setBusy(false);
     }
@@ -202,7 +236,7 @@ export function CoordinatorPanel({
           <MessageBubble key={message.id} message={message} />
         ))}
 
-        {busy ? (
+        {busy && !streamingMessageId ? (
           <div className="flex items-start gap-2.5">
             <Avatar className="h-7 w-7">
               <AvatarFallback className="text-[10px]">SC</AvatarFallback>

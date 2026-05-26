@@ -153,6 +153,7 @@ export type {
   CoordinatorChatInput,
   CoordinatorChatProviderMeta,
   CoordinatorChatResult,
+  CoordinatorChatStreamEvent,
 } from "./coordinator/chat.js";
 export { CoordinatorMessageStore } from "./coordinator/messages.js";
 export type {

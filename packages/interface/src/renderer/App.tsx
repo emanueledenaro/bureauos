@@ -29,6 +29,7 @@ import {
   type ClientSuccessStatusResult,
   type CoordinatorAttachmentInput,
   type CoordinatorChatResult,
+  type CoordinatorChatStreamHandlers,
   type GrowthContentPipelineResult,
   type MemoryTriggerResult,
   type ProjectRepositoryVerificationResult,
@@ -85,6 +86,22 @@ export function App() {
       message,
       ...(attachments?.length ? { attachments } : {}),
     });
+    await refresh();
+    return result;
+  };
+
+  const onCoordinatorMessageStream = async (
+    message: string,
+    attachments: CoordinatorAttachmentInput[] | undefined,
+    handlers: CoordinatorChatStreamHandlers,
+  ): Promise<CoordinatorChatResult> => {
+    const result = await Api.coordinatorChatStream(
+      {
+        message,
+        ...(attachments?.length ? { attachments } : {}),
+      },
+      handlers,
+    );
     await refresh();
     return result;
   };
@@ -179,6 +196,7 @@ export function App() {
               onModeChange={onModeChange}
               onResolve={onResolve}
               onCoordinatorMessage={onCoordinatorMessage}
+              onCoordinatorMessageStream={onCoordinatorMessageStream}
               onGenerateReport={onGenerateReport}
               onProviderLogin={onProviderLogin}
               onProviderLogout={onProviderLogout}
@@ -215,6 +233,7 @@ function DashboardLayout({
   onModeChange,
   onResolve,
   onCoordinatorMessage,
+  onCoordinatorMessageStream,
   onGenerateReport,
   onProviderLogin,
   onProviderLogout,
@@ -233,6 +252,11 @@ function DashboardLayout({
   onCoordinatorMessage: (
     message: string,
     attachments?: CoordinatorAttachmentInput[],
+  ) => Promise<CoordinatorChatResult>;
+  onCoordinatorMessageStream: (
+    message: string,
+    attachments: CoordinatorAttachmentInput[] | undefined,
+    handlers: CoordinatorChatStreamHandlers,
   ) => Promise<CoordinatorChatResult>;
   onGenerateReport: () => Promise<BusinessReportResult>;
   onProviderLogin: (input: {
@@ -261,6 +285,7 @@ function DashboardLayout({
         <CoordinatorView
           state={state}
           onMessage={onCoordinatorMessage}
+          onStreamMessage={onCoordinatorMessageStream}
           onModeChange={onModeChange}
         />
       </div>
