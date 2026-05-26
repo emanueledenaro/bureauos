@@ -169,6 +169,36 @@ test.describe("Operating Room retry blockers", () => {
   });
 });
 
+test.describe("Operating Room revenue pulse", () => {
+  let workspace: InterfaceWorkspace;
+
+  test.beforeAll(async () => {
+    workspace = await createInterfaceWorkspace("seeded");
+  });
+
+  test.afterAll(async () => {
+    await workspace.close();
+  });
+
+  test("uses stored revenue history and client intelligence without invented deltas", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openWorkspace(page, workspace);
+    await openDesktopView(page, "Revenue");
+
+    const body = page.locator("body");
+    await expect(body).toContainText("Revenue Pulse");
+    await expect(body).toContainText("stored snapshots");
+    await expect(body).toContainText("+$3K vs last report");
+    await expect(body).toContainText("Top Clients by LTV");
+    await expect(body).toContainText("Client memory");
+    await expect(body).toContainText("Acme Labs");
+    await expect(body).not.toContainText(/vs 30d|MTD|Last 90d/);
+    await expectNoHorizontalOverflow(page);
+  });
+});
+
 test.describe("Operating Room agent layer detail", () => {
   let workspace: InterfaceWorkspace;
 

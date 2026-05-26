@@ -93,6 +93,20 @@ async function seedWorkspace(
     expectedMargin: 0.42,
     notes: "Seed opportunity used by revenue and growth screens.",
   });
+  await artifacts.write({
+    type: "revenue-pipeline-report",
+    createdBy: "sales",
+    status: "submitted",
+    metadata: {
+      generated_at: "2026-05-25T09:00:00.000Z",
+      pipeline_value: 9_000,
+      open_opportunities: 1,
+      qualified_count: 1,
+      proposal_ready_count: 0,
+      opportunity_count: 1,
+    },
+    body: "# Revenue Pipeline Report\n\nSeed previous report for Revenue Pulse trend coverage.",
+  });
   await approvals.request({
     action: "send_final_proposals",
     actor: "supreme_coordinator",

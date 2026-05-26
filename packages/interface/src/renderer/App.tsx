@@ -451,7 +451,9 @@ function DashboardLayout({
       <RevenuePulseView
         pulse={state.pulse}
         clients={state.clients}
+        clientIntelligence={state.clientIntelligence}
         opportunities={state.opportunities}
+        artifacts={state.artifacts}
         onGenerateReport={onGenerateReport}
       />
     </div>
