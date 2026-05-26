@@ -1,4 +1,4 @@
-import { Megaphone, ShieldCheck, Sparkles, WandSparkles } from "lucide-react";
+import { Megaphone, ShieldCheck, Sparkles, Target, WandSparkles } from "lucide-react";
 import { SectionShell } from "../components/dashboard/SectionShell";
 import { MetricTile } from "../components/dashboard/MetricTile";
 import { EmptyState } from "../components/dashboard/EmptyState";
@@ -6,6 +6,7 @@ import { ActionBanner } from "../components/dashboard/ActionBanner";
 import { BaseCard, BaseCardHeader } from "../components/dashboard/BaseCard";
 import { KpiBar } from "../components/dashboard/KpiBar";
 import { ViewToolbar } from "../components/dashboard/ViewToolbar";
+import { OperationalFocus } from "../components/dashboard/OperationalFocus";
 import { Badge } from "../components/ui/badge";
 import { useAsyncAction } from "../hooks/useAsyncAction";
 import { formatLabel, timeAgo } from "../lib/format";
@@ -28,6 +29,28 @@ export function GrowthView({
   const growthMemory = state.growthMemory;
   const configuredMemory =
     growthMemory?.sections.filter((section) => section.status === "configured").length ?? 0;
+  const latestGrowthArtifact = growthArtifacts[0];
+  const growthFocusTone = !growthMemory
+    ? "neutral"
+    : growthMemory.ready
+      ? growthArtifacts.length > 0
+        ? "success"
+        : "info"
+      : "warning";
+  const growthFocusTitle = !growthMemory
+    ? "Connect growth memory"
+    : growthMemory.ready
+      ? growthArtifacts.length > 0
+        ? `Review latest ${formatLabel(latestGrowthArtifact.type)}`
+        : "Generate the first draft-only growth asset"
+      : `Complete ${growthMemory.missing_sections.map(formatLabel).join(", ")}`;
+  const growthFocusDetail = !growthMemory
+    ? "The local API has not returned growth memory yet, so draft generation has no verified brand, offer, or channel source."
+    : growthMemory.ready
+      ? growthArtifacts.length > 0
+        ? "Draft assets exist locally. Review the newest artifact before any public publishing or spend decision."
+        : "Brand, offers, and channels are configured. BOS can draft content locally without touching publishing or ad spend."
+      : "Campaign work should wait until missing growth memory is written, otherwise drafts will be weak and hard to approve.";
 
   return (
     <SectionShell
@@ -45,21 +68,36 @@ export function GrowthView({
         />
       }
     >
-      <ActionBanner
-        tone={generate.error ? "danger" : generate.result ? "success" : "info"}
-        title={
-          generate.error
-            ? "Content generation failed"
-            : generate.result
-              ? `${generate.result.drafts.length} drafts generated · report ${generate.result.report.id}`
-              : "Content pipeline"
-        }
-        detail={
-          generate.error ??
-          "Generates local drafts only. Publishing, spend, client contact, and claims stay approval-gated."
-        }
-        onDismiss={generate.error || generate.result ? generate.reset : undefined}
+      {generate.error ? (
+        <ActionBanner
+          tone="danger"
+          title="Content generation failed"
+          detail={generate.error}
+          onDismiss={generate.reset}
+          className="mb-3"
+        />
+      ) : null}
+      {generate.result ? (
+        <ActionBanner
+          tone="success"
+          title={`${generate.result.drafts.length} drafts generated · report ${generate.result.report.id}`}
+          detail="Drafts were created locally; external publishing stays gated."
+          onDismiss={generate.reset}
+          className="mb-3"
+        />
+      ) : null}
+
+      <OperationalFocus
         className="mb-section"
+        tone={growthFocusTone}
+        icon={Target}
+        title={growthFocusTitle}
+        detail={growthFocusDetail}
+        signals={[
+          `${configuredMemory}/3 memory`,
+          `${growthArtifacts.length} drafts`,
+          `${state.approvals.length} approvals`,
+        ]}
       />
 
       <KpiBar>

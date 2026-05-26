@@ -1,4 +1,4 @@
-import { AlertTriangle, Briefcase, DollarSign, FileText, RefreshCw, Users } from "lucide-react";
+import { Briefcase, DollarSign, FileText, RefreshCw, UserCheck, Users } from "lucide-react";
 import { SectionShell } from "../components/dashboard/SectionShell";
 import { MetricTile } from "../components/dashboard/MetricTile";
 import { ClientAccountCard } from "../components/dashboard/ClientAccountCard";
@@ -6,8 +6,10 @@ import { EmptyState } from "../components/dashboard/EmptyState";
 import { ActionBanner } from "../components/dashboard/ActionBanner";
 import { KpiBar } from "../components/dashboard/KpiBar";
 import { ViewToolbar } from "../components/dashboard/ViewToolbar";
+import { OperationalFocus } from "../components/dashboard/OperationalFocus";
 import { useAsyncAction } from "../hooks/useAsyncAction";
-import { formatMoney } from "../lib/format";
+import { clientRiskTone } from "../lib/tone";
+import { formatLabel, formatMoney, timeAgo } from "../lib/format";
 import type { ClientSuccessStatusResult, MemoryTriggerResult } from "../lib/api";
 import type { DashboardState } from "../lib/types";
 
@@ -25,6 +27,19 @@ export function ClientsView({
   const status = useAsyncAction(onGenerateSuccessStatus);
   const scan = useAsyncAction(onMemoryTriggerScan);
   const noClients = clients.length === 0;
+  const riskWeight: Record<string, number> = {
+    blocked: 0,
+    follow_up_due: 1,
+    proposal: 2,
+    active: 3,
+    cold: 4,
+  };
+  const focusClient = [...clients].sort(
+    (left, right) =>
+      (riskWeight[left.risk] ?? 10) - (riskWeight[right.risk] ?? 10) ||
+      right.revenue.pipeline_value - left.revenue.pipeline_value ||
+      right.delivery.active_projects - left.delivery.active_projects,
+  )[0];
 
   return (
     <SectionShell
@@ -90,7 +105,33 @@ export function ClientsView({
         />
       ) : null}
 
-      <KpiBar>
+      <OperationalFocus
+        className="mb-section"
+        tone={focusClient ? clientRiskTone(focusClient.risk) : "neutral"}
+        icon={UserCheck}
+        title={focusClient ? focusClient.client.name : "Create the first client account memory"}
+        detail={
+          focusClient
+            ? focusClient.next_action
+            : "No client intelligence is available yet. The coordinator needs a client profile before follow-up, delivery, or revenue decisions."
+        }
+        signals={
+          focusClient
+            ? [
+                formatLabel(focusClient.risk),
+                formatMoney(focusClient.revenue.pipeline_value),
+                focusClient.relationship.follow_up_due && focusClient.relationship.next_follow_up_at
+                  ? `Due ${timeAgo(focusClient.relationship.next_follow_up_at)}`
+                  : `${focusClient.delivery.active_projects} active projects`,
+              ]
+            : ["0 clients", "No account plan"]
+        }
+      />
+
+      <KpiBar
+        columns={4}
+        className="grid-flow-row grid-cols-2 auto-cols-auto overflow-visible pb-0 lg:grid-cols-4"
+      >
         <MetricTile
           label="Clients"
           value={String(intelligence?.totals.clients ?? state.clients.length)}
@@ -101,44 +142,25 @@ export function ClientsView({
         <MetricTile
           label="Pipeline"
           value={formatMoney(intelligence?.totals.pipeline_value ?? 0)}
-          detail="Open opportunity value"
+          detail={`${formatMoney(intelligence?.totals.won_value ?? 0)} won value`}
           icon={DollarSign}
           tone="success"
         />
         <MetricTile
-          label="Won value"
-          value={formatMoney(intelligence?.totals.won_value ?? 0)}
-          detail="Closed won opportunities"
-          icon={DollarSign}
-          tone="success"
+          label="Active projects"
+          value={String(intelligence?.totals.active_projects ?? 0)}
+          detail={`${intelligence?.totals.blocked_projects ?? 0} blocked`}
+          icon={Briefcase}
+          tone={intelligence?.totals.blocked_projects ? "danger" : "info"}
+        />
+        <MetricTile
+          label="Follow-ups due"
+          value={String(intelligence?.totals.follow_ups_due ?? 0)}
+          detail="Relationship memory"
+          icon={Users}
+          tone={intelligence?.totals.follow_ups_due ? "warning" : "success"}
         />
       </KpiBar>
-
-      <div className="mt-3">
-        <KpiBar>
-          <MetricTile
-            label="Active projects"
-            value={String(intelligence?.totals.active_projects ?? 0)}
-            detail="Across all clients"
-            icon={Briefcase}
-            tone="info"
-          />
-          <MetricTile
-            label="Blocked projects"
-            value={String(intelligence?.totals.blocked_projects ?? 0)}
-            detail="Client delivery risk"
-            icon={AlertTriangle}
-            tone={intelligence?.totals.blocked_projects ? "danger" : "success"}
-          />
-          <MetricTile
-            label="Follow-ups due"
-            value={String(intelligence?.totals.follow_ups_due ?? 0)}
-            detail="Relationship memory"
-            icon={Users}
-            tone={intelligence?.totals.follow_ups_due ? "warning" : "success"}
-          />
-        </KpiBar>
-      </div>
 
       <div className="mt-section grid gap-3 xl:grid-cols-2">
         {clients.map((item) => (

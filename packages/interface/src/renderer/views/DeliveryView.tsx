@@ -3,6 +3,7 @@ import {
   ExternalLink,
   GitBranch,
   GitPullRequest,
+  ListChecks,
   RefreshCw,
   ShieldAlert,
 } from "lucide-react";
@@ -15,6 +16,7 @@ import { BaseCard, BaseCardFooter, BaseCardHeader } from "../components/dashboar
 import { KpiBar } from "../components/dashboard/KpiBar";
 import { ViewToolbar } from "../components/dashboard/ViewToolbar";
 import { DataTable, type DataTableColumn } from "../components/dashboard/DataTable";
+import { OperationalFocus } from "../components/dashboard/OperationalFocus";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { useAsyncAction } from "../hooks/useAsyncAction";
@@ -93,6 +95,47 @@ export function DeliveryView({
   const attentionCount = latestVerification?.attention_count ?? 0;
   const unverifiedCount = latestVerification?.unverified_count ?? 0;
   const linkedWork = buildLinkedWorkItems(state);
+  const blockedProject = sortNewest(state.projects).find((project) => project.status === "blocked");
+  const missingRepositoryProject = sortNewest(state.projects).find((project) => !project.repository);
+  const staleLinkedWork = linkedWork.find(
+    (item) => item.prState === "stale" || item.issueState === "stale",
+  );
+  const missingPrRun = linkedWork.find((item) => item.prState === "missing");
+  const deliveryFocus =
+    blockedProject ??
+    (staleLinkedWork ? "stale-linked-work" : undefined) ??
+    missingRepositoryProject ??
+    (missingPrRun ? "missing-pr-run" : undefined);
+  const deliveryFocusTone =
+    blockedProject || staleLinkedWork
+      ? "danger"
+      : missingRepositoryProject || missingPrRun
+        ? "warning"
+        : state.projects.length > 0
+          ? "success"
+          : "neutral";
+  const deliveryFocusTitle =
+    typeof deliveryFocus === "object"
+      ? `${deliveryFocus.name} · ${clientName(state.clients, deliveryFocus.client_id)}`
+      : deliveryFocus === "stale-linked-work" && staleLinkedWork
+        ? `${formatLabel(staleLinkedWork.runType)} · stale GitHub signal`
+        : deliveryFocus === "missing-pr-run" && missingPrRun
+          ? `${formatLabel(missingPrRun.runType)} · PR missing`
+          : state.projects.length > 0
+            ? "Delivery queue is clear enough to keep moving"
+            : "Create the first delivery stream";
+  const deliveryFocusDetail =
+    typeof deliveryFocus === "object"
+      ? deliveryFocus.status === "blocked"
+        ? "Project is blocked. Assign a recovery action before starting more delivery work for this account."
+        : "Repository is not linked yet. Connect the project repo before expecting GitHub-native delivery evidence."
+      : deliveryFocus === "stale-linked-work" && staleLinkedWork
+        ? staleLinkedWork.prDetail
+      : deliveryFocus === "missing-pr-run" && missingPrRun
+        ? missingPrRun.prDetail
+      : state.projects.length > 0
+        ? "No blocked project is first in the queue. Continue with repository verification and active project-manager runs."
+        : "No project memory exists yet. The coordinator should create a project from approved client scope.";
 
   const verifyAll = useAsyncAction(onVerifyRepositories);
   const [busyProject, setBusyProject] = useState<string | undefined>();
@@ -216,6 +259,19 @@ export function DeliveryView({
           className="mb-3"
         />
       ) : null}
+
+      <OperationalFocus
+        className="mb-section"
+        tone={deliveryFocusTone}
+        icon={ListChecks}
+        title={deliveryFocusTitle}
+        detail={deliveryFocusDetail}
+        signals={[
+          `${blocked} blocked`,
+          `${reposLinked}/${Math.max(state.projects.length, 1)} repos`,
+          `${linkedWork.length} runs`,
+        ]}
+      />
 
       <KpiBar>
         <MetricTile
