@@ -468,7 +468,8 @@ function arrayField<const K extends string>(key: K, value: unknown): Partial<Rec
 }
 
 const ROUTES: Record<string, RouteHandler> = {
-  "GET /health": ({ res }) => ok(res, { ok: true }),
+  "GET /health": async ({ res, options }) =>
+    ok(res, { ok: true, daemon: await daemonSupervisor(options).status() }),
 
   "GET /daemon/status": async ({ res, options }) => {
     ok(res, await daemonSupervisor(options).status());

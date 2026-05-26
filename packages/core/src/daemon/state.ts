@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { workspacePaths } from "../paths.js";
 
@@ -17,11 +17,38 @@ export interface DaemonStateRecord {
   message?: string;
 }
 
+export type DaemonSchedulerStatus = "active" | "inactive" | "stale";
+
+export interface DaemonHeartbeatLastRun {
+  trigger: string;
+  run_id?: string;
+  at: string;
+}
+
+export interface DaemonHeartbeatLastError {
+  trigger: string;
+  error: string;
+  at: string;
+  failure_count: number;
+}
+
+export interface DaemonHeartbeat {
+  process_id?: number;
+  uptime_seconds?: number;
+  scheduler_active: boolean;
+  scheduler_status: DaemonSchedulerStatus;
+  last_run?: DaemonHeartbeatLastRun;
+  last_error?: DaemonHeartbeatLastError;
+  updated_at: string;
+}
+
 export interface DaemonStatusSnapshot {
   path: string;
   state?: DaemonStateRecord;
   alive: boolean;
   status: DaemonStatus;
+  heartbeat: DaemonHeartbeat;
+  diagnostics_path: string;
 }
 
 export interface DaemonLockRecord {
@@ -66,6 +93,14 @@ export interface SchedulerStateRecord {
 
 export type ProcessAliveCheck = (pid: number) => boolean;
 
+export interface DaemonDiagnosticEvent {
+  timestamp: string;
+  type: "stale_lock_recovered" | "stale_status_recovered";
+  stale_pid?: number;
+  replacement_pid?: number;
+  message: string;
+}
+
 function defaultProcessAlive(pid: number): boolean {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
@@ -85,6 +120,7 @@ async function writeJson(path: string, value: unknown): Promise<void> {
 export class DaemonStateStore {
   private readonly statusPath: string;
   private readonly lockPath: string;
+  private readonly diagnosticsPath: string;
 
   constructor(
     private readonly workspaceRoot: string,
@@ -93,6 +129,7 @@ export class DaemonStateStore {
     const paths = workspacePaths(workspaceRoot);
     this.statusPath = paths.daemonStatus;
     this.lockPath = paths.daemonLock;
+    this.diagnosticsPath = paths.daemonLog;
   }
 
   async read(): Promise<DaemonStateRecord | undefined> {
@@ -113,12 +150,28 @@ export class DaemonStateStore {
 
   async status(): Promise<DaemonStatusSnapshot> {
     const state = await this.read();
-    if (!state) return { path: this.statusPath, alive: false, status: "stopped" };
+    const scheduler = await new DaemonSchedulerStateStore(this.workspaceRoot).read();
+    if (!state) {
+      return {
+        path: this.statusPath,
+        alive: false,
+        status: "stopped",
+        heartbeat: this.heartbeat(undefined, false, "stopped", scheduler),
+        diagnostics_path: this.diagnosticsPath,
+      };
+    }
     const processAlive = state.pid ? this.isProcessAlive(state.pid) : false;
     const active = state.status === "running" || state.status === "starting";
     const alive = active && processAlive;
     const status = active && !processAlive ? "stale" : state.status;
-    return { path: this.statusPath, state, alive, status };
+    return {
+      path: this.statusPath,
+      state,
+      alive,
+      status,
+      heartbeat: this.heartbeat(state, alive, status, scheduler),
+      diagnostics_path: this.diagnosticsPath,
+    };
   }
 
   async lockStatus(): Promise<DaemonLockSnapshot> {
@@ -134,6 +187,12 @@ export class DaemonStateStore {
       return { acquired: false, ...existing };
     }
     if (existing.state && existing.stale) {
+      await this.recordDiagnostic({
+        type: "stale_lock_recovered",
+        stale_pid: existing.state.pid,
+        replacement_pid: input.pid,
+        message: input.message ?? "daemon lock recovered from stale process",
+      });
       await rm(this.lockPath, { force: true });
     }
 
@@ -240,6 +299,73 @@ export class DaemonStateStore {
       message,
     } satisfies DaemonStateRecord);
   }
+
+  async recordDiagnostic(input: Omit<DaemonDiagnosticEvent, "timestamp">): Promise<void> {
+    const event: DaemonDiagnosticEvent = {
+      timestamp: new Date().toISOString(),
+      ...input,
+    };
+    await mkdir(dirname(this.diagnosticsPath), { recursive: true });
+    await appendFile(this.diagnosticsPath, `${JSON.stringify(event)}\n`, "utf8");
+  }
+
+  private heartbeat(
+    state: DaemonStateRecord | undefined,
+    alive: boolean,
+    status: DaemonStatus,
+    scheduler: SchedulerStateRecord,
+  ): DaemonHeartbeat {
+    const lastRun = latestRun(scheduler);
+    const lastError = latestError(scheduler);
+    const startedAt =
+      state?.started_at && Number.isFinite(Date.parse(state.started_at))
+        ? Date.parse(state.started_at)
+        : undefined;
+    const schedulerStatus: DaemonSchedulerStatus =
+      state?.scheduler_active && alive ? "active" : status === "stale" ? "stale" : "inactive";
+    return {
+      ...(state?.pid ? { process_id: state.pid } : {}),
+      ...(startedAt !== undefined
+        ? { uptime_seconds: Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) }
+        : {}),
+      scheduler_active: Boolean(state?.scheduler_active && alive),
+      scheduler_status: schedulerStatus,
+      ...(lastRun ? { last_run: lastRun } : {}),
+      ...(lastError ? { last_error: lastError } : {}),
+      updated_at: state?.updated_at ?? scheduler.updated_at,
+    };
+  }
+}
+
+function cursorTime(cursor: SchedulerCursorRecord): string {
+  return cursor.last_success_at ?? cursor.last_started_at ?? cursor.updated_at;
+}
+
+function latestRun(state: SchedulerStateRecord): DaemonHeartbeatLastRun | undefined {
+  const cursors = Object.values(state.cursors)
+    .filter((cursor) => cursor.last_run_id || cursor.last_success_at)
+    .sort((a, b) => cursorTime(b).localeCompare(cursorTime(a)));
+  const latest = cursors[0];
+  if (!latest) return undefined;
+  return {
+    trigger: latest.trigger,
+    ...(latest.last_run_id ? { run_id: latest.last_run_id } : {}),
+    at: cursorTime(latest),
+  };
+}
+
+function latestError(state: SchedulerStateRecord): DaemonHeartbeatLastError | undefined {
+  const cursors = Object.values(state.cursors)
+    .filter((cursor) => cursor.last_error)
+    .sort((a, b) => cursorTime(b).localeCompare(cursorTime(a)));
+  const latest = cursors[0];
+  if (!latest?.last_error) return undefined;
+  return {
+    trigger: latest.trigger,
+    error: latest.last_error,
+    at: cursorTime(latest),
+    failure_count: latest.failure_count,
+  };
 }
 
 export class DaemonSchedulerStateStore {

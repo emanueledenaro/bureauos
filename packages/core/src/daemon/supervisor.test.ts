@@ -1,8 +1,9 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initWorkspace } from "../init/initializer.js";
+import { workspacePaths } from "../paths.js";
 import { DaemonStateStore } from "./state.js";
 import { DaemonLifecycleSupervisor, type DaemonSpawn } from "./supervisor.js";
 
@@ -71,6 +72,29 @@ describe("DaemonLifecycleSupervisor", () => {
     });
     expect(result.message).toContain("lock");
     expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it("records a restart diagnostic event when starting after stale status", async () => {
+    const state = new DaemonStateStore(dir, (pid) => pid === 2222);
+    await state.markRunning({
+      pid: 1111,
+      apiUrl: "http://127.0.0.1:1111",
+      port: 1111,
+    });
+    const spawn = vi.fn<DaemonSpawn>(() => ({ pid: 2222, unref: vi.fn() }));
+    const supervisor = new DaemonLifecycleSupervisor({
+      workspaceRoot: dir,
+      scriptPath: "/tmp/bureau.js",
+      state,
+      spawn,
+    });
+
+    const result = await supervisor.start();
+
+    expect(result).toMatchObject({ ok: true, status: "started", pid: 2222 });
+    const diagnostic = await readFile(workspacePaths(dir).daemonLog, "utf8");
+    expect(diagnostic).toContain("stale_status_recovered");
+    expect(diagnostic).toContain('"stale_pid":1111');
   });
 
   it("stops the locked daemon process and records stopped state", async () => {

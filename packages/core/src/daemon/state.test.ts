@@ -31,6 +31,11 @@ describe("DaemonStateStore", () => {
     expect(status).toMatchObject({
       alive: true,
       status: "running",
+      heartbeat: {
+        process_id: 1234,
+        scheduler_active: true,
+        scheduler_status: "active",
+      },
       state: {
         pid: 1234,
         api_url: "http://127.0.0.1:3737",
@@ -51,6 +56,11 @@ describe("DaemonStateStore", () => {
 
     expect(status.alive).toBe(false);
     expect(status.status).toBe("stale");
+    expect(status.heartbeat).toMatchObject({
+      process_id: 1234,
+      scheduler_active: false,
+      scheduler_status: "stale",
+    });
   });
 
   it("prevents duplicate active locks and cleans up stale locks", async () => {
@@ -66,6 +76,10 @@ describe("DaemonStateStore", () => {
     const recovered = await staleAwareStore.acquireLock({ pid: 5678, message: "new daemon" });
 
     expect(recovered).toMatchObject({ acquired: true, alive: true, state: { pid: 5678 } });
+    const diagnostic = await readFile(workspacePaths(dir).daemonLog, "utf8");
+    expect(diagnostic).toContain("stale_lock_recovered");
+    expect(diagnostic).toContain('"stale_pid":1234');
+    expect(diagnostic).toContain('"replacement_pid":5678');
   });
 
   it("preserves the status file as workspace-local JSON", async () => {
@@ -112,5 +126,43 @@ describe("DaemonStateStore", () => {
     const raw = await readFile(workspacePaths(dir).daemonSchedulerState, "utf8");
     const parsed = JSON.parse(raw) as { cursors: Record<string, unknown> };
     expect(parsed.cursors).toHaveProperty("daily_executive_report");
+  });
+
+  it("includes latest scheduler run and error in the daemon heartbeat", async () => {
+    const state = new DaemonStateStore(dir, (pid) => pid === 1234);
+    const scheduler = new DaemonSchedulerStateStore(dir);
+    await state.markRunning({
+      pid: 1234,
+      apiUrl: "http://127.0.0.1:3737",
+      port: 3737,
+    });
+    await scheduler.markSucceeded({
+      trigger: "project_health_check",
+      now: new Date("2026-05-26T10:00:00.000Z"),
+      everyMs: 60 * 60 * 1000,
+      runId: "run_health",
+    });
+    await scheduler.markFailed({
+      trigger: "memory_trigger_scan",
+      now: new Date("2026-05-26T10:05:00.000Z"),
+      error: "provider unavailable",
+    });
+
+    await expect(state.status()).resolves.toMatchObject({
+      heartbeat: {
+        scheduler_status: "active",
+        last_run: {
+          trigger: "project_health_check",
+          run_id: "run_health",
+          at: "2026-05-26T10:00:00.000Z",
+        },
+        last_error: {
+          trigger: "memory_trigger_scan",
+          error: "provider unavailable",
+          at: "2026-05-26T10:05:00.000Z",
+          failure_count: 1,
+        },
+      },
+    });
   });
 });

@@ -436,6 +436,12 @@ describe("API server", () => {
       path: join(dir, ".bureauos", "daemon", "status.json"),
       alive: false,
       status: "stopped",
+      heartbeat: {
+        scheduler_active: false,
+        scheduler_status: "inactive",
+        updated_at: "2026-05-26T10:00:00.000Z",
+      },
+      diagnostics_path: join(dir, ".bureauos", "daemon", "daemon.log"),
     };
     server = await startApiServer({
       workspaceRoot: dir,
@@ -458,6 +464,16 @@ describe("API server", () => {
       status: "stopped",
       alive: false,
     });
+
+    const health = await fetch(`${server.url}/health`);
+    expect(health.status).toBe(200);
+    await expect(health.json()).resolves.toMatchObject({
+      ok: true,
+      daemon: {
+        status: "stopped",
+        heartbeat: { scheduler_status: "inactive" },
+      },
+    });
   });
 
   it("starts the daemon through the API without bypassing the supervisor", async () => {
@@ -466,6 +482,13 @@ describe("API server", () => {
       path: join(dir, ".bureauos", "daemon", "status.json"),
       alive: true,
       status: "starting",
+      heartbeat: {
+        process_id: 4567,
+        scheduler_active: false,
+        scheduler_status: "inactive",
+        updated_at: "2026-05-26T10:00:00.000Z",
+      },
+      diagnostics_path: join(dir, ".bureauos", "daemon", "daemon.log"),
       state: {
         status: "starting",
         workspace_root: dir,
@@ -520,6 +543,13 @@ describe("API server", () => {
       path: join(dir, ".bureauos", "daemon", "status.json"),
       alive: true,
       status: "running",
+      heartbeat: {
+        process_id: 5678,
+        scheduler_active: true,
+        scheduler_status: "active",
+        updated_at: "2026-05-26T10:00:00.000Z",
+      },
+      diagnostics_path: join(dir, ".bureauos", "daemon", "daemon.log"),
       state: {
         status: "running",
         workspace_root: dir,
@@ -540,6 +570,11 @@ describe("API server", () => {
         ...snapshot,
         alive: false,
         status: "stopped",
+        heartbeat: {
+          ...snapshot.heartbeat,
+          scheduler_active: false,
+          scheduler_status: "inactive",
+        },
         ...(snapshot.state
           ? { state: { ...snapshot.state, status: "stopped" as const, scheduler_active: false } }
           : {}),

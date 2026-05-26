@@ -1516,7 +1516,22 @@ const handleDaemonStatus: Handler = async () => {
   );
   if (state.pid) process.stdout.write(`pid: ${state.pid}\n`);
   if (state.api_url) process.stdout.write(`api: ${state.api_url}\n`);
-  process.stdout.write(`scheduler: ${state.scheduler_active ? "active" : "inactive"}\n`);
+  process.stdout.write(`scheduler: ${snapshot.heartbeat.scheduler_status}\n`);
+  if (snapshot.heartbeat.uptime_seconds !== undefined) {
+    process.stdout.write(`uptime_seconds: ${snapshot.heartbeat.uptime_seconds}\n`);
+  }
+  if (snapshot.heartbeat.last_run) {
+    const run = snapshot.heartbeat.last_run;
+    process.stdout.write(
+      `last_run: ${run.trigger}${run.run_id ? ` -> ${run.run_id}` : ""} at ${run.at}\n`,
+    );
+  }
+  if (snapshot.heartbeat.last_error) {
+    const error = snapshot.heartbeat.last_error;
+    process.stdout.write(
+      `last_error: ${error.trigger} failed ${error.failure_count} time(s): ${error.error}\n`,
+    );
+  }
   if (state.started_at) process.stdout.write(`started: ${state.started_at}\n`);
   if (state.updated_at) process.stdout.write(`updated: ${state.updated_at}\n`);
   if (state.message) process.stdout.write(`message: ${state.message}\n`);

@@ -72,6 +72,13 @@ export class DaemonLifecycleSupervisor {
         snapshot: current,
       };
     }
+    if (current.status === "stale") {
+      await this.state.recordDiagnostic({
+        type: "stale_status_recovered",
+        ...(current.state?.pid ? { stale_pid: current.state.pid } : {}),
+        message: "starting daemon after stale status",
+      });
+    }
 
     const lock = await this.state.lockStatus();
     if (lock.state && lock.alive) {
