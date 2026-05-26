@@ -775,6 +775,54 @@ describe("CoordinatorChatService", () => {
     expect(result.coordinatorMessage.text).toBe("Ok, lavoro sullo stato dei provider.");
   });
 
+  it("strips defensive no-mutation filler from provider answers", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    const messages = new CoordinatorMessageStore(dir);
+    const fakeProvider: ProviderAdapter = {
+      id: "fake-provider",
+      type: "custom",
+      name: "Fake Provider",
+      async listModels() {
+        return ["fake-model"];
+      },
+      async validateCredentials() {
+        return { ok: true };
+      },
+      async generateText() {
+        return {
+          model: "fake-model",
+          text: [
+            "Non ho creato nuovi clienti, progetti o opportunita: ho solo letto lo stato esistente.",
+            "Pizzeria Amodeo Website e in intake.",
+            "Prossima mossa: preparo lo scope operativo.",
+          ].join("\n"),
+        };
+      },
+      async *stream() {
+        yield "unused";
+      },
+    };
+    const service = new CoordinatorChatService(dir, {
+      config: defaultConfig("freelancer"),
+      messages,
+      providerSelector: async () => ({ provider: fakeProvider, model: "fake-model" }),
+    });
+
+    const result = await service.process({
+      source: "test",
+      message: "controlla provider e memoria",
+    });
+
+    expect(result.provider.status).toBe("used");
+    expect(result.coordinatorMessage.text).toBe(
+      "Pizzeria Amodeo Website e in intake.\nProssima mossa: preparo lo scope operativo.",
+    );
+    expect(result.coordinatorMessage.text).not.toContain("Non ho creato");
+    expect(result.coordinatorMessage.text).not.toContain("ho solo letto");
+    const history = await messages.list();
+    expect(history.at(-1)?.text).toBe(result.coordinatorMessage.text);
+  });
+
   it("does not persist provider prompts, traces, or hidden reasoning in chat replies", async () => {
     const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
     const fakeProvider: ProviderAdapter = {

@@ -78,6 +78,12 @@ const OWNER_FACING_STARTS = [
 const INTERNAL_TAG_PATTERN =
   /<\s*(analysis|thinking|thought|thoughts|scratchpad|reasoning|reflection|internal)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi;
 
+const DEFENSIVE_NO_MUTATION_SENTENCE_PATTERN =
+  /\bNon ho creato\b[^.!?\n]*(?:\bho solo letto\b[^.!?\n]*)?[.!?]?/giu;
+
+const DEFENSIVE_READ_ONLY_SENTENCE_PATTERN =
+  /\b(?:Ho solo letto|mi sono limitato a leggere|mi sono limitata a leggere)\b[^.!?\n]*[.!?]?/giu;
+
 function stripTaggedInternalBlocks(text: string): string {
   return text.replace(INTERNAL_TAG_PATTERN, "");
 }
@@ -174,6 +180,21 @@ function stripInternalLineSections(text: string): string {
   return output.join("\n");
 }
 
+function stripDefensiveNoMutationFiller(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .map((line) =>
+      line
+        .replace(DEFENSIVE_NO_MUTATION_SENTENCE_PATTERN, "")
+        .replace(DEFENSIVE_READ_ONLY_SENTENCE_PATTERN, "")
+        .replace(/^[\s:;-]+/, "")
+        .replace(/[ \t]{2,}/g, " ")
+        .trim(),
+    )
+    .filter(Boolean)
+    .join("\n");
+}
+
 function keepAfterFinalAnswerMarker(text: string): string {
   const lines = text.split(/\r?\n/);
   for (let index = 0; index < lines.length; index += 1) {
@@ -190,9 +211,11 @@ function keepAfterFinalAnswerMarker(text: string): string {
 }
 
 export function sanitizeCoordinatorVisibleText(input: string): string {
-  return stripInternalLineSections(
-    stripLeadingInternalPreamble(
-      keepAfterFinalAnswerMarker(stripInternalFences(stripTaggedInternalBlocks(input.trim()))),
+  return stripDefensiveNoMutationFiller(
+    stripInternalLineSections(
+      stripLeadingInternalPreamble(
+        keepAfterFinalAnswerMarker(stripInternalFences(stripTaggedInternalBlocks(input.trim()))),
+      ),
     ),
   )
     .replace(/\p{Extended_Pictographic}/gu, "")

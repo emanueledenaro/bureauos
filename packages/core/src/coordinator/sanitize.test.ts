@@ -44,4 +44,18 @@ const status = "ok";
     expect(sanitized.toLowerCase()).not.toContain("historical memory context");
     expect(sanitized.toLowerCase()).not.toContain("focused memory hits");
   });
+
+  it("removes defensive no-mutation filler from visible coordinator replies", () => {
+    const sanitized = sanitizeCoordinatorVisibleText(`
+Non ho creato nuovi clienti, progetti o opportunita: ho solo letto lo stato esistente.
+Pizzeria Amodeo Website e in intake.
+Prossima mossa: preparo lo scope operativo.
+`);
+
+    expect(sanitized).toBe(
+      "Pizzeria Amodeo Website e in intake.\nProssima mossa: preparo lo scope operativo.",
+    );
+    expect(sanitized).not.toContain("Non ho creato");
+    expect(sanitized).not.toContain("ho solo letto");
+  });
 });
