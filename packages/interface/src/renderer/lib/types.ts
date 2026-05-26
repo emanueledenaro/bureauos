@@ -8,6 +8,7 @@ import type {
   ClientRecord,
   CompanyPulse,
   GrowthMemorySummary,
+  LocalNotificationRecord,
   OpportunityRecord,
   PolicyExplainResult,
   ProjectOwnershipRecord,
@@ -45,6 +46,7 @@ export interface DashboardState {
   growthMemory?: GrowthMemorySummary;
   approvals: ApprovalRecord[];
   resolvedApprovals: ApprovalRecord[];
+  notifications: LocalNotificationRecord[];
   runs: RunRecord[];
   agents: AgentDefinition[];
   capabilities: CapabilityDefinition[];

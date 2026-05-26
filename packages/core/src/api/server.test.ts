@@ -213,6 +213,30 @@ describe("API server", () => {
     expect(pending.map((approval) => approval.id)).not.toContain(first.id);
   });
 
+  it("exposes local notifications for approval-required work", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const approval = await new ApprovalRegistry(dir).request({
+      action: "open_pull_requests",
+      actor: "supreme_coordinator",
+      target: "github.com/acme/web",
+      scope: "SER-90 API notification fixture",
+      riskLevel: "medium",
+    });
+
+    const response = await fetch(`${server.url}/notifications`);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "approval_needed",
+          source_id: approval.id,
+          dedupe_key: `approval:${approval.id}`,
+        }),
+      ]),
+    );
+  });
+
   it("requires a decision note before approving high-risk approvals", async () => {
     const approval = await new ApprovalRegistry(dir).request({
       action: "deploy_production",

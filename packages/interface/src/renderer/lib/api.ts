@@ -489,6 +489,24 @@ export interface PolicyExplainResult {
   counts: Record<PolicyExplainOutcome, number>;
   decisions: PolicyExplainDecision[];
 }
+export interface LocalNotificationRecord {
+  id: string;
+  type:
+    | "approval_needed"
+    | "high_risk_blocker"
+    | "client_issue"
+    | "revenue_opportunity"
+    | "daily_report";
+  title: string;
+  severity: "info" | "warning" | "critical";
+  status: "unread" | "read" | "dismissed";
+  source_type: string;
+  source_id: string;
+  target: string;
+  dedupe_key: string;
+  created: string;
+  updated: string;
+}
 export interface BusinessReportResult {
   generated_at: string;
   executive_report: ArtifactRecord;
@@ -802,6 +820,7 @@ export const Api = {
     }),
   approvals: () => api<ApprovalRecord[]>("/approvals"),
   approvalsResolved: () => api<ApprovalRecord[]>("/approvals/resolved"),
+  notifications: () => api<LocalNotificationRecord[]>("/notifications"),
   runs: () => api<RunRecord[]>("/runs"),
   agents: () => api<AgentDefinition[]>("/agents"),
   capabilities: () => api<CapabilityDefinition[]>("/capabilities"),

@@ -36,6 +36,10 @@ export function Header({
   }, []);
 
   const blockedProjects = state.projects.filter((project) => project.status === "blocked").length;
+  const localNotifications = state.notifications.filter(
+    (notification) => notification.status !== "dismissed",
+  ).length;
+  const bellCount = localNotifications || state.approvals.length;
   const riskTone: Tone =
     blockedProjects > 0 ? "danger" : state.approvals.length > 0 ? "warning" : "success";
   const riskLabel =
@@ -157,12 +161,16 @@ export function Header({
               aria-label="Open pending approvals"
             >
               <Bell className="h-4 w-4" />
-              {state.approvals.length > 0 ? (
+              {bellCount > 0 ? (
                 <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-warning" />
               ) : null}
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{state.approvals.length} pending approvals</TooltipContent>
+          <TooltipContent>
+            {localNotifications > 0
+              ? `${localNotifications} local notifications`
+              : `${state.approvals.length} pending approvals`}
+          </TooltipContent>
         </Tooltip>
 
         <div className="hidden flex-col text-right text-[10px] leading-tight text-muted-foreground xl:flex">

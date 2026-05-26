@@ -38,6 +38,7 @@ describe("initWorkspace", () => {
     expect(await exists(paths.companyMemory)).toBe(true);
     expect(await exists(paths.policiesMemory)).toBe(true);
     expect(await exists(paths.auditLog)).toBe(true);
+    expect(await exists(paths.notificationsInboxDir)).toBe(true);
     expect(await exists(paths.dailyDir)).toBe(true);
     expect(await exists(paths.coordinatorDir)).toBe(true);
     expect(await exists(paths.clientsDir)).toBe(true);

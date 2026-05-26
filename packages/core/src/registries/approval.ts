@@ -1,6 +1,7 @@
 import { rename } from "node:fs/promises";
 import { join } from "node:path";
 import { newId } from "../ids.js";
+import { LocalNotificationCenter, type ApprovalNotificationSink } from "../notifications/local.js";
 import { workspacePaths } from "../paths.js";
 import { ensureDir, fileExists, listDocs, readDoc, writeDoc, type FrontMatter } from "./base.js";
 
@@ -37,6 +38,10 @@ export interface CreateApprovalInput {
   oneOff?: boolean;
   recurring?: boolean;
   body?: string;
+}
+
+export interface ApprovalRegistryDeps {
+  notifications?: ApprovalNotificationSink | false;
 }
 
 const APPROVAL_ACTION_RISK: Readonly<Record<string, ApprovalRiskLevel>> = {
@@ -108,7 +113,17 @@ export function approvalRequiresDecisionNote(
 }
 
 export class ApprovalRegistry {
-  constructor(public readonly workspaceRoot: string) {}
+  private readonly notifications?: ApprovalNotificationSink;
+
+  constructor(
+    public readonly workspaceRoot: string,
+    deps: ApprovalRegistryDeps = {},
+  ) {
+    this.notifications =
+      deps.notifications === false
+        ? undefined
+        : (deps.notifications ?? new LocalNotificationCenter(workspaceRoot));
+  }
 
   private paths() {
     return workspacePaths(this.workspaceRoot);
@@ -146,7 +161,16 @@ export class ApprovalRegistry {
       reason: "",
     };
     await writeDoc(this.pendingFile(id), record, input.body ?? "");
+    await this.emitApprovalNotification(record);
     return record;
+  }
+
+  private async emitApprovalNotification(record: ApprovalRecord): Promise<void> {
+    try {
+      await this.notifications?.notifyApprovalNeeded(record);
+    } catch {
+      // Notification delivery is best-effort; approval creation remains the source of truth.
+    }
   }
 
   async getPending(id: string): Promise<ApprovalRecord | undefined> {

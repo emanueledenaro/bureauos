@@ -60,6 +60,17 @@ export type {
 export { ApprovalRegistry } from "./registries/approval.js";
 export type { ApprovalRecord, ApprovalStatus, CreateApprovalInput } from "./registries/approval.js";
 
+export { LocalNotificationCenter } from "./notifications/local.js";
+export type {
+  ApprovalNotificationInput,
+  ApprovalNotificationSink,
+  CreateLocalNotificationInput,
+  LocalNotificationRecord,
+  LocalNotificationSeverity,
+  LocalNotificationStatus,
+  LocalNotificationType,
+} from "./notifications/local.js";
+
 export { CompanyRegistry } from "./registries/company.js";
 export type { CompanyRecord } from "./registries/company.js";
 

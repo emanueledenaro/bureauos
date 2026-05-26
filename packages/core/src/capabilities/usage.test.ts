@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ArtifactStore } from "../artifacts/store.js";
 import { defaultConfig } from "../config/loader.js";
 import { initWorkspace } from "../init/initializer.js";
+import { LocalNotificationCenter } from "../notifications/local.js";
 import { workspacePaths } from "../paths.js";
 import { ApprovalRegistry } from "../registries/approval.js";
 import { CapabilityUseService } from "./usage.js";
@@ -88,6 +89,37 @@ describe("CapabilityUseService", () => {
     expect(comment.status).toBe("blocked");
     expect(comment.policy.action).toBe("comment_on_issues");
     expect(comment.approval?.action).toBe("comment_on_issues");
+  });
+
+  it("emits one local notification for repeated approval-required policy decisions", async () => {
+    const config = defaultConfig("agency");
+    config.autonomy.comment_on_issues = false;
+    const service = new CapabilityUseService(dir, { config });
+
+    const first = await service.check({
+      agent: "development",
+      capabilityId: "linear",
+      action: "comment",
+      target: "linear://issue/SER-90",
+    });
+    const second = await service.check({
+      agent: "development",
+      capabilityId: "linear",
+      action: "comment",
+      target: "linear://issue/SER-90",
+    });
+
+    expect(first.status).toBe("blocked");
+    expect(second.status).toBe("blocked");
+    expect(second.approval?.id).toBe(first.approval?.id);
+
+    const notifications = await new LocalNotificationCenter(dir).list();
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]).toMatchObject({
+      type: "approval_needed",
+      source_id: first.approval?.id,
+      dedupe_key: `approval:${first.approval?.id}`,
+    });
   });
 
   it("blocks agents that are not assigned to a capability", async () => {

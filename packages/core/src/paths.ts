@@ -39,6 +39,8 @@ export interface WorkspacePaths {
   indexesDir: string;
   auditDir: string;
   auditLog: string;
+  notificationsDir: string;
+  notificationsInboxDir: string;
   daemonDir: string;
   daemonStatus: string;
   daemonLock: string;
@@ -87,6 +89,8 @@ export function workspacePaths(root: string): WorkspacePaths {
     indexesDir: join(mem, "indexes"),
     auditDir: join(ws, "audit"),
     auditLog: join(ws, "audit", "audit.log"),
+    notificationsDir: join(ws, "notifications"),
+    notificationsInboxDir: join(ws, "notifications", "inbox"),
     daemonDir: join(ws, "daemon"),
     daemonStatus: join(ws, "daemon", "status.json"),
     daemonLock: join(ws, "daemon", "daemon.lock"),

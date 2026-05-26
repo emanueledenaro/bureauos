@@ -10,6 +10,7 @@ const emptyDashboardState: DashboardState = {
   opportunities: [],
   approvals: [],
   resolvedApprovals: [],
+  notifications: [],
   runs: [],
   agents: [],
   capabilities: [],

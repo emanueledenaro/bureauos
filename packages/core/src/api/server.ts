@@ -14,6 +14,7 @@ import {
   approvalRequiresDecisionNote,
   approvalRiskLevel,
 } from "../registries/approval.js";
+import { LocalNotificationCenter } from "../notifications/local.js";
 import { ArtifactStore } from "../artifacts/store.js";
 import { AuditLog } from "../audit/log.js";
 import { PolicyEngine } from "../policy/engine.js";
@@ -273,6 +274,7 @@ function deps(options: ApiServerOptions) {
   const policy = new PolicyEngine(options.config, approvals);
   const audit = new AuditLog(workspacePaths(options.workspaceRoot).auditLog);
   const artifacts = new ArtifactStore(options.workspaceRoot);
+  const notifications = new LocalNotificationCenter(options.workspaceRoot);
   return {
     clients: new ClientRegistry(options.workspaceRoot),
     projects: new ProjectRegistry(options.workspaceRoot),
@@ -280,6 +282,7 @@ function deps(options: ApiServerOptions) {
     approvals,
     audit,
     artifacts,
+    notifications,
     policy,
     runs: new RunEngine(options.workspaceRoot, { audit, artifacts, policy }),
   };
@@ -708,6 +711,8 @@ const ROUTES: Record<string, RouteHandler> = {
     ok(res, await deps(options).approvals.listPending()),
   "GET /approvals/resolved": async ({ res, options }) =>
     ok(res, await deps(options).approvals.listResolved()),
+  "GET /notifications": async ({ res, options }) =>
+    ok(res, await deps(options).notifications.list()),
   "GET /runs": async ({ res, options }) => ok(res, await deps(options).runs.list()),
   "GET /artifacts": async ({ res, options }) => ok(res, await deps(options).artifacts.list()),
   "GET /agents": ({ res }) => ok(res, AGENT_ROLES),
