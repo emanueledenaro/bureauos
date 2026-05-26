@@ -24,6 +24,8 @@ describe("PolicyEngine", () => {
     const d = await engine.evaluate({ action: "create_issues", actor: "supreme_coordinator" });
     expect(d.allowed).toBe(true);
     expect(d.outcome).toBe("allow");
+    expect(d.matched_rule).toBe("autonomy.create_issues");
+    expect(d.approval_required).toBe(false);
   });
 
   it("requires approval for actions disabled by autonomy defaults", async () => {
@@ -34,6 +36,8 @@ describe("PolicyEngine", () => {
     });
     expect(d.allowed).toBe(false);
     expect(d.outcome).toBe("require_approval");
+    expect(d.matched_rule).toBe("autonomy.merge_pull_requests");
+    expect(d.approval_required).toBe(true);
   });
 
   it("enforces autonomy level boundaries for issue, branch, merge, and deploy work", async () => {
@@ -118,6 +122,7 @@ describe("PolicyEngine", () => {
     const d = await engine.evaluate({ action: "summon_dragons", actor: "supreme_coordinator" });
     expect(d.allowed).toBe(false);
     expect(d.outcome).toBe("escalate");
+    expect(d.matched_rule).toBe("policy.unknown_action");
   });
 
   it("allows a previously disabled action when a matching approval exists", async () => {

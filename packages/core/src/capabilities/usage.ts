@@ -178,6 +178,8 @@ function auditBody(args: {
 - Policy action: ${args.policy.action}
 - Outcome: ${args.policy.outcome}
 - Allowed by policy: ${args.policy.allowed}
+- Matched rule: ${args.policy.matched_rule}
+- Approval required: ${args.policy.approval_required}
 - Reason: ${args.policy.reason}
 - Required gates: ${args.policy.required_gates.join(", ") || "(none)"}
 - Approval: ${args.approval?.id ?? args.policy.approval_id ?? "(none)"}
@@ -260,6 +262,17 @@ export class CapabilityUseService {
         : undefined;
     const status =
       capability.allowed && policy.allowed && missingGates.length === 0 ? "allowed" : "blocked";
+    const effectivePolicy: PolicyDecision = missingGates.length
+      ? {
+          ...policy,
+          allowed: false,
+          outcome: "require_approval",
+          reason: blockedReason,
+          approval_required: true,
+          required_gates: missingGates,
+          ...(approval ? { approval_id: approval.id } : {}),
+        }
+      : policy;
 
     const artifact = await this.artifacts.write({
       type: "capability-audit",
@@ -269,10 +282,16 @@ export class CapabilityUseService {
         capability_id: input.capabilityId,
         action: input.action,
         target,
-        status,
-        policy_action: policy.action,
-        policy_outcome: policy.outcome,
+        decision_status: status,
+        policy_action: effectivePolicy.action,
+        policy_outcome: effectivePolicy.outcome,
+        policy_reason: effectivePolicy.reason,
+        policy_matched_rule: effectivePolicy.matched_rule,
+        policy_required_gates: effectivePolicy.required_gates,
+        policy_approval_required: effectivePolicy.approval_required,
         capability_status: capability.status,
+        capability_reason: capability.reason,
+        capability_risk_class: capability.risk_class,
         missing_gates: missingGates,
         linked_issues: linkedIssues.map(String),
         test_evidence: [...tests],
@@ -287,7 +306,7 @@ export class CapabilityUseService {
         input,
         target,
         capability,
-        policy,
+        policy: effectivePolicy,
         status,
         missingGates,
         changedFileCount,
@@ -307,7 +326,7 @@ export class CapabilityUseService {
         status === "allowed"
           ? "allow"
           : capability.allowed
-            ? auditPolicyResult(policy.outcome)
+            ? auditPolicyResult(effectivePolicy.outcome)
             : "deny",
       result: "ok",
     });
@@ -315,16 +334,7 @@ export class CapabilityUseService {
     return {
       status,
       capability,
-      policy: missingGates.length
-        ? {
-            ...policy,
-            allowed: false,
-            outcome: "require_approval",
-            reason: blockedReason,
-            required_gates: missingGates,
-            ...(approval ? { approval_id: approval.id } : {}),
-          }
-        : policy,
+      policy: effectivePolicy,
       target,
       missing_gates: missingGates,
       ...(approval ? { approval } : {}),

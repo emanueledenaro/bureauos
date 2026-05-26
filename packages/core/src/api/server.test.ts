@@ -1803,7 +1803,7 @@ describe("API server", () => {
         agent: "development",
         capabilityId: "codex",
         action: "read_repo",
-        target: "github.com/acme/web",
+        target: "github.com/acme/web?api_key=sk-apitestsecret123456",
       }),
     });
 
@@ -1816,6 +1816,25 @@ describe("API server", () => {
     expect(body.status).toBe("allowed");
     expect(body.artifact.type).toBe("capability-audit");
     expect(body.policy.action).toBe("observe_signals");
+
+    const explain = await fetch(`${server.url}/policy/explain`);
+    expect(explain.status).toBe(200);
+    const explainBody = (await explain.json()) as {
+      decisions: Array<{ outcome: string; matched_rule: string; capability: string }>;
+    };
+    expect(explainBody.decisions).toEqual([
+      expect.objectContaining({
+        outcome: "allow",
+        matched_rule: "autonomy.observe_signals",
+        capability: "codex",
+      }),
+    ]);
+
+    const auditResponse = await fetch(`${server.url}/audit`);
+    expect(auditResponse.status).toBe(200);
+    const auditBody = JSON.stringify(await auditResponse.json());
+    expect(auditBody).toContain("[redacted]");
+    expect(auditBody).not.toContain("sk-apitestsecret123456");
   });
 
   it("connects OpenAI Codex with the browser OAuth callback flow", async () => {

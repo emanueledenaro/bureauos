@@ -300,7 +300,12 @@ export interface AuditEvent {
   actor: string;
   action: string;
   target?: string;
+  capability?: string;
+  policy_result?: "allow" | "deny" | "require_approval" | "escalate";
+  approval_id?: string;
+  artifact_id?: string;
   result: string;
+  error?: string;
 }
 export interface AgentDefinition {
   id: string;
@@ -457,6 +462,32 @@ export interface MemoryBrowserResult {
   categories: Array<{ id: MemoryBrowserCategory; label: string; count: number }>;
   entries: MemoryBrowserEntry[];
   selected?: MemoryBrowserDetail;
+}
+export type PolicyExplainOutcome = "allow" | "deny" | "require_approval" | "escalate";
+export interface PolicyExplainDecision {
+  id: string;
+  artifact_id: string;
+  created: string;
+  agent: string;
+  capability: string;
+  action: string;
+  policy_action: string;
+  target: string;
+  source_status: "allowed" | "blocked";
+  outcome: PolicyExplainOutcome;
+  allowed: boolean;
+  matched_rule: string;
+  risk_class: "low" | "medium" | "high" | "critical";
+  approval_required: boolean;
+  approval_id?: string;
+  reason: string;
+  required_gates: string[];
+  missing_gates: string[];
+}
+export interface PolicyExplainResult {
+  generated_at: string;
+  counts: Record<PolicyExplainOutcome, number>;
+  decisions: PolicyExplainDecision[];
 }
 export interface BusinessReportResult {
   generated_at: string;
@@ -841,6 +872,7 @@ export const Api = {
     params.set("limit", String(input.limit ?? 80));
     return api<MemoryBrowserResult>(`/memory/browser?${params.toString()}`);
   },
+  policyExplain: (limit = 20) => api<PolicyExplainResult>(`/policy/explain?limit=${limit}`),
   audit: (n = 50) => api<AuditEvent[]>(`/audit?n=${n}`),
   coordinatorIntake: (input: {
     message: string;

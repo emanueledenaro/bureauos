@@ -17,6 +17,7 @@ import {
 import { ArtifactStore } from "../artifacts/store.js";
 import { AuditLog } from "../audit/log.js";
 import { PolicyEngine } from "../policy/engine.js";
+import { PolicyExplainService } from "../policy/explain.js";
 import { RunEngine } from "../runs/engine.js";
 import { AGENT_ROLES } from "../agents/roles.js";
 import type { CoordinatorAttachmentInput } from "../coordinator/intake.js";
@@ -172,6 +173,33 @@ const PROVIDER_TYPES: ReadonlySet<ProviderType> = new Set([
   "openrouter",
   "custom",
 ]);
+
+const SECRET_PATTERNS: Array<[RegExp, string]> = [
+  [/\b(sk-[A-Za-z0-9_-]{8,})\b/g, "[redacted]"],
+  [/\b(xox[baprs]-[A-Za-z0-9-]{8,})\b/g, "[redacted]"],
+  [
+    /\b((?:api[_-]?key|access[_-]?token|refresh[_-]?token|secret|password|authorization)\s*[:=]\s*)([^\s"'`]+)/gi,
+    "$1[redacted]",
+  ],
+  [/\b(Bearer\s+)([A-Za-z0-9._-]{12,})\b/gi, "$1[redacted]"],
+];
+
+function redactSecretLookingText(input: string): string {
+  return SECRET_PATTERNS.reduce((text, [pattern, replacement]) => {
+    return text.replace(pattern, replacement);
+  }, input);
+}
+
+function redactAuditPayload(payload: unknown): unknown {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
+  const event = payload as Record<string, unknown>;
+  return Object.fromEntries(
+    Object.entries(event).map(([key, value]) => [
+      key,
+      typeof value === "string" ? redactSecretLookingText(value) : value,
+    ]),
+  );
+}
 
 function ok(res: ServerResponse, payload: unknown, status = 200): void {
   res.statusCode = status;
@@ -718,6 +746,14 @@ const ROUTES: Record<string, RouteHandler> = {
       ...(Array.isArray(body.approvalIds) ? { approvalIds: body.approvalIds } : {}),
     });
     ok(res, result, result.status === "allowed" ? 200 : 202);
+  },
+
+  "GET /policy/explain": async ({ res, options, url }) => {
+    const requestedLimit = Number(url.searchParams.get("limit") ?? "20");
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 100)
+      : 20;
+    ok(res, await new PolicyExplainService(options.workspaceRoot).list({ limit }));
   },
 
   "GET /coordinator/messages": async ({ res, options, url }) => {
@@ -1335,9 +1371,9 @@ const ROUTES: Record<string, RouteHandler> = {
         res,
         lines.map((l) => {
           try {
-            return JSON.parse(l);
+            return redactAuditPayload(JSON.parse(l));
           } catch {
-            return { raw: l };
+            return { raw: redactSecretLookingText(l) };
           }
         }),
       );
@@ -1387,9 +1423,11 @@ const ROUTES: Record<string, RouteHandler> = {
           if (!line) continue;
           try {
             const parsed = JSON.parse(line);
-            res.write(`event: audit\ndata: ${JSON.stringify(parsed)}\n\n`);
+            res.write(`event: audit\ndata: ${JSON.stringify(redactAuditPayload(parsed))}\n\n`);
           } catch {
-            res.write(`event: raw\ndata: ${JSON.stringify({ raw: line })}\n\n`);
+            res.write(
+              `event: raw\ndata: ${JSON.stringify({ raw: redactSecretLookingText(line) })}\n\n`,
+            );
           }
         }
       } catch {

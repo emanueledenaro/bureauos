@@ -9,6 +9,7 @@ import type {
   CompanyPulse,
   GrowthMemorySummary,
   OpportunityRecord,
+  PolicyExplainResult,
   ProjectOwnershipRecord,
   ProjectRecord,
   ProviderConnection,
@@ -52,6 +53,7 @@ export interface DashboardState {
   settings?: SettingsSummary;
   artifacts: ArtifactRecord[];
   audit: AuditEvent[];
+  policyExplain?: PolicyExplainResult;
   error?: string;
   loading: boolean;
 }

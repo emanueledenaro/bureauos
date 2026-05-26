@@ -126,6 +126,13 @@ export type {
 // Policy
 export { PolicyEngine } from "./policy/engine.js";
 export type { PolicyInput, PolicyDecision, PolicyOutcome, RiskClass } from "./policy/engine.js";
+export { PolicyExplainService } from "./policy/explain.js";
+export type {
+  PolicyExplainDecision,
+  PolicyExplainOptions,
+  PolicyExplainOutcome,
+  PolicyExplainResult,
+} from "./policy/explain.js";
 
 // Artifacts
 export { ArtifactStore } from "./artifacts/store.js";

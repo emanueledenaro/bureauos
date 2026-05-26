@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
   ApprovalRegistry,
   ArtifactStore,
+  CapabilityUseService,
   AuditLog,
   ClientRegistry,
   defaultConfig,
@@ -62,6 +63,13 @@ async function seedWorkspace(
   const audit = new AuditLog(workspacePaths(root).auditLog);
   const policy = new PolicyEngine(config, approvals);
   const runs = new RunEngine(root, { audit, artifacts, policy });
+  const capabilities = new CapabilityUseService(root, {
+    config,
+    approvals,
+    artifacts,
+    policy,
+    audit,
+  });
 
   const client = await clients.create({
     name: "Acme Labs",
@@ -100,6 +108,24 @@ async function seedWorkspace(
     scope: "Verify the seeded Operating Room state.",
     clientId: client.id,
     projectId: project.id,
+  });
+  await capabilities.check({
+    agent: "development",
+    capabilityId: "codex",
+    action: "read_repo",
+    target: "github.com/acme-labs/website",
+  });
+  await capabilities.check({
+    agent: "product",
+    capabilityId: "codex",
+    action: "edit_code",
+    target: "github.com/acme-labs/website?api_key=sk-seededsecret123456",
+  });
+  await capabilities.check({
+    agent: "development",
+    capabilityId: "codex",
+    action: "open_pr",
+    target: "github.com/acme-labs/website/pull/7",
   });
   await audit.append({
     actor: "qa",

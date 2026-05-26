@@ -117,6 +117,33 @@ test.describe("Operating Room memory browser", () => {
   });
 });
 
+test.describe("Operating Room policy explain", () => {
+  let workspace: InterfaceWorkspace;
+
+  test.beforeAll(async () => {
+    workspace = await createInterfaceWorkspace("seeded");
+  });
+
+  test.afterAll(async () => {
+    await workspace.close();
+  });
+
+  test("renders allow deny and approval-required decisions with redacted targets", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openWorkspace(page, workspace);
+    await openDesktopView(page, "Risk");
+
+    await expect(page.locator("main")).toContainText("Policy Explain");
+    await expect(page.locator("main")).toContainText("Allowed");
+    await expect(page.locator("main")).toContainText("Denied");
+    await expect(page.locator("main")).toContainText("Approval Required");
+    await expect(page.locator("main")).toContainText("autonomy.push_commits");
+    await expect(page.locator("main")).not.toContainText("sk-seededsecret123456");
+  });
+});
+
 async function openWorkspace(page: Page, workspace: InterfaceWorkspace): Promise<void> {
   await page.goto(`/?apiBase=${encodeURIComponent(workspace.url)}`);
   await expect(page).toHaveTitle(/BureauOS - Operating Room/);

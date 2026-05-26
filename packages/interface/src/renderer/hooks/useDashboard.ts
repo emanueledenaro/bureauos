@@ -20,6 +20,7 @@ const emptyState: DashboardState = {
   providerConnectors: [],
   artifacts: [],
   audit: [],
+  policyExplain: undefined,
   loading: true,
 };
 
@@ -70,6 +71,7 @@ export function useDashboard(): {
         Api.agents(),
         Api.capabilities(),
         Api.artifacts(),
+        Api.policyExplain(),
         Api.providers(),
         Api.settings(),
         Api.providerConnectors(),
@@ -89,6 +91,7 @@ export function useDashboard(): {
         agents,
         capabilities,
         artifacts,
+        policyExplain,
         providers,
         settings,
         providerConnectors,
@@ -109,6 +112,7 @@ export function useDashboard(): {
         agents,
         capabilities,
         artifacts,
+        policyExplain,
         providers,
         settings,
         providerConnectors,

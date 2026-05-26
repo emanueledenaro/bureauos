@@ -10,8 +10,32 @@ import { ViewToolbar } from "../components/dashboard/ViewToolbar";
 import { useAsyncAction } from "../hooks/useAsyncAction";
 import { clientName } from "../lib/builders";
 import { formatLabel, timeAgo } from "../lib/format";
-import type { AutonomousRetryResult } from "../lib/api";
+import type {
+  AutonomousRetryResult,
+  PolicyExplainDecision,
+  PolicyExplainOutcome,
+} from "../lib/api";
+import type { Tone } from "../lib/tone";
 import type { DashboardState } from "../lib/types";
+
+const policyTone: Record<PolicyExplainOutcome, Tone> = {
+  allow: "success",
+  deny: "danger",
+  require_approval: "warning",
+  escalate: "warning",
+};
+
+function policyOutcomeLabel(outcome: PolicyExplainOutcome): string {
+  if (outcome === "allow") return "Allowed";
+  if (outcome === "deny") return "Denied";
+  if (outcome === "require_approval") return "Approval Required";
+  return "Escalated";
+}
+
+function decisionTitle(decision: PolicyExplainDecision): string {
+  const capability = [decision.capability, decision.action].filter(Boolean).join(".");
+  return capability || decision.policy_action;
+}
 
 export function RiskView({
   state,
@@ -26,6 +50,8 @@ export function RiskView({
   const latestRetryReport = [...state.artifacts]
     .filter((artifact) => artifact.type === "autonomy-retry-report")
     .sort((a, b) => (b.created ?? "").localeCompare(a.created ?? ""))[0];
+  const policyExplain = state.policyExplain;
+  const policyDecisions = policyExplain?.decisions.slice(0, 6) ?? [];
   const retry = useAsyncAction(onRetryScan);
 
   const isClean =
@@ -91,6 +117,89 @@ export function RiskView({
           tone={failed.length + blockedRuns.length > 0 ? "danger" : "success"}
         />
       </KpiBar>
+
+      <div className="mt-section rounded-lg border border-border/70 bg-surface-subtle/60 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-[13px] font-semibold text-foreground">Policy Explain</div>
+            <div className="mt-1 text-[10px] text-muted-foreground">
+              {policyExplain
+                ? `${policyExplain.decisions.length} recent decisions · ${policyExplain.counts.require_approval} approval gates`
+                : "Loading policy decisions"}
+            </div>
+          </div>
+          <div className="flex flex-wrap justify-end gap-1.5">
+            <StatusPill value={`Allow ${policyExplain?.counts.allow ?? 0}`} tone="success" />
+            <StatusPill value={`Deny ${policyExplain?.counts.deny ?? 0}`} tone="danger" />
+            <StatusPill
+              value={`Approval ${policyExplain?.counts.require_approval ?? 0}`}
+              tone="warning"
+            />
+          </div>
+        </div>
+
+        {policyDecisions.length > 0 ? (
+          <div className="mt-3 grid gap-2 lg:grid-cols-3">
+            {policyDecisions.map((decision) => (
+              <BaseCard key={decision.id} className="min-w-0 gap-2">
+                <BaseCardHeader title={decisionTitle(decision)}>
+                  <StatusPill
+                    value={policyOutcomeLabel(decision.outcome)}
+                    tone={policyTone[decision.outcome]}
+                  />
+                </BaseCardHeader>
+                <div className="grid gap-1 text-[10px] text-muted-foreground">
+                  <div className="flex justify-between gap-2">
+                    <span>Agent</span>
+                    <span className="truncate font-mono text-foreground">{decision.agent}</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span>Rule</span>
+                    <span className="truncate font-mono text-foreground">
+                      {decision.matched_rule}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span>Risk</span>
+                    <span className="truncate text-foreground">{decision.risk_class}</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span>Approval</span>
+                    <span className="truncate text-foreground">
+                      {decision.approval_required ? decision.approval_id || "required" : "none"}
+                    </span>
+                  </div>
+                </div>
+                <div className="line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
+                  {decision.reason}
+                </div>
+                <div className="truncate font-mono text-[10px] text-muted-foreground/80">
+                  {decision.target}
+                </div>
+                {decision.missing_gates.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {decision.missing_gates.map((gate) => (
+                      <span
+                        key={gate}
+                        className="rounded bg-warning-subtle/30 px-1.5 py-0.5 text-[9px] text-warning"
+                      >
+                        {gate}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </BaseCard>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            className="mt-3"
+            title="No policy decisions"
+            description="Capability checks will appear here with their matched rule and approval boundary."
+            icon={ShieldCheck}
+          />
+        )}
+      </div>
 
       <div className="mt-section grid gap-3 md:grid-cols-2">
         {state.approvals.map((approval) => (
