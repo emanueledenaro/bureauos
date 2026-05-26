@@ -180,6 +180,9 @@ export type {
   AgentRunOutput,
   AgentContext,
   AgentDeps,
+  AgentCapabilityChecker,
+  AgentCapabilityCheckInput,
+  AgentCapabilityCheckResult,
 } from "./agents/runtime.js";
 export {
   MODEL_PROVIDER_CAPABILITY,
