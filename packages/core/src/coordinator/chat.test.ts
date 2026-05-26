@@ -39,7 +39,14 @@ describe("CoordinatorChatService", () => {
 
     expect(result.mode).toBe("answer");
     expect(result.result).toBeUndefined();
-    expect(result.provider.reason).toBe("client_only_save");
+    expect(result.provider.reason).toBe("client_only_save_fallback");
+    expect(result.coordinatorMessage.meta?.tool).toMatchObject({
+      name: "save_client",
+      source: "safety_fallback",
+    });
+    expect(result.coordinatorMessage.meta?.planningProvider).toMatchObject({
+      reason: "no_valid_provider_route",
+    });
     expect(result.coordinatorMessage.text).toBe(
       "Ho salvato il cliente Pizzeria Amodeo. Non ho creato progetti, opportunità o approvazioni perché mi hai chiesto solo l'anagrafica cliente.",
     );
@@ -50,6 +57,55 @@ describe("CoordinatorChatService", () => {
     await expect(new OpportunityRegistry(dir).list()).resolves.toEqual([]);
     await expect(new ApprovalRegistry(dir).listPending()).resolves.toEqual([]);
     await expect(new ArtifactStore(dir).list()).resolves.toEqual([]);
+  });
+
+  it("lets the provider choose the save_client tool before executing it", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    let providerWasAsked = false;
+    const fakeProvider: ProviderAdapter = {
+      id: "fake-provider",
+      type: "custom",
+      name: "Fake Provider",
+      async listModels() {
+        return ["fake-model"];
+      },
+      async validateCredentials() {
+        return { ok: true };
+      },
+      async generateText() {
+        providerWasAsked = true;
+        return {
+          model: "fake-model",
+          text: JSON.stringify({
+            action: "save_client",
+            clientName: "Pizzeria Amodeo",
+            industry: "food_and_beverage",
+            confidence: 0.94,
+          }),
+        };
+      },
+      async *stream() {
+        yield "unused";
+      },
+    };
+    const service = new CoordinatorChatService(dir, {
+      config: defaultConfig("freelancer"),
+      providerSelector: async () => ({ provider: fakeProvider, model: "fake-model" }),
+    });
+
+    const result = await service.process({
+      source: "test",
+      message: "puoi registrare questo lead: Pizzeria Amodeo?",
+    });
+
+    expect(providerWasAsked).toBe(true);
+    expect(result.provider.reason).toBe("coordinator_tool_plan");
+    expect(result.coordinatorMessage.meta?.tool).toMatchObject({ name: "save_client" });
+    expect(result.coordinatorMessage.text).toContain("Ho salvato il cliente Pizzeria Amodeo.");
+    const clients = await new ClientRegistry(dir).list();
+    expect(clients.map((client) => client.name)).toEqual(["Pizzeria Amodeo"]);
+    await expect(new ProjectRegistry(dir).list()).resolves.toEqual([]);
+    await expect(new OpportunityRegistry(dir).list()).resolves.toEqual([]);
   });
 
   it("streams client-only saves as plain confirmations", async () => {

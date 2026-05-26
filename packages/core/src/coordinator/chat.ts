@@ -73,7 +73,25 @@ export type CoordinatorProviderSelector = (
   env: NodeJS.ProcessEnv,
 ) => Promise<CoordinatorProviderSelection | undefined>;
 
+interface CoordinatorToolPlan {
+  action: "save_client" | "create_intake" | "answer";
+  clientName?: string;
+  industry?: string;
+  answer?: string;
+  confidence?: number;
+}
+
+interface CoordinatorToolPlanningResult {
+  plan?: CoordinatorToolPlan;
+  provider: CoordinatorChatProviderMeta;
+}
+
 const DEFAULT_PROVIDER_TIMEOUT_MS = 12_000;
+
+function includesAny(message: string, words: readonly string[]): boolean {
+  const lower = message.toLowerCase();
+  return words.some((word) => lower.includes(word));
+}
 
 function messageAttachments(
   attachments: readonly CoordinatorAttachmentInput[],
@@ -132,6 +150,28 @@ function hasIntakeIntent(
   if (intakeSignals.some((signal) => lower.includes(signal))) return true;
   if (attachments.length === 0) return false;
   return ["logo", "brief", "cliente", "progetto", "brand"].some((signal) => lower.includes(signal));
+}
+
+function hasCoordinatorToolIntent(
+  message: string,
+  attachments: readonly CoordinatorAttachmentInput[],
+): boolean {
+  if (hasIntakeIntent(message, attachments)) return true;
+  if (attachments.length > 0) return true;
+  return includesToolGatewaySignal(message);
+}
+
+function includesToolGatewaySignal(message: string): boolean {
+  return includesAny(message, [
+    "aggiungi",
+    "client",
+    "cliente",
+    "contatto",
+    "lead",
+    "memorizza",
+    "registra",
+    "salva",
+  ]);
 }
 
 function wordsIn(message: string): string[] {
@@ -346,6 +386,36 @@ function userPrompt(
   ].join("\n");
 }
 
+function toolPlanningPrompt(
+  message: string,
+  packet: ContextPacket,
+  recent: readonly CoordinatorMessageRecord[],
+): string {
+  return [
+    "Current owner message:",
+    message,
+    "",
+    "Choose exactly one internal Coordinator tool. Return JSON only.",
+    "",
+    "Available tools:",
+    "- save_client: persist only a client identity/anagraphic record. Use this when the owner only asks to save, remember, register, or add a client/lead, without project scope.",
+    "- create_intake: create the full client/project/opportunity intake package. Use this only when the owner gives project, website, app, proposal, budget, booking, automation, marketing, or delivery scope.",
+    "- answer: respond without mutating memory. Use this for questions, status requests, ambiguity, or when a mutation is not safe.",
+    "",
+    "Rules:",
+    "- Never invent project scope from a client-only request.",
+    "- Extract the clean client name. Do not include trailing request text such as 'lo puoi salvare'.",
+    "- If the owner only names a client/lead and asks to save, remember, register, or add it, choose save_client with only the clean business name.",
+    "- If the owner says the client wants a website/app/booking/proposal, choose create_intake.",
+    "- If unclear, choose answer and ask one concise clarification.",
+    "",
+    "JSON shape:",
+    '{"action":"save_client|create_intake|answer","clientName":"optional clean client name","industry":"optional","answer":"optional owner-facing answer","confidence":0.0}',
+    "",
+    memoryPrompt(packet, recent),
+  ].join("\n");
+}
+
 function idleAnswer(message: string, provider: CoordinatorChatProviderMeta): string {
   if (isLowContextIdentityMessage(message, [])) return coordinatorIdentityAnswer();
   const providerIssue =
@@ -382,6 +452,62 @@ function deterministicAnswer(
     "",
     "Prossimo passo interno: lavoro solo sul tema indicato nel messaggio corrente. Se vuoi creare una nuova opportunita cliente, indicami cliente, obiettivo, budget indicativo, deadline e asset disponibili.",
   ].join("\n");
+}
+
+function parseCoordinatorToolPlan(raw: string): CoordinatorToolPlan | undefined {
+  const json = extractFirstJsonObject(raw);
+  if (!json) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return undefined;
+  }
+  if (!parsed || typeof parsed !== "object") return undefined;
+  const value = parsed as Record<string, unknown>;
+  const args =
+    value["args"] && typeof value["args"] === "object"
+      ? (value["args"] as Record<string, unknown>)
+      : value;
+  const rawAction = String(value["action"] ?? value["tool"] ?? "").toLowerCase();
+  const action =
+    rawAction === "save_client" || rawAction === "client.save"
+      ? "save_client"
+      : rawAction === "create_intake" || rawAction === "intake.create"
+        ? "create_intake"
+        : rawAction === "answer" || rawAction === "clarify"
+          ? "answer"
+          : undefined;
+  if (!action) return undefined;
+
+  const clientName = stringArg(args, "clientName") ?? stringArg(args, "client_name");
+  const industry = stringArg(args, "industry");
+  const answer = stringArg(args, "answer");
+  const confidence = typeof value["confidence"] === "number" ? value["confidence"] : undefined;
+
+  return {
+    action,
+    ...(clientName ? { clientName } : {}),
+    ...(industry ? { industry } : {}),
+    ...(answer ? { answer } : {}),
+    ...(confidence !== undefined ? { confidence } : {}),
+  };
+}
+
+function extractFirstJsonObject(raw: string): string | undefined {
+  const fenced = /```(?:json)?\s*([\s\S]*?)\s*```/i.exec(raw);
+  const text = fenced?.[1] ?? raw;
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start < 0 || end <= start) return undefined;
+  return text.slice(start, end + 1);
+}
+
+function stringArg(source: Record<string, unknown>, key: string): string | undefined {
+  const value = source[key];
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed || undefined;
 }
 
 async function selectCoordinatorProvider(
@@ -500,6 +626,50 @@ export class CoordinatorChatService {
     this.providerTimeoutMs = deps.providerTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
   }
 
+  private async planToolAction(
+    message: string,
+    packet: ContextPacket,
+    recent: readonly CoordinatorMessageRecord[],
+  ): Promise<CoordinatorToolPlanningResult> {
+    const selection = await this.providerSelector(this.workspaceRoot, this.config, this.env);
+    if (!selection) {
+      return {
+        provider: providerMeta("unavailable", undefined, undefined, "no_valid_provider_route"),
+      };
+    }
+
+    try {
+      const generated = await withTimeout(
+        selection.provider.generateText({
+          model: selection.model,
+          system: [
+            `You are the Supreme Coordinator of ${this.config.organization.name}.`,
+            "You choose safe internal tools for BureauOS.",
+            "Return JSON only. Do not include prose or hidden reasoning.",
+          ].join("\n"),
+          prompt: toolPlanningPrompt(message, packet, recent),
+          temperature: 0,
+          maxTokens: 500,
+        }),
+        this.providerTimeoutMs,
+        `provider tool planning timed out after ${this.providerTimeoutMs}ms`,
+      );
+      return {
+        plan: parseCoordinatorToolPlan(generated.text),
+        provider: providerMeta("used", selection, generated, "coordinator_tool_plan"),
+      };
+    } catch (error) {
+      return {
+        provider: providerMeta(
+          "failed",
+          selection,
+          undefined,
+          error instanceof Error ? error.message : "provider tool planning failed",
+        ),
+      };
+    }
+  }
+
   async *stream(input: CoordinatorChatInput): AsyncGenerator<CoordinatorChatStreamEvent> {
     yield { type: "status", status: "started" };
     const message = input.message.trim();
@@ -600,13 +770,103 @@ export class CoordinatorChatService {
     const recent = await this.messages.list(12);
     const memory = memoryMeta(packet);
 
+    let plannedIntakeProvider: CoordinatorChatProviderMeta | undefined;
+    let toolPlanningProvider: CoordinatorChatProviderMeta | undefined;
+    if (
+      hasCoordinatorToolIntent(message, attachments) &&
+      !isLowContextMessage(message, attachments)
+    ) {
+      const planned = await this.planToolAction(message, packet, recent);
+      toolPlanningProvider = planned.provider;
+      if (planned.plan?.action === "save_client" && planned.plan.clientName) {
+        const result = await this.intake.saveClientOnly({
+          message,
+          source: input.source ?? "coordinator_chat",
+          clientName: planned.plan.clientName,
+          ...(planned.plan.industry ? { industry: planned.plan.industry } : {}),
+          attachments,
+        });
+        const { ownerMessage, coordinatorMessage } = requireMessagePair(
+          await this.messages.appendMany([
+            {
+              role: "owner",
+              text: message,
+              attachments: messageAttachments(attachments),
+              meta: { mode: "client_save" },
+            },
+            {
+              role: "coordinator",
+              text: result.summary,
+              meta: {
+                mode: "client_save",
+                provider: planned.provider,
+                memory,
+                tool: {
+                  name: "save_client",
+                  confidence: planned.plan.confidence,
+                },
+                client: {
+                  id: result.client.id,
+                  slug: result.client.slug,
+                  name: result.client.name,
+                  created: result.created,
+                },
+              },
+            },
+          ]),
+        );
+        return {
+          mode: "answer",
+          ownerMessage,
+          coordinatorMessage,
+          provider: planned.provider,
+          memory,
+        };
+      }
+
+      if (planned.plan?.action === "answer" && planned.plan.answer) {
+        const answer = sanitizeCoordinatorAnswer(planned.plan.answer);
+        const { ownerMessage, coordinatorMessage } = requireMessagePair(
+          await this.messages.appendMany([
+            {
+              role: "owner",
+              text: message,
+              attachments: messageAttachments(attachments),
+              meta: { mode: "answer" },
+            },
+            {
+              role: "coordinator",
+              text: answer,
+              meta: { mode: "answer", provider: planned.provider, memory },
+            },
+          ]),
+        );
+        return {
+          mode: "answer",
+          ownerMessage,
+          coordinatorMessage,
+          provider: planned.provider,
+          memory,
+        };
+      }
+
+      if (planned.plan?.action === "create_intake") {
+        plannedIntakeProvider = planned.provider;
+      }
+    }
+
     if (isClientOnlySaveRequest({ message, attachments })) {
       const result = await this.intake.saveClientOnly({
         message,
         source: input.source ?? "coordinator_chat",
         attachments,
       });
-      const provider = providerMeta("unavailable", undefined, undefined, "client_only_save");
+      const provider = providerMeta(
+        "unavailable",
+        undefined,
+        undefined,
+        "client_only_save_fallback",
+      );
       const { ownerMessage, coordinatorMessage } = requireMessagePair(
         await this.messages.appendMany([
           {
@@ -622,6 +882,11 @@ export class CoordinatorChatService {
               mode: "client_save",
               provider,
               memory,
+              ...(toolPlanningProvider ? { planningProvider: toolPlanningProvider } : {}),
+              tool: {
+                name: "save_client",
+                source: "safety_fallback",
+              },
               client: {
                 id: result.client.id,
                 slug: result.client.slug,
@@ -642,6 +907,8 @@ export class CoordinatorChatService {
     }
 
     if (hasIntakeIntent(message, attachments)) {
+      const provider =
+        plannedIntakeProvider ?? providerMeta("unavailable", undefined, undefined, "intake_route");
       const result = await this.intake.process({
         message,
         source: input.source ?? "coordinator_chat",
@@ -659,7 +926,12 @@ export class CoordinatorChatService {
             role: "coordinator",
             text: result.summary,
             result,
-            meta: { mode: "intake", memory },
+            meta: {
+              mode: "intake",
+              memory,
+              provider,
+              ...(plannedIntakeProvider ? { tool: { name: "create_intake" } } : {}),
+            },
           },
         ]),
       );
@@ -668,7 +940,7 @@ export class CoordinatorChatService {
         ownerMessage,
         coordinatorMessage,
         result,
-        provider: providerMeta("unavailable", undefined, undefined, "intake_route"),
+        provider,
         memory,
       };
     }
