@@ -151,7 +151,8 @@ GitHub:
   github create-pr --project slug --owner O --repo R --head H --title T
                                             Open a policy-gated GitHub pull request
   github ensure-labels --owner O --repo R   Apply the BureauOS label taxonomy
-  github sync --owner O --repo R [--state]  Pull issues, PRs, and check signals into memory
+  github sync --owner O --repo R [--project slug] [--state]
+                                            Pull issues, PRs, and check signals into memory
 
 Misc:
   --version | -v       Print version
@@ -1850,6 +1851,7 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
         token: { type: "string" },
         state: { type: "string" },
         client: { type: "string" },
+        project: { type: "string" },
         "stale-days": { type: "number" },
         "no-issues": { type: "boolean" },
         "no-prs": { type: "boolean" },
@@ -1879,6 +1881,7 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
           | "closed"
           | "all",
         ...(typeof flags.client === "string" ? { clientSlug: flags.client } : {}),
+        ...(typeof flags.project === "string" ? { projectSlug: flags.project } : {}),
         includeIssues: flags["no-issues"] !== true,
         includePullRequests: flags["no-prs"] !== true,
         includeChecks: flags["no-checks"] !== true,
@@ -1900,6 +1903,9 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
       process.stdout.write(
         `bureau: synced ${result.repository}: ${result.issues.length} issues, ${result.pullRequests.length} PRs, ${result.checks.length} checks\n`,
       );
+      if (result.project) {
+        process.stdout.write(`project: ${result.project.slug}\n`);
+      }
       process.stdout.write(
         `signals: ${result.failingChecks.length} failing checks, ${result.staleIssues.length + result.stalePullRequests.length} stale items, ${result.createdOpportunities.length} new opportunities\n`,
       );

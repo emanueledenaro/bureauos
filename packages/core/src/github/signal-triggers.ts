@@ -167,6 +167,8 @@ export class GitHubSignalTriggerService {
         triggerType: "threshold",
         triggerSource: candidate.triggerSource,
         scope: candidate.scope,
+        ...(input.report.project_id ? { projectId: input.report.project_id } : {}),
+        ...(input.report.client_id ? { clientId: input.report.client_id } : {}),
       });
       await this.deps.runs.attachArtifacts(run.id, [input.report.id]);
       knownSources.add(candidate.triggerSource);

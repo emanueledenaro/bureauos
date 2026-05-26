@@ -1,9 +1,13 @@
+import { join } from "node:path";
 import { ArtifactStore, type ArtifactRecord } from "../artifacts/store.js";
 import { AuditLog } from "../audit/log.js";
 import { workspacePaths } from "../paths.js";
+import { readDoc, writeDoc, type FrontMatter } from "../registries/base.js";
 import { ClientRegistry } from "../registries/client.js";
 import { OpportunityRegistry, type OpportunityRecord } from "../registries/opportunity.js";
+import { ProjectRegistry, type ProjectRecord } from "../registries/project.js";
 import { createGitHubIssueOpportunities } from "./opportunity-import.js";
+import { parseGitHubRepository } from "./repository-utils.js";
 
 export interface GitHubSignalIssue {
   owner: string;
@@ -77,6 +81,7 @@ export interface GitHubSignalSyncInput {
   repo: string;
   state?: "open" | "closed" | "all";
   clientSlug?: string;
+  projectSlug?: string;
   includeIssues?: boolean;
   includePullRequests?: boolean;
   includeChecks?: boolean;
@@ -92,6 +97,7 @@ export interface GitHubSignalSyncResult {
   staleIssues: readonly GitHubSignalIssue[];
   stalePullRequests: readonly GitHubSignalPullRequest[];
   createdOpportunities: OpportunityRecord[];
+  project?: ProjectRecord;
   report: ArtifactRecord;
 }
 
@@ -101,6 +107,7 @@ export interface GitHubSignalSyncDeps {
   audit?: AuditLog;
   clients?: ClientRegistry;
   opportunities?: OpportunityRegistry;
+  projects?: ProjectRegistry;
 }
 
 const FAILING_CONCLUSIONS = new Set<GitHubSignalCheckConclusion>([
@@ -156,8 +163,23 @@ function checksForPullRequest(
   return checks.filter((check) => check.headSha === pullRequest.headSha);
 }
 
+function pullRequestCheckSummary(
+  checks: readonly GitHubSignalCheckRun[],
+  pullRequest: GitHubSignalPullRequest,
+): string {
+  const prChecks = checksForPullRequest(checks, pullRequest);
+  const failed = prChecks.filter(isFailingCheck);
+  return `#${pullRequest.number} ${pullRequest.state} checks=${prChecks.length} failing=${failed.length} head=${pullRequest.headSha.slice(0, 12)}`;
+}
+
+function repositoryMatchesProject(project: ProjectRecord, repository: string): boolean {
+  const parsed = parseGitHubRepository(project.repository);
+  return parsed?.repository.toLowerCase() === repository.toLowerCase();
+}
+
 function reportBody(args: {
   repository: string;
+  project?: ProjectRecord;
   issues: readonly GitHubSignalIssue[];
   pullRequests: readonly GitHubSignalPullRequest[];
   checks: readonly GitHubSignalCheckRun[];
@@ -169,6 +191,7 @@ function reportBody(args: {
 }): string {
   const {
     repository,
+    project,
     issues,
     pullRequests,
     checks,
@@ -183,6 +206,7 @@ function reportBody(args: {
 ## Repository
 
 - Repository: ${repository}
+- Project: ${project ? `${project.name} (${project.slug})` : "(unlinked)"}
 - Issues observed: ${issues.length}
 - Pull requests observed: ${pullRequests.length}
 - Check runs observed: ${checks.length}
@@ -216,6 +240,18 @@ ${
     : "- none"
 }
 
+## Run And Health Summary
+
+${
+  pullRequests.length
+    ? pullRequests.map((pr) => `- ${pullRequestCheckSummary(checks, pr)}`).join("\n")
+    : "- no pull request check state observed"
+}
+
+- Failing check trigger candidates: ${failingChecks.length}
+- Stale issue trigger candidates: ${staleIssues.length}
+- Stale pull request trigger candidates: ${stalePullRequests.length}
+
 ## Failing Checks
 
 ${
@@ -244,11 +280,78 @@ BureauOS observed GitHub as an external delivery signal. Failed checks and stale
 `;
 }
 
+function projectSignalMemorySection(args: {
+  generatedAt: string;
+  repository: string;
+  report: ArtifactRecord;
+  issues: readonly GitHubSignalIssue[];
+  pullRequests: readonly GitHubSignalPullRequest[];
+  checks: readonly GitHubSignalCheckRun[];
+  failingChecks: readonly GitHubSignalCheckRun[];
+  staleIssues: readonly GitHubSignalIssue[];
+  stalePullRequests: readonly GitHubSignalPullRequest[];
+}): string {
+  const {
+    generatedAt,
+    repository,
+    report,
+    issues,
+    pullRequests,
+    checks,
+    failingChecks,
+    staleIssues,
+    stalePullRequests,
+  } = args;
+  return `## GitHub Signal Sync - ${generatedAt}
+
+- Repository: ${repository}
+- Report: ${report.id}
+- Issues: ${issues.length} observed, ${staleIssues.length} stale
+- Pull requests: ${pullRequests.length} observed, ${stalePullRequests.length} stale
+- Check runs: ${checks.length} observed, ${failingChecks.length} failing
+
+### Issue State
+
+${
+  issues.length
+    ? issues
+        .slice(0, 10)
+        .map((issue) => `- Issue #${issue.number} ${issue.state}: ${issue.title}`)
+        .join("\n")
+    : "- none"
+}
+
+### Pull Request State
+
+${
+  pullRequests.length
+    ? pullRequests
+        .map((pr) => `- PR ${pullRequestCheckSummary(checks, pr)}: ${pr.title}`)
+        .join("\n")
+    : "- none"
+}
+
+### Check State
+
+${
+  failingChecks.length
+    ? failingChecks
+        .map(
+          (check) =>
+            `- ${check.name} ${check.conclusion ?? check.status} on ${check.headSha.slice(0, 12)}`,
+        )
+        .join("\n")
+    : "- no failing checks"
+}
+`;
+}
+
 export class GitHubSignalSyncService {
   private readonly artifacts: ArtifactStore;
   private readonly audit: AuditLog;
   private readonly clients: ClientRegistry;
   private readonly opportunities: OpportunityRegistry;
+  private readonly projects: ProjectRegistry;
   private readonly githubClient: GitHubSignalClient;
 
   constructor(
@@ -260,6 +363,40 @@ export class GitHubSignalSyncService {
     this.audit = deps.audit ?? new AuditLog(workspacePaths(workspaceRoot).auditLog);
     this.clients = deps.clients ?? new ClientRegistry(workspaceRoot);
     this.opportunities = deps.opportunities ?? new OpportunityRegistry(workspaceRoot);
+    this.projects = deps.projects ?? new ProjectRegistry(workspaceRoot);
+  }
+
+  private async resolveProject(
+    input: GitHubSignalSyncInput,
+    repository: string,
+  ): Promise<ProjectRecord | undefined> {
+    if (input.projectSlug) {
+      const project = await this.projects.get(input.projectSlug);
+      if (!project) throw new Error(`project not found: ${input.projectSlug}`);
+      return project;
+    }
+
+    const projects = await this.projects.list();
+    return projects.find((project) => repositoryMatchesProject(project, repository));
+  }
+
+  private async appendProjectMemory(args: {
+    project: ProjectRecord;
+    generatedAt: string;
+    repository: string;
+    report: ArtifactRecord;
+    issues: readonly GitHubSignalIssue[];
+    pullRequests: readonly GitHubSignalPullRequest[];
+    checks: readonly GitHubSignalCheckRun[];
+    failingChecks: readonly GitHubSignalCheckRun[];
+    staleIssues: readonly GitHubSignalIssue[];
+    stalePullRequests: readonly GitHubSignalPullRequest[];
+  }): Promise<void> {
+    const path = join(workspacePaths(this.workspaceRoot).projectsDir, args.project.slug, "RUNS.md");
+    const doc = await readDoc<FrontMatter>(path);
+    const body = `${doc.body.trimEnd()}\n\n${projectSignalMemorySection(args)}\n`;
+    await writeDoc(path, doc.front, body);
+    await this.projects.update(args.project.slug, {});
   }
 
   async sync(input: GitHubSignalSyncInput): Promise<GitHubSignalSyncResult> {
@@ -297,6 +434,7 @@ export class GitHubSignalSyncService {
     const stalePullRequests = pullRequests.filter(
       (pr) => pr.state === "open" && isStale(pr.updatedAt, cutoff),
     );
+    const project = await this.resolveProject(input, repository);
     const createdOpportunities = await createGitHubIssueOpportunities({
       clients: this.clients,
       opportunities: this.opportunities,
@@ -309,21 +447,35 @@ export class GitHubSignalSyncService {
     const report = await this.artifacts.write({
       type: "github-signal-report",
       createdBy: "supreme_coordinator",
+      ...(project ? { projectId: project.id, clientId: project.client_id } : {}),
       metadata: {
         repository,
+        ...(project
+          ? { project_slug: project.slug, project_name: project.name, linked_project: true }
+          : { linked_project: false }),
         issues_count: issues.length,
+        issue_state_refs: issues
+          .slice(0, 10)
+          .map((issue) => `#${issue.number} ${issue.state} ${issue.title}`),
         pull_requests_count: pullRequests.length,
         pull_request_refs: pullRequests
           .slice(0, 3)
           .map((pr) => `#${pr.number} ${pr.state} ${pr.title}`),
         pull_request_urls: pullRequests.slice(0, 3).map((pr) => pr.url),
+        pull_request_check_summary: pullRequests
+          .slice(0, 10)
+          .map((pr) => pullRequestCheckSummary(checks, pr)),
         checks_count: checks.length,
         failing_checks_count: failingChecks.length,
+        failing_check_refs: failingChecks
+          .slice(0, 10)
+          .map((check) => `${check.name} ${check.conclusion ?? check.status} ${check.headSha}`),
         stale_issues_count: staleIssues.length,
         stale_pull_requests_count: stalePullRequests.length,
       },
       body: reportBody({
         repository,
+        ...(project ? { project } : {}),
         issues,
         pullRequests,
         checks,
@@ -334,6 +486,29 @@ export class GitHubSignalSyncService {
         staleDays,
       }),
     });
+
+    if (project) {
+      await this.appendProjectMemory({
+        project,
+        generatedAt: report.created,
+        repository,
+        report,
+        issues,
+        pullRequests,
+        checks,
+        failingChecks,
+        staleIssues,
+        stalePullRequests,
+      });
+      await this.audit.append({
+        actor: "supreme_coordinator",
+        action: "github.signals.project_memory_updated",
+        target: project.id,
+        capability: "github.sync",
+        artifact_id: report.id,
+        result: "ok",
+      });
+    }
 
     for (const check of failingChecks) {
       await this.audit.append({
@@ -386,6 +561,7 @@ export class GitHubSignalSyncService {
       staleIssues,
       stalePullRequests,
       createdOpportunities,
+      ...(project ? { project } : {}),
       report,
     };
   }

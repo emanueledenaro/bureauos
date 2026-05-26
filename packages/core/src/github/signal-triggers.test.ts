@@ -11,7 +11,11 @@ import { PolicyEngine } from "../policy/engine.js";
 import { ApprovalRegistry } from "../registries/approval.js";
 import { RunEngine } from "../runs/engine.js";
 import { GitHubSignalTriggerService } from "./signal-triggers.js";
-import type { GitHubSignalCheckRun, GitHubSignalPullRequest } from "./signal-sync.js";
+import type {
+  GitHubSignalCheckRun,
+  GitHubSignalIssue,
+  GitHubSignalPullRequest,
+} from "./signal-sync.js";
 
 const failingCheck: GitHubSignalCheckRun = {
   owner: "acme",
@@ -39,6 +43,17 @@ const stalePullRequest: GitHubSignalPullRequest = {
   updatedAt: "2026-05-01T10:00:00.000Z",
 };
 
+const staleIssue: GitHubSignalIssue = {
+  owner: "acme",
+  repo: "web",
+  number: 7,
+  title: "Booking form fails on mobile",
+  url: "https://github.com/acme/web/issues/7",
+  labels: ["type:bug"],
+  state: "open",
+  updatedAt: "2026-05-01T09:00:00.000Z",
+};
+
 describe("GitHubSignalTriggerService", () => {
   let dir: string;
 
@@ -61,6 +76,8 @@ describe("GitHubSignalTriggerService", () => {
     const report = await artifacts.write({
       type: "github-signal-report",
       createdBy: "supreme_coordinator",
+      projectId: "project_acme",
+      clientId: "client_acme",
       body: "# GitHub Signal Report",
     });
     const service = new GitHubSignalTriggerService({
@@ -75,25 +92,34 @@ describe("GitHubSignalTriggerService", () => {
       repository: "acme/web",
       report,
       failingChecks: [failingCheck],
+      staleIssues: [staleIssue],
       stalePullRequests: [stalePullRequest],
     });
     const duplicate = await service.trigger({
       repository: "acme/web",
       report,
       failingChecks: [failingCheck],
+      staleIssues: [staleIssue],
       stalePullRequests: [stalePullRequest],
     });
 
     expect(result.triggered.map((item) => item.kind).sort()).toEqual([
       "failing_check",
+      "stale_issue",
       "stale_pull_request",
     ]);
     expect(duplicate.triggered).toHaveLength(0);
-    expect(duplicate.skipped.map((item) => item.reason)).toEqual(["duplicate", "duplicate"]);
+    expect(duplicate.skipped.map((item) => item.reason)).toEqual([
+      "duplicate",
+      "duplicate",
+      "duplicate",
+    ]);
 
     const allRuns = await runs.list();
-    expect(allRuns.map((run) => run.trigger_type)).toEqual(["threshold", "threshold"]);
-    expect(allRuns.map((run) => run.type).sort()).toEqual(["bug", "health_check"]);
+    expect(allRuns.map((run) => run.trigger_type)).toEqual(["threshold", "threshold", "threshold"]);
+    expect(allRuns.map((run) => run.type).sort()).toEqual(["bug", "health_check", "health_check"]);
+    expect(allRuns.every((run) => run.project_id === "project_acme")).toBe(true);
+    expect(allRuns.every((run) => run.client_id === "client_acme")).toBe(true);
     expect(allRuns.every((run) => run.artifacts.includes(report.id))).toBe(true);
 
     const log = await readFile(workspacePaths(dir).auditLog, "utf8");

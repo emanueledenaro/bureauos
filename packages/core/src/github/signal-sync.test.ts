@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ArtifactStore } from "../artifacts/store.js";
 import { initWorkspace } from "../init/initializer.js";
 import { workspacePaths } from "../paths.js";
+import { ClientRegistry } from "../registries/client.js";
 import { OpportunityRegistry } from "../registries/opportunity.js";
+import { ProjectRegistry } from "../registries/project.js";
 import {
   GitHubSignalSyncService,
   type GitHubSignalCheckRun,
@@ -94,11 +96,23 @@ describe("GitHubSignalSyncService", () => {
   });
 
   it("persists GitHub issues, PRs, stale work, and failing check signals", async () => {
+    const client = await new ClientRegistry(dir).create({
+      name: "Acme",
+      status: "active",
+    });
+    const project = await new ProjectRegistry(dir).create({
+      name: "Acme Web",
+      clientId: client.id,
+      status: "in_progress",
+      repository: "https://github.com/acme/web",
+    });
+
     const result = await new GitHubSignalSyncService(dir, {
       githubClient: new FakeGitHubSignalClient(),
     }).sync({
       owner: "acme",
       repo: "web",
+      clientSlug: client.slug,
       staleDays: 7,
     });
 
@@ -111,20 +125,39 @@ describe("GitHubSignalSyncService", () => {
     expect(result.createdOpportunities.map((opportunity) => opportunity.source)).toEqual([
       "github:acme/web#7",
     ]);
+    expect(result.project?.id).toBe(project.id);
     expect(result.report.type).toBe("github-signal-report");
+    expect(result.report.project_id).toBe(project.id);
+    expect(result.report.client_id).toBe(client.id);
+    expect(result.report.pull_request_check_summary).toEqual([
+      "#12 open checks=2 failing=1 head=abc123def456",
+    ]);
 
     const report = await new ArtifactStore(dir).read(result.report.id);
     expect(report?.body).toContain("## Failing Checks");
     expect(report?.body).toContain("ci / test failure");
     expect(report?.body).toContain("## Stale Work");
+    expect(report?.body).toContain("#12 open checks=2 failing=1 head=abc123def456");
+
+    const projectRuns = await readFile(
+      join(workspacePaths(dir).projectsDir, project.slug, "RUNS.md"),
+      "utf8",
+    );
+    expect(projectRuns).toContain("## GitHub Signal Sync");
+    expect(projectRuns).toContain(`- Report: ${result.report.id}`);
+    expect(projectRuns).toContain("Issue #7 open: Booking form fails on mobile");
+    expect(projectRuns).toContain("PR #12 open checks=2 failing=1 head=abc123def456");
+    expect(projectRuns).toContain("ci / test failure on abc123def456");
 
     const opportunities = await new OpportunityRegistry(dir).list();
     expect(opportunities).toHaveLength(1);
+    expect(opportunities[0]?.client_id).toBe(client.id);
 
     const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(audit).toContain("github.check_failed.detected");
     expect(audit).toContain("github.issue_stale.detected");
     expect(audit).toContain("github.pr_stale.detected");
+    expect(audit).toContain("github.signals.project_memory_updated");
     expect(audit).toContain("github.signals.synced");
   });
 });
