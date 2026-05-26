@@ -57,6 +57,7 @@ interface Candidate {
   nextAttempt: number;
   triggerSource: string;
   action: "retry" | "escalate";
+  nextRetryAt: string;
 }
 
 const DEFAULT_MAX_ATTEMPTS = 2;
@@ -100,6 +101,11 @@ function alreadyRecovered(run: RunRecord): boolean {
 
 function retrySource(run: RunRecord, attempt: number): string {
   return `bureauos.retry:${run.id}:${attempt}`;
+}
+
+function nextRetryAt(now: Date, attempt: number): string {
+  const delayMs = Math.min(24 * 60 * 60 * 1000, Math.max(1, attempt) * 30 * 60 * 1000);
+  return new Date(now.getTime() + delayMs).toISOString();
 }
 
 function reportBody(now: Date, maxAttempts: number, candidates: readonly Candidate[]): string {
@@ -178,6 +184,7 @@ export class AutonomousRetryService {
         nextAttempt,
         triggerSource,
         action: nextAttempt > maxAttempts ? "escalate" : "retry",
+        nextRetryAt: nextRetryAt(now, nextAttempt),
       });
     }
 
@@ -203,6 +210,7 @@ export class AutonomousRetryService {
       if (candidate.action === "escalate") {
         await this.deps.runs.patch(candidate.run.id, {
           retry_attempts: candidate.attempts,
+          next_retry_at: candidate.nextRetryAt,
           retry_escalated_at: now.toISOString(),
           retry_escalation_reason: "max_attempts_reached",
         });
@@ -280,6 +288,7 @@ export class AutonomousRetryService {
       await this.deps.runs.patch(candidate.run.id, {
         retry_attempts: candidate.nextAttempt,
         last_retry_at: now.toISOString(),
+        next_retry_at: candidate.nextRetryAt,
         ...(retryRun.status === "completed" ? { retry_recovered_at: now.toISOString() } : {}),
         retry_child_runs: [...stringList(candidate.run["retry_child_runs"]), retryRun.id],
       });

@@ -13,6 +13,7 @@ import { OperationalSignalTriggerService } from "../autonomy/operational-trigger
 import { MemoryTriggerService } from "../autonomy/memory-triggers.js";
 import { AutonomousRetryService } from "../autonomy/retry.js";
 import { parseGitHubRepository } from "../github/repository-utils.js";
+import { DaemonSchedulerStateStore } from "./state.js";
 
 /**
  * Always-on scheduler.
@@ -29,6 +30,7 @@ export interface SchedulerOptions {
   workspaceRoot?: string;
   coordinator?: CoordinatorDeps;
   githubClient?: GitHubSignalClient;
+  schedulerState?: DaemonSchedulerStateStore;
   logger?: (message: string) => void;
 }
 
@@ -94,9 +96,13 @@ const TICKS: Array<Omit<TickJob, "last">> = [
 export class Scheduler {
   private interval: NodeJS.Timeout | undefined;
   private jobs: TickJob[];
+  private readonly state?: DaemonSchedulerStateStore;
 
   constructor(private readonly options: SchedulerOptions) {
     this.jobs = TICKS.map((t) => ({ ...t }));
+    this.state =
+      options.schedulerState ??
+      (options.workspaceRoot ? new DaemonSchedulerStateStore(options.workspaceRoot) : undefined);
   }
 
   start(everyMs = 60_000): void {
@@ -115,24 +121,29 @@ export class Scheduler {
 
   async tick(now = Date.now()): Promise<void> {
     for (const job of this.jobs) {
-      const due = job.last === undefined || now - job.last >= job.everyMs;
+      const lastSuccess = await this.lastSuccessMs(job);
+      const due = lastSuccess === undefined || now - lastSuccess >= job.everyMs;
       if (!due) continue;
-      job.last = now;
+      await this.state?.markStarted(job.name, new Date(now));
       try {
         if (job.name === "github_project_signal_sync") {
           await this.syncGitHubProjectSignals();
+          await this.markSucceeded(job, now);
           continue;
         }
         if (job.name === "operational_signal_scan") {
           await this.scanOperationalSignals();
+          await this.markSucceeded(job, now);
           continue;
         }
         if (job.name === "memory_trigger_scan") {
           await this.scanMemoryTriggers(now);
+          await this.markSucceeded(job, now);
           continue;
         }
         if (job.name === "autonomous_retry_scan") {
           await this.scanAutonomousRetries();
+          await this.markSucceeded(job, now);
           continue;
         }
         const run = await this.options.runs.start({
@@ -196,10 +207,38 @@ export class Scheduler {
         } else {
           this.log(`scheduler: ran ${job.name} -> ${run.id} (${run.status})`);
         }
+        await this.markSucceeded(job, now, run.id);
       } catch (err) {
-        this.log(`scheduler: ${job.name} failed: ${(err as Error).message}`);
+        const message = (err as Error).message;
+        await this.state?.markFailed({
+          trigger: job.name,
+          now: new Date(now),
+          error: message,
+        });
+        this.log(`scheduler: ${job.name} failed: ${message}`);
       }
     }
+  }
+
+  private async lastSuccessMs(job: TickJob): Promise<number | undefined> {
+    const cursor = await this.state?.cursor(job.name);
+    const persisted =
+      cursor?.last_success_at && Number.isFinite(Date.parse(cursor.last_success_at))
+        ? Date.parse(cursor.last_success_at)
+        : undefined;
+    if (job.last === undefined) return persisted;
+    if (persisted === undefined) return job.last;
+    return Math.max(job.last, persisted);
+  }
+
+  private async markSucceeded(job: TickJob, now: number, runId?: string): Promise<void> {
+    job.last = now;
+    await this.state?.markSucceeded({
+      trigger: job.name,
+      now: new Date(now),
+      everyMs: job.everyMs,
+      ...(runId ? { runId } : {}),
+    });
   }
 
   private async syncGitHubProjectSignals(): Promise<void> {

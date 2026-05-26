@@ -47,6 +47,23 @@ export interface DaemonLockAcquisition {
   stale: boolean;
 }
 
+export interface SchedulerCursorRecord {
+  trigger: string;
+  last_started_at?: string;
+  last_success_at?: string;
+  last_run_id?: string;
+  next_due_at?: string;
+  failure_count: number;
+  last_error?: string;
+  updated_at: string;
+}
+
+export interface SchedulerStateRecord {
+  workspace_root: string;
+  updated_at: string;
+  cursors: Record<string, SchedulerCursorRecord>;
+}
+
 export type ProcessAliveCheck = (pid: number) => boolean;
 
 function defaultProcessAlive(pid: number): boolean {
@@ -222,5 +239,96 @@ export class DaemonStateStore {
       updated_at: now,
       message,
     } satisfies DaemonStateRecord);
+  }
+}
+
+export class DaemonSchedulerStateStore {
+  private readonly path: string;
+
+  constructor(private readonly workspaceRoot: string) {
+    this.path = workspacePaths(workspaceRoot).daemonSchedulerState;
+  }
+
+  async read(): Promise<SchedulerStateRecord> {
+    try {
+      const parsed = JSON.parse(await readFile(this.path, "utf8")) as SchedulerStateRecord;
+      return {
+        workspace_root: parsed.workspace_root || workspacePaths(this.workspaceRoot).root,
+        updated_at: parsed.updated_at || new Date(0).toISOString(),
+        cursors: parsed.cursors && typeof parsed.cursors === "object" ? parsed.cursors : {},
+      };
+    } catch {
+      return {
+        workspace_root: workspacePaths(this.workspaceRoot).root,
+        updated_at: new Date(0).toISOString(),
+        cursors: {},
+      };
+    }
+  }
+
+  async cursor(trigger: string): Promise<SchedulerCursorRecord | undefined> {
+    return (await this.read()).cursors[trigger];
+  }
+
+  async markStarted(trigger: string, now: Date): Promise<SchedulerCursorRecord> {
+    return this.updateCursor(trigger, now, (current) => ({
+      ...current,
+      last_started_at: now.toISOString(),
+      updated_at: now.toISOString(),
+    }));
+  }
+
+  async markSucceeded(input: {
+    trigger: string;
+    now: Date;
+    everyMs: number;
+    runId?: string;
+  }): Promise<SchedulerCursorRecord> {
+    return this.updateCursor(input.trigger, input.now, (current) => ({
+      ...current,
+      last_success_at: input.now.toISOString(),
+      next_due_at: new Date(input.now.getTime() + input.everyMs).toISOString(),
+      failure_count: 0,
+      ...(input.runId ? { last_run_id: input.runId } : {}),
+      updated_at: input.now.toISOString(),
+      last_error: undefined,
+    }));
+  }
+
+  async markFailed(input: {
+    trigger: string;
+    now: Date;
+    error: string;
+  }): Promise<SchedulerCursorRecord> {
+    return this.updateCursor(input.trigger, input.now, (current) => ({
+      ...current,
+      failure_count: current.failure_count + 1,
+      last_error: input.error,
+      updated_at: input.now.toISOString(),
+    }));
+  }
+
+  private async updateCursor(
+    trigger: string,
+    now: Date,
+    update: (current: SchedulerCursorRecord) => SchedulerCursorRecord,
+  ): Promise<SchedulerCursorRecord> {
+    const state = await this.read();
+    const current: SchedulerCursorRecord = state.cursors[trigger] ?? {
+      trigger,
+      failure_count: 0,
+      updated_at: now.toISOString(),
+    };
+    const next = update(current);
+    const updated: SchedulerStateRecord = {
+      workspace_root: workspacePaths(this.workspaceRoot).root,
+      updated_at: now.toISOString(),
+      cursors: {
+        ...state.cursors,
+        [trigger]: next,
+      },
+    };
+    await writeJson(this.path, updated);
+    return next;
   }
 }

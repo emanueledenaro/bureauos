@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { initWorkspace } from "../init/initializer.js";
 import { workspacePaths } from "../paths.js";
-import { DaemonStateStore } from "./state.js";
+import { DaemonSchedulerStateStore, DaemonStateStore } from "./state.js";
 
 describe("DaemonStateStore", () => {
   let dir: string;
@@ -85,5 +85,32 @@ describe("DaemonStateStore", () => {
       message: "owner requested stop",
       workspace_root: dir,
     });
+  });
+
+  it("persists scheduler cursors as workspace-local JSON", async () => {
+    const store = new DaemonSchedulerStateStore(dir);
+    const now = new Date("2026-05-26T10:00:00.000Z");
+
+    await store.markStarted("daily_executive_report", now);
+    await store.markSucceeded({
+      trigger: "daily_executive_report",
+      now,
+      everyMs: 24 * 60 * 60 * 1000,
+      runId: "run_daily",
+    });
+
+    const cursor = await store.cursor("daily_executive_report");
+    expect(cursor).toMatchObject({
+      trigger: "daily_executive_report",
+      last_started_at: now.toISOString(),
+      last_success_at: now.toISOString(),
+      last_run_id: "run_daily",
+      next_due_at: "2026-05-27T10:00:00.000Z",
+      failure_count: 0,
+    });
+
+    const raw = await readFile(workspacePaths(dir).daemonSchedulerState, "utf8");
+    const parsed = JSON.parse(raw) as { cursors: Record<string, unknown> };
+    expect(parsed.cursors).toHaveProperty("daily_executive_report");
   });
 });

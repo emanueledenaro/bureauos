@@ -77,6 +77,7 @@ describe("AutonomousRetryService", () => {
 
     const patchedOriginal = await runs.get(original.id);
     expect(patchedOriginal?.["retry_attempts"]).toBe(1);
+    expect(patchedOriginal?.["next_retry_at"]).toBe("2026-05-25T12:30:00.000Z");
     expect(patchedOriginal?.["retry_recovered_at"]).toBe(NOW.toISOString());
     expect(patchedOriginal?.["retry_child_runs"]).toEqual([result.triggered[0]!.retryRun.id]);
 
@@ -112,6 +113,7 @@ describe("AutonomousRetryService", () => {
     expect(result.escalated).toHaveLength(1);
     expect(result.escalated[0]?.attempts).toBe(2);
     const patchedOriginal = await runs.get(original.id);
+    expect(patchedOriginal?.["next_retry_at"]).toBe("2026-05-25T13:30:00.000Z");
     expect(patchedOriginal?.["retry_escalated_at"]).toBe(NOW.toISOString());
 
     const log = await readFile(workspacePaths(dir).auditLog, "utf8");
