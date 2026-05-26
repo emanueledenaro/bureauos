@@ -63,8 +63,22 @@ export interface Workstream {
   tone: Tone;
   progress: number;
   meta: string;
-  github?: string;
+  delivery?: WorkstreamDeliverySignal;
   badges: string[];
+}
+
+export interface WorkstreamPullRequestLink {
+  label: string;
+  url?: string;
+  title?: string;
+}
+
+export interface WorkstreamDeliverySignal {
+  repository: string;
+  label: string;
+  detail: string;
+  tone: Tone;
+  pullRequests: WorkstreamPullRequestLink[];
 }
 
 export interface PortfolioLane {

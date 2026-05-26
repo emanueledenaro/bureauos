@@ -19,8 +19,10 @@ import type {
   PortfolioLane,
   TodayAction,
   Workstream,
+  WorkstreamDeliverySignal,
+  WorkstreamPullRequestLink,
 } from "./types";
-import type { ClientRecord } from "./api";
+import type { ArtifactRecord, ClientRecord, ProjectRecord } from "./api";
 
 export function clientName(clients: ClientRecord[], clientId: string): string {
   return clients.find((client) => client.id === clientId)?.name ?? "No client";
@@ -38,6 +40,105 @@ export function sortNewest<T extends { created?: string; updated?: string }>(
 
 export function enabledCount(values: Record<string, boolean>): number {
   return Object.values(values).filter(Boolean).length;
+}
+
+export function normalizeRepositoryReference(repository?: string): string {
+  const raw = (repository ?? "").trim();
+  if (!raw) return "";
+
+  const sshMatch = raw.match(/^git@github\.com:(?<path>[^#?]+?)(?:\.git)?$/i);
+  if (sshMatch?.groups?.path) {
+    return sshMatch.groups.path.replace(/\.git$/i, "").toLowerCase();
+  }
+
+  const withoutProtocol = raw.replace(/^https?:\/\//i, "").replace(/^www\./i, "");
+  const withoutHost = withoutProtocol.replace(/^github\.com[:/]/i, "");
+  const path = withoutHost.split(/[?#]/)[0]?.replace(/\.git$/i, "") ?? "";
+  const [owner, repo] = path.split("/").filter(Boolean);
+
+  if (!owner || !repo) return raw.replace(/\.git$/i, "").toLowerCase();
+  return `${owner}/${repo}`.toLowerCase();
+}
+
+function latestGitHubSignalForProject(
+  project: ProjectRecord,
+  artifacts: ArtifactRecord[],
+): ArtifactRecord | undefined {
+  const repository = normalizeRepositoryReference(project.repository);
+  if (!repository) return undefined;
+
+  return sortNewest(
+    artifacts.filter(
+      (artifact) =>
+        artifact.type === "github-signal-report" &&
+        normalizeRepositoryReference(artifact.repository) === repository,
+    ),
+  )[0];
+}
+
+function projectPullRequestLinks(signal?: ArtifactRecord): WorkstreamPullRequestLink[] {
+  if (!signal?.pull_request_refs?.length && !signal?.pull_request_urls?.length) return [];
+
+  const refs = signal.pull_request_refs ?? [];
+  const urls = signal.pull_request_urls ?? [];
+  const count = Math.max(refs.length, urls.length);
+
+  return Array.from({ length: count }, (_, index) => {
+    const ref = refs[index] ?? `PR ${index + 1}`;
+    const shortLabel = ref.match(/#\d+/)?.[0] ?? `PR ${index + 1}`;
+    return {
+      label: shortLabel,
+      title: ref,
+      ...(urls[index] ? { url: urls[index] } : {}),
+    };
+  }).slice(0, 3);
+}
+
+export function buildProjectDeliverySignal(
+  project: ProjectRecord,
+  artifacts: ArtifactRecord[],
+): WorkstreamDeliverySignal {
+  const repository = normalizeRepositoryReference(project.repository);
+  if (!repository) {
+    return {
+      repository: "No repository linked",
+      label: "No repo",
+      detail: "Project memory only",
+      tone: "warning",
+      pullRequests: [],
+    };
+  }
+
+  const signal = latestGitHubSignalForProject(project, artifacts);
+  if (!signal) {
+    return {
+      repository,
+      label: "Repo linked",
+      detail: "GitHub sync not run",
+      tone: "neutral",
+      pullRequests: [],
+    };
+  }
+
+  const pullRequests = signal.pull_requests_count ?? 0;
+  const checks = signal.checks_count ?? 0;
+  const failing = signal.failing_checks_count ?? 0;
+  const stale = (signal.stale_issues_count ?? 0) + (signal.stale_pull_requests_count ?? 0);
+  const links = projectPullRequestLinks(signal);
+  const label =
+    failing > 0
+      ? `${failing} failing`
+      : stale > 0
+        ? `${stale} stale`
+        : links[0]?.label || (pullRequests > 0 ? `${pullRequests} PR` : "No PR");
+
+  return {
+    repository,
+    label,
+    detail: `PR ${pullRequests} · CI ${checks} · stale ${stale}`,
+    tone: failing > 0 ? "danger" : stale > 0 ? "warning" : checks > 0 ? "success" : "info",
+    pullRequests: links,
+  };
 }
 
 export function buildPortfolioLanes(state: DashboardState): PortfolioLane[] {
@@ -67,9 +168,9 @@ export function buildPortfolioLanes(state: DashboardState): PortfolioLane[] {
       status: formatLabel(project.status),
       tone: projectTone(project.status),
       progress: projectProgress(project.status),
-      meta: `${formatLabel(manager)} · ${project.stack || project.repository || "Project memory"}`,
-      github: project.repository ? "PR Open" : undefined,
-      badges: [agentAbbr(manager) || "PM", ...specialistBadges, project.repository ? "GH" : "MEM"],
+      meta: `${formatLabel(manager)} · ${project.stack || "Project memory"}`,
+      delivery: buildProjectDeliverySignal(project, state.artifacts),
+      badges: [agentAbbr(manager) || "PM", ...specialistBadges],
     });
   }
 

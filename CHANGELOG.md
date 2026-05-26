@@ -23,6 +23,8 @@ messages. Keep public claims conservative and aligned with
   final-message persistence.
 - SSE-backed Live Operations Timeline updates with compact typed event icons
   and audit fallback dedupe.
+- Portfolio project cards now surface repository delivery state, PR/check signal
+  metadata, and project-ownership agent chips without placeholder GitHub state.
 
 ### Fixed
 

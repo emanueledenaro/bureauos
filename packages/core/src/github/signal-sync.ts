@@ -313,6 +313,10 @@ export class GitHubSignalSyncService {
         repository,
         issues_count: issues.length,
         pull_requests_count: pullRequests.length,
+        pull_request_refs: pullRequests
+          .slice(0, 3)
+          .map((pr) => `#${pr.number} ${pr.state} ${pr.title}`),
+        pull_request_urls: pullRequests.slice(0, 3).map((pr) => pr.url),
         checks_count: checks.length,
         failing_checks_count: failingChecks.length,
         stale_issues_count: staleIssues.length,

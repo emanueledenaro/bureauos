@@ -10,7 +10,6 @@ import {
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { Badge } from "../components/ui/badge";
 import { WorkstreamCard } from "../components/dashboard/WorkstreamCard";
 import { EmptyState } from "../components/dashboard/EmptyState";
 import { buildCapacitySegments, buildPortfolioLanes } from "../lib/builders";
@@ -94,18 +93,6 @@ export function PortfolioView({ state }: { state: DashboardState }) {
                         item={item}
                         laneIndex={laneIndex}
                       />
-                    ))}
-                  </div>
-
-                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                    {lane.streams[0]?.badges.map((badge) => (
-                      <Badge
-                        key={badge}
-                        variant="outline"
-                        className="h-5 px-2 text-[9px] font-mono uppercase"
-                      >
-                        {badge}
-                      </Badge>
                     ))}
                   </div>
                 </div>

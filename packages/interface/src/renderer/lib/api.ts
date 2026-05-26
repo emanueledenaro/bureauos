@@ -304,6 +304,8 @@ export interface ArtifactRecord {
   repository?: string;
   github_event?: string;
   github_action?: string;
+  pull_request_refs?: string[];
+  pull_request_urls?: string[];
   issues_count?: number;
   pull_requests_count?: number;
   checks_count?: number;
