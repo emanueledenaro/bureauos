@@ -1,10 +1,103 @@
-import { Activity, AlertTriangle, ChevronRight, GitBranch } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  CheckCircle2,
+  ChevronRight,
+  Database,
+  FileText,
+  GitBranch,
+  KeyRound,
+  MessageSquare,
+  ShieldCheck,
+  type LucideIcon,
+} from "lucide-react";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { EmptyState } from "../components/dashboard/EmptyState";
 import { cn } from "../lib/utils";
 import { timeAgo } from "../lib/format";
 import type { ArtifactRecord, AuditEvent } from "../lib/api";
+
+export type TimelineEventIcon =
+  | "activity"
+  | "approval"
+  | "audit"
+  | "chat"
+  | "github"
+  | "memory"
+  | "policy"
+  | "provider"
+  | "report";
+
+export type TimelineEventTone = "success" | "danger" | "warning" | "info" | "neutral";
+
+export interface TimelineEventPresentation {
+  icon: TimelineEventIcon;
+  label: string;
+  tone: TimelineEventTone;
+}
+
+const timelineIcons: Record<TimelineEventIcon, LucideIcon> = {
+  activity: Activity,
+  approval: CheckCircle2,
+  audit: FileText,
+  chat: MessageSquare,
+  github: GitBranch,
+  memory: Database,
+  policy: ShieldCheck,
+  provider: KeyRound,
+  report: FileText,
+};
+
+const toneClasses: Record<TimelineEventTone, string> = {
+  success:
+    "border-success/40 bg-success-subtle text-success shadow-[0_0_10px_hsl(var(--success)/0.3)]",
+  danger: "border-danger/40 bg-danger-subtle text-danger shadow-[0_0_10px_hsl(var(--danger)/0.3)]",
+  warning:
+    "border-warning/40 bg-warning-subtle text-warning shadow-[0_0_10px_hsl(var(--warning)/0.28)]",
+  info: "border-info/40 bg-info-subtle text-info shadow-[0_0_10px_hsl(var(--info)/0.24)]",
+  neutral: "border-border/70 bg-surface-raised text-muted-foreground",
+};
+
+export function timelineEventPresentation(event: AuditEvent): TimelineEventPresentation {
+  const action = event.action.toLowerCase();
+  const target = (event.target ?? "").toLowerCase();
+  const descriptor = `${action} ${target}`;
+
+  if (event.result !== "ok") {
+    return { icon: "audit", label: "Attention needed", tone: "danger" };
+  }
+  if (descriptor.includes("approval")) {
+    return { icon: "approval", label: "Approval", tone: "warning" };
+  }
+  if (descriptor.includes("policy")) {
+    return { icon: "policy", label: "Policy", tone: "warning" };
+  }
+  if (
+    descriptor.includes("github") ||
+    descriptor.includes("pull") ||
+    descriptor.includes("issue")
+  ) {
+    return { icon: "github", label: "GitHub", tone: "info" };
+  }
+  if (descriptor.includes("memory")) {
+    return { icon: "memory", label: "Memory", tone: "success" };
+  }
+  if (descriptor.includes("provider") || descriptor.includes("auth")) {
+    return { icon: "provider", label: "Provider", tone: "info" };
+  }
+  if (
+    descriptor.includes("coordinator") ||
+    descriptor.includes("chat") ||
+    descriptor.includes("message")
+  ) {
+    return { icon: "chat", label: "Coordinator", tone: "success" };
+  }
+  if (descriptor.includes("report") || descriptor.includes("artifact")) {
+    return { icon: "report", label: "Report", tone: "neutral" };
+  }
+  return { icon: "activity", label: "Activity", tone: "neutral" };
+}
 
 export function TimelineView({
   events,
@@ -52,30 +145,37 @@ export function TimelineView({
         <div className="relative px-5 py-5">
           <div className="absolute right-9 top-[34px] left-9 hidden border-t border-dashed border-border/60 md:block" />
           <div className="grid gap-x-3 gap-y-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-6">
-            {visible.map((event, index) => (
-              <div key={`${event.timestamp}-${index}`} className="relative min-w-0">
-                <div className="text-[10px] text-muted-foreground">{timeAgo(event.timestamp)}</div>
-                <div className="relative mt-1.5 flex items-center">
-                  <span
-                    className={cn(
-                      "z-10 h-2.5 w-2.5 rounded-full border-2 border-card",
-                      event.result === "ok"
-                        ? "bg-success shadow-[0_0_8px_hsl(var(--success)/0.5)]"
-                        : "bg-danger shadow-[0_0_8px_hsl(var(--danger)/0.5)]",
-                    )}
-                  />
+            {visible.map((event, index) => {
+              const presentation = timelineEventPresentation(event);
+              const Icon = timelineIcons[presentation.icon];
+              return (
+                <div key={`${event.timestamp}-${index}`} className="relative min-w-0">
+                  <div className="text-[10px] text-muted-foreground">
+                    {timeAgo(event.timestamp)}
+                  </div>
+                  <div className="relative mt-1.5 flex h-6 items-center">
+                    <span
+                      className={cn(
+                        "z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border",
+                        toneClasses[presentation.tone],
+                      )}
+                      aria-label={presentation.label}
+                    >
+                      <Icon className="h-3 w-3" aria-hidden="true" />
+                    </span>
+                  </div>
+                  <div className="mt-2 truncate text-[11px] font-semibold text-foreground">
+                    {event.action}
+                  </div>
+                  <div className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                    {event.target ?? "BureauOS"}
+                  </div>
+                  <div className="mt-1 truncate text-[10px] text-muted-foreground/80">
+                    {event.actor}
+                  </div>
                 </div>
-                <div className="mt-2 truncate text-[11px] font-semibold text-foreground">
-                  {event.action}
-                </div>
-                <div className="mt-0.5 truncate text-[10px] text-muted-foreground">
-                  {event.target ?? "BureauOS"}
-                </div>
-                <div className="mt-1 truncate text-[10px] text-muted-foreground/80">
-                  {event.actor}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       ) : (

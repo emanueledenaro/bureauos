@@ -21,6 +21,8 @@ messages. Keep public claims conservative and aligned with
   and fenced code blocks.
 - SSE-backed Coordinator chat streaming for the Operating Room with durable
   final-message persistence.
+- SSE-backed Live Operations Timeline updates with compact typed event icons
+  and audit fallback dedupe.
 
 ### Fixed
 
