@@ -21,6 +21,11 @@ describe("linearIssueToRunScope", () => {
     expect(result.scope).toContain("Wire Codex runtime adapter");
     expect(result.acceptanceCriteria).toHaveLength(3);
     expect(result.externalIssue.identifier).toBe("SER-62");
+    expect(result.sourceWorkItem).toEqual({
+      type: "linear_issue",
+      identifier: "SER-62",
+      url: "https://linear.app/serium/issue/SER-62/wire-codex-runtime-adapter",
+    });
   });
 
   it("refuses issues without acceptance criteria", () => {

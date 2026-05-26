@@ -1,4 +1,5 @@
 import type { RunTriggerType, RunType } from "../runs/engine.js";
+import { linearIssueSourceWorkItem, type SourceWorkItemInput } from "../work-items/source.js";
 
 export interface LinearIssueScopeInput {
   identifier: string;
@@ -19,6 +20,7 @@ export interface LinearIssueRunScope {
   acceptanceCriteria: string[];
   blockers: string[];
   externalIssue: LinearIssueScopeInput;
+  sourceWorkItem: SourceWorkItemInput;
 }
 
 const BLOCKED_OPERATIONS = ["merge", "deploy", "delete data", "billing", "secret"] as const;
@@ -66,5 +68,6 @@ export function linearIssueToRunScope(input: LinearIssueScopeInput): LinearIssue
     acceptanceCriteria: criteria,
     blockers,
     externalIssue: input,
+    sourceWorkItem: linearIssueSourceWorkItem(input.identifier, input.url),
   };
 }

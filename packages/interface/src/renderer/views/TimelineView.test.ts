@@ -55,6 +55,15 @@ describe("run timeline helpers", () => {
   });
 
   it("extracts Linear source issues from trigger sources", () => {
+    expect(
+      runSourceIssue(
+        run({
+          source_work_item_type: "linear_issue",
+          source_work_item_id: "SER-34",
+          trigger_source: "external",
+        }),
+      ),
+    ).toBe("SER-34");
     expect(runSourceIssue(run({ trigger_source: "linear://issue/ser-86" }))).toBe("SER-86");
     expect(runSourceIssue(run({ trigger_source: "electron" }))).toBe("No linked issue");
   });

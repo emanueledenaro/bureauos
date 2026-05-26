@@ -5,6 +5,13 @@ import { AuditLog } from "../audit/log.js";
 import { ArtifactStore } from "../artifacts/store.js";
 import { PolicyEngine, type PolicyDecision } from "../policy/engine.js";
 import {
+  sourceWorkItemFromFrontMatter,
+  sourceWorkItemFromTriggerSource,
+  sourceWorkItemFrontMatter,
+  sourceWorkItemLabel,
+  type SourceWorkItemInput,
+} from "../work-items/source.js";
+import {
   ensureDir,
   fileExists,
   listDocs,
@@ -70,6 +77,11 @@ export interface RunRecord extends FrontMatter {
   created: string;
   updated: string;
   completed: string;
+  source_work_item_type: string;
+  source_work_item_id: string;
+  source_work_item_url: string;
+  linear_identifier: string;
+  linear_url: string;
 }
 
 export interface StartRunInput {
@@ -80,6 +92,7 @@ export interface StartRunInput {
   createdBy?: string;
   projectId?: string;
   clientId?: string;
+  sourceWorkItem?: SourceWorkItemInput;
 }
 
 export type RunDispatchTerminalStatus = "completed" | "blocked" | "needs_human" | "failed";
@@ -140,6 +153,8 @@ export class RunEngine {
     });
 
     const now = new Date().toISOString();
+    const sourceWorkItem =
+      input.sourceWorkItem ?? sourceWorkItemFromTriggerSource(input.triggerSource);
     let record: RunRecord = {
       id,
       type: input.type,
@@ -155,6 +170,12 @@ export class RunEngine {
       created: now,
       updated: now,
       completed: "",
+      source_work_item_type: "",
+      source_work_item_id: "",
+      source_work_item_url: "",
+      linear_identifier: "",
+      linear_url: "",
+      ...sourceWorkItemFrontMatter(sourceWorkItem),
     };
 
     await this.persist(record, `# Run ${id}\n\nScope: ${input.scope}\n`);
@@ -199,6 +220,7 @@ export class RunEngine {
       runId: record.id,
       ...(input.projectId !== undefined ? { projectId: input.projectId } : {}),
       ...(input.clientId !== undefined ? { clientId: input.clientId } : {}),
+      sourceWorkItem: sourceWorkItemFromFrontMatter(record),
       body: `# Run Report\n\n- Run: ${record.id}\n- Type: ${input.type}\n- Trigger: ${input.triggerType} (${input.triggerSource})\n- Scope: ${input.scope}\n\n## Status\n\nStub dispatch completed. No model calls were made. Phase 8 wires the real development runtime through an injected dispatcher.\n`,
     });
     record.artifacts = [...record.artifacts, artifact.id];
@@ -410,6 +432,7 @@ export class RunEngine {
 Scope: ${record.scope}
 Status: ${record.status}
 Dispatch: ${details.dispatchStatus ?? String(record["dispatch_status"] ?? "(none)")}
+Source work item: ${sourceWorkItemLabel(record)}
 ${details.summary ? `\n${details.summary}\n` : ""}
 Artifacts: ${record.artifacts.join(", ") || "(none)"}
 Decisions: ${record.decisions.join(", ") || "(none)"}

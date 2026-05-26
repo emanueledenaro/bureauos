@@ -91,6 +91,7 @@ export class LinearIssueIngestionService {
       ...(input.runId ? { runId: input.runId } : {}),
       ...(input.clientId ? { clientId: input.clientId } : {}),
       ...(input.projectId ? { projectId: input.projectId } : {}),
+      sourceWorkItem: scope.sourceWorkItem,
       metadata: {
         linear_identifier: input.issue.identifier,
         linear_url: input.issue.url,

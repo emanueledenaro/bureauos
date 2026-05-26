@@ -264,6 +264,11 @@ export interface RunRecord {
   dispatch_error?: string;
   error?: string;
   next_action?: string;
+  source_work_item_type?: string;
+  source_work_item_id?: string;
+  source_work_item_url?: string;
+  linear_identifier?: string;
+  linear_url?: string;
 }
 export interface AuditEvent {
   timestamp: string;
@@ -300,6 +305,11 @@ export interface ArtifactRecord {
   run_id?: string;
   client_id?: string;
   project_id?: string;
+  source_work_item_type?: string;
+  source_work_item_id?: string;
+  source_work_item_url?: string;
+  linear_identifier?: string;
+  linear_url?: string;
   client_name?: string;
   risk?: string;
   follow_up_due?: boolean;

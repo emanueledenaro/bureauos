@@ -15,6 +15,22 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
+async function captureStdout(
+  run: () => Promise<number>,
+): Promise<{ code: number; output: string }> {
+  const originalWrite = process.stdout.write;
+  let output = "";
+  process.stdout.write = ((chunk: unknown, ..._args: unknown[]) => {
+    output += String(chunk);
+    return true;
+  }) as typeof process.stdout.write;
+  try {
+    return { code: await run(), output };
+  } finally {
+    process.stdout.write = originalWrite;
+  }
+}
+
 describe("bureau cli", () => {
   let dir: string;
   let prevCwd: string;
@@ -272,6 +288,43 @@ describe("bureau cli", () => {
     const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
     expect(audit).toContain("run.dispatch_stub_completed");
     expect(audit).not.toContain("coordinator.briefing_written");
+  });
+
+  it("surfaces Linear source work items in run CLI output and persisted metadata", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+
+    const created = await captureStdout(() =>
+      main([
+        "node",
+        "bureau",
+        "run",
+        "new",
+        "--type",
+        "feature",
+        "--scope",
+        "SER-34 source metadata",
+        "--linear-issue",
+        "SER-34",
+        "--linear-url",
+        "https://linear.app/serium/issue/SER-34/link-linear-issue-metadata-to-bureauos-runs-and-artifacts",
+        "--stub",
+      ]),
+    );
+
+    expect(created.code).toBe(0);
+    expect(created.output).toContain("bureau: source: linear_issue:SER-34");
+    expect(created.output).toContain("https://linear.app/serium/issue/SER-34");
+
+    const listed = await captureStdout(() => main(["node", "bureau", "run", "list"]));
+    expect(listed.code).toBe(0);
+    expect(listed.output).toContain("linear_issue:SER-34");
+
+    const runsDir = join(dir, ".bureauos", "memory", "runs");
+    const runFile = (await readdir(runsDir)).find((file) => file.endsWith(".md"));
+    expect(runFile).toBeDefined();
+    const runDoc = await readFile(join(runsDir, runFile!), "utf8");
+    expect(runDoc).toContain("source_work_item_id: SER-34");
+    expect(runDoc).toContain("linear_url:");
   });
 
   it("prints client intelligence from real registries", async () => {

@@ -45,8 +45,17 @@ describe("LinearIssueIngestionService", () => {
     expect(result.capability.status).toBe("allowed");
     expect(result.scope?.triggerSource).toBe("linear://issue/SER-62");
     expect(result.artifact?.type).toBe("project-dispatch-packet");
+    expect(result.artifact?.source_work_item_type).toBe("linear_issue");
+    expect(result.artifact?.source_work_item_id).toBe("SER-62");
+    expect(result.artifact?.source_work_item_url).toBe(
+      "https://linear.app/serium/issue/SER-62/wire-codex-runtime-adapter",
+    );
 
     const written = await new ArtifactStore(dir).read(result.artifact!.id);
+    expect(written?.record.linear_identifier).toBe("SER-62");
+    expect(written?.record.linear_url).toBe(
+      "https://linear.app/serium/issue/SER-62/wire-codex-runtime-adapter",
+    );
     expect(written?.body).toContain("SER-62");
     expect(written?.body).toContain("Development Agent calls Codex runtime");
     expect(written?.body).toContain("Readiness: ready");

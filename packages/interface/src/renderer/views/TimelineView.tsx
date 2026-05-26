@@ -83,6 +83,10 @@ export function runRiskLevel(run: RunRecord): RunRiskLevel {
 }
 
 export function runSourceIssue(run: RunRecord): string {
+  if (run.source_work_item_type === "linear_issue" && run.source_work_item_id) {
+    return run.source_work_item_id;
+  }
+  if (run.linear_identifier) return run.linear_identifier;
   const source = run.trigger_source ?? "";
   const linear = /linear:\/\/issue\/([A-Z]+-\d+)/i.exec(source);
   if (linear?.[1]) return linear[1].toUpperCase();

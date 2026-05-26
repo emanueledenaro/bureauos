@@ -6,6 +6,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { defaultConfig } from "../config/loader.js";
 import { initWorkspace } from "../init/initializer.js";
 import { workspacePaths } from "../paths.js";
+import { ApprovalRegistry } from "../registries/approval.js";
+import { ArtifactStore } from "../artifacts/store.js";
+import { AuditLog } from "../audit/log.js";
+import { PolicyEngine } from "../policy/engine.js";
+import { RunEngine } from "../runs/engine.js";
 import type { DaemonStatusSnapshot } from "../daemon/state.js";
 import type { DaemonStartResult, DaemonStopResult } from "../daemon/supervisor.js";
 import type {
@@ -240,6 +245,46 @@ describe("API server", () => {
     expect(body.agents.roles).toBeGreaterThan(0);
     expect(body.capabilities.catalog).toBeGreaterThan(0);
     expect(JSON.stringify(body)).not.toContain("must-not-leak");
+  });
+
+  it("surfaces Linear source work item metadata through runs and artifacts", async () => {
+    const config = defaultConfig("agency");
+    const approvals = new ApprovalRegistry(dir);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const policy = new PolicyEngine(config, approvals);
+    const run = await new RunEngine(dir, { audit, artifacts, policy }).start({
+      type: "feature",
+      triggerType: "external_signal",
+      triggerSource: "linear://issue/SER-34",
+      sourceWorkItem: {
+        type: "linear_issue",
+        identifier: "SER-34",
+        url: "https://linear.app/serium/issue/SER-34/link-linear-issue-metadata-to-bureauos-runs-and-artifacts",
+      },
+      scope: "SER-34: Link Linear issue metadata to BureauOS runs and artifacts",
+    });
+    server = await startApiServer({ workspaceRoot: dir, config });
+
+    const runs = (await (await fetch(`${server.url}/runs`)).json()) as Array<{
+      id: string;
+      source_work_item_id?: string;
+      source_work_item_url?: string;
+      linear_identifier?: string;
+    }>;
+    const apiRun = runs.find((item) => item.id === run.id);
+    expect(apiRun?.source_work_item_id).toBe("SER-34");
+    expect(apiRun?.linear_identifier).toBe("SER-34");
+    expect(apiRun?.source_work_item_url).toContain("https://linear.app/serium/issue/SER-34");
+
+    const listedArtifacts = (await (await fetch(`${server.url}/artifacts`)).json()) as Array<{
+      run_id: string;
+      source_work_item_id?: string;
+      linear_url?: string;
+    }>;
+    const apiArtifact = listedArtifacts.find((item) => item.run_id === run.id);
+    expect(apiArtifact?.source_work_item_id).toBe("SER-34");
+    expect(apiArtifact?.linear_url).toContain("https://linear.app/serium/issue/SER-34");
   });
 
   it("exposes daemon status through the API", async () => {

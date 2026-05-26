@@ -309,6 +309,16 @@ export type {
 } from "./linear/issue-ingestion.js";
 export type { LinearIssueRunScope, LinearIssueScopeInput } from "./linear/work-scope.js";
 
+// Source work item metadata
+export {
+  linearIssueSourceWorkItem,
+  sourceWorkItemFromFrontMatter,
+  sourceWorkItemFromTriggerSource,
+  sourceWorkItemFrontMatter,
+  sourceWorkItemLabel,
+} from "./work-items/source.js";
+export type { SourceWorkItemInput } from "./work-items/source.js";
+
 // Development execution helpers
 export {
   DevelopmentBranchService,

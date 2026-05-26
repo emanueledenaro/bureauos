@@ -41,7 +41,10 @@ import {
   defaultConfig,
   initWorkspace,
   loadConfig,
+  linearIssueSourceWorkItem,
   startApiServer,
+  sourceWorkItemFromTriggerSource,
+  sourceWorkItemLabel,
   workspacePaths,
   type BureauConfig,
   type CreateProjectInput,
@@ -98,7 +101,7 @@ Registries:
   growth review [--recent-days n]           Generate growth review artifact
 
 Runs and audit:
-  run new --type <t> --scope <s> [--client slug] [--project slug] [--stub]
+  run new --type <t> --scope <s> [--client slug] [--project slug] [--linear-issue id] [--linear-url u] [--stub]
   run list
   autonomy memory-scan                      Start due follow-up runs from durable memory
   autonomy retry-scan [--max-attempts n]    Retry failed/blocked runs within policy limits
@@ -818,11 +821,25 @@ const handleRunNew: Handler = async (args) => {
     client: { type: "string", alias: "c" },
     project: { type: "string", alias: "p" },
     source: { type: "string" },
+    "linear-issue": { type: "string" },
+    "linear-url": { type: "string" },
     stub: { type: "boolean" },
   });
   if (typeof flags === "string") return err(`run new: ${flags}`);
   if (typeof flags.type !== "string") return err("run new: --type is required");
   if (typeof flags.scope !== "string") return err("run new: --scope is required");
+  const sourceWorkItem =
+    typeof flags["linear-issue"] === "string"
+      ? linearIssueSourceWorkItem(flags["linear-issue"], String(flags["linear-url"] ?? ""))
+      : typeof flags.source === "string"
+        ? sourceWorkItemFromTriggerSource(flags.source)
+        : undefined;
+  const triggerSource =
+    sourceWorkItem?.type === "linear_issue"
+      ? `linear://issue/${sourceWorkItem.identifier}`
+      : typeof flags.source === "string"
+        ? flags.source
+        : "cli";
   const config = await loadWorkspaceConfig(process.cwd());
   const approvals = new ApprovalRegistry(process.cwd());
   const audit = new AuditLog(workspacePaths(process.cwd()).auditLog);
@@ -853,12 +870,16 @@ const handleRunNew: Handler = async (args) => {
   const record = await engine.start({
     type: flags.type as never,
     triggerType: "owner_request",
-    triggerSource: typeof flags.source === "string" ? flags.source : "cli",
+    triggerSource,
     scope: flags.scope,
     ...(clientId !== undefined ? { clientId } : {}),
     ...(projectId !== undefined ? { projectId } : {}),
+    ...(sourceWorkItem ? { sourceWorkItem } : {}),
   });
   process.stdout.write(`bureau: run ${record.id} (${record.status})\n`);
+  if (sourceWorkItemLabel(record) !== "(none)") {
+    process.stdout.write(`bureau: source: ${sourceWorkItemLabel(record)}\n`);
+  }
   if (record.artifacts.length) {
     process.stdout.write(`bureau: artifacts: ${record.artifacts.join(", ")}\n`);
   }
@@ -880,7 +901,9 @@ const handleRunList: Handler = async () => {
     return 0;
   }
   for (const r of all) {
-    process.stdout.write(`${r.id}  ${r.type.padEnd(12)}  ${r.status.padEnd(14)}  ${r.scope}\n`);
+    process.stdout.write(
+      `${r.id}  ${r.type.padEnd(12)}  ${r.status.padEnd(14)}  ${sourceWorkItemLabel(r).padEnd(32)}  ${r.scope}\n`,
+    );
   }
   return 0;
 };
