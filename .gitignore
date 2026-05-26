@@ -5,6 +5,8 @@ dist/
 build/
 out/
 coverage/
+test-results/
+artifacts/interface-visual-qa/
 .env
 .env.*
 !.env.example

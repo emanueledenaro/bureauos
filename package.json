@@ -23,6 +23,7 @@
     "qa:coordinator": "pnpm --filter @bureauos/core build && node scripts/qa-coordinator-prompt-matrix.mjs",
     "security:scan": "pnpm audit --audit-level high",
     "release:check": "bash scripts/release-check.sh",
+    "visual:interface": "pnpm --filter @bureauos/core build && BUREAUOS_VISUAL_QA=1 playwright test packages/interface/e2e/visual-qa.spec.ts",
     "clean": "pnpm -r exec rm -rf dist node_modules .turbo"
   },
   "devDependencies": {

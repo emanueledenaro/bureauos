@@ -4,6 +4,7 @@ const PORT = Number(process.env["BUREAUOS_E2E_RENDERER_PORT"] ?? 4173);
 const HOST = process.env["BUREAUOS_E2E_RENDERER_HOST"] ?? "::1";
 const rendererHost = HOST.includes(":") ? `[${HOST}]` : HOST;
 const rendererUrl = `http://${rendererHost}:${PORT}`;
+const visualQa = process.env["BUREAUOS_VISUAL_QA"] === "1";
 
 export default defineConfig({
   testDir: "./packages/interface/e2e",
@@ -15,6 +16,7 @@ export default defineConfig({
   forbidOnly: Boolean(process.env["CI"]),
   retries: process.env["CI"] ? 1 : 0,
   reporter: [["list"]],
+  testIgnore: visualQa ? [] : ["**/visual-qa.spec.ts"],
   use: {
     baseURL: rendererUrl,
     actionTimeout: 10_000,

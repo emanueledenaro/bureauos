@@ -67,7 +67,18 @@ tracked in [`docs/v1-acceptance-checklist.md`](./docs/v1-acceptance-checklist.md
 pnpm -r run build      # tsc + electron-vite build for the interface
 pnpm -r run typecheck  # strict TypeScript across all packages
 pnpm -r run test       # vitest
+pnpm run e2e:interface # Operating Room Playwright coverage
 ```
+
+For reviewable UI screenshots, run:
+
+```bash
+pnpm run visual:interface
+```
+
+The visual QA command starts a seeded local workspace and writes desktop, tablet,
+and phone screenshots to `artifacts/interface-visual-qa/`, which is ignored by
+git.
 
 CI on every push runs the same plus a smoke `bureau init`.
 
