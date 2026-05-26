@@ -58,7 +58,7 @@ exception.
 | Daemon | Scheduler, daemon start/stop/status, retries, memory triggers, health checks, and daily reports operate locally with bounded loops. | partial | scheduler, daemon state, autonomy services |
 | Electron Operating Room | The desktop app shows company state, clients, projects, approvals, reports, memory, settings, provider status, and coordinator chat from kernel/API state. | partial | `@bureauos/interface`, local API |
 | Owner approvals | Pending and resolved approvals are visible and actionable, with history preserved. | implemented | approval registry, Electron approvals, API |
-| Security baseline | Secrets are not stored in repo; destructive shell/file/git actions are blocked by default; provider auth is kept in local workspace auth files. | partial | runtime boundary, auth store, security docs, `docs/security-and-policy-model.md`, audit gate |
+| Security baseline | Secrets are not stored in repo; destructive shell/file/git actions are blocked by default; provider auth is kept in local workspace auth files. | partial | runtime boundary, auth store, security docs, `docs/security-and-policy-model.md`, `docs/secrets.md`, audit gate |
 | Local API safety | Local API exposes only workspace state needed by the interface and must document trust assumptions before v1. | partial | API routes, settings summary |
 | Tests | Core behavior has automated coverage and v1 release must pass build, typecheck, test, lint, and targeted smoke checks. | partial | workspace scripts and CI |
 | Documentation | README, roadmap, implementation coverage, policy docs, security docs, and this checklist accurately describe shipped vs. future behavior. | partial | public docs |
@@ -103,7 +103,7 @@ be considered complete.
 | Decision | Needed before v1 | Current state |
 | --- | --- | --- |
 | Codex runtime host | Choose how the desktop/host process supplies a real Codex execution runner to the kernel boundary. | partial |
-| Local API trust model | Document whether API access is loopback-only, token-protected, or process-private for v1. | partial |
+| Local API trust model | Document whether API access is loopback-only, token-protected, or process-private for v1. | partial | `docs/secrets.md` |
 | Release packaging | Decide whether v1 ships as source-only, CLI package, unsigned desktop build, or signed desktop app. | designed |
 | GitHub verification workspace | Provide a safe test repository for live issue, branch, test, and draft PR smoke checks. | blocked |
 | Linear verification workspace | Use host MCP access only; repository runtime should keep Linear as a capability boundary, not embed credentials. | blocked |

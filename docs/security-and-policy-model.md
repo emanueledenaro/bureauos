@@ -236,5 +236,6 @@ See also:
 - [Autonomy Policy](./autonomy-policy.md)
 - [Capabilities and Integrations](./capabilities-and-integrations.md)
 - [Providers](./providers.md)
+- [Secrets and Local Threat Model](./secrets.md)
 - [Repository Hygiene](./repository-hygiene.md)
 - [Release Process](./release-process.md)

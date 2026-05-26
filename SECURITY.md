@@ -7,6 +7,8 @@ Security is therefore part of the core design, not an optional plugin.
 For the operator-facing v1 trust boundary, policy, credential, approval, audit,
 and draft PR model, see
 [`docs/security-and-policy-model.md`](docs/security-and-policy-model.md).
+For provider secret handling, credential rotation, and the local
+daemon/API/Electron threat model, see [`docs/secrets.md`](docs/secrets.md).
 
 ## Security Principles
 

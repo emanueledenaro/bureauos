@@ -283,6 +283,7 @@ BureauOS treats GitHub as the operating surface for an AI-native software agency
 - [Marketing and Ads Automation](docs/marketing-and-ads-automation.md)
 - [Risk and Compliance](docs/risk-and-compliance.md)
 - [Security and Policy Model](docs/security-and-policy-model.md)
+- [Secrets and Local Threat Model](docs/secrets.md)
 - [Capabilities and Integrations](docs/capabilities-and-integrations.md)
 - [Open Source Growth](docs/open-source-growth.md)
 - [Workflows](docs/workflows.md)
