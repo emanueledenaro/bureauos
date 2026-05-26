@@ -5,9 +5,11 @@ import {
   type ProviderAdapter,
 } from "@bureauos/providers";
 import { configureAgentProviderRouting, selectAgentModel } from "../agents/provider-routing.js";
+import { AuditLog } from "../audit/log.js";
 import type { BureauConfig } from "../config/schema.js";
 import { defaultConfig } from "../config/loader.js";
 import { CoordinatorGlobalMemoryService } from "../memory/global.js";
+import { workspacePaths } from "../paths.js";
 import { ClientRegistry, type ClientRecord } from "../registries/client.js";
 import {
   CoordinatorIntakeService,
@@ -22,6 +24,13 @@ import {
 } from "./messages.js";
 import { coordinatorIdentityAnswer, coordinatorIdleAnswer } from "./idle.js";
 import { sanitizeCoordinatorVisibleText } from "./sanitize.js";
+import {
+  coordinatorToolPromptCatalog,
+  implementedCoordinatorToolNames,
+  parseCoordinatorToolPlan,
+  type CoordinatorImplementedToolAction,
+  type CoordinatorToolPlan,
+} from "./tool-planning.js";
 
 export interface CoordinatorChatInput {
   message: string;
@@ -59,6 +68,7 @@ export interface CoordinatorChatDeps {
   intake?: CoordinatorIntakeService;
   clients?: ClientRegistry;
   memory?: CoordinatorGlobalMemoryService;
+  audit?: AuditLog;
   env?: NodeJS.ProcessEnv;
   providerSelector?: CoordinatorProviderSelector;
   providerTimeoutMs?: number;
@@ -76,14 +86,6 @@ export type CoordinatorProviderSelector = (
   config: BureauConfig,
   env: NodeJS.ProcessEnv,
 ) => Promise<CoordinatorProviderSelection | undefined>;
-
-interface CoordinatorToolPlan {
-  action: "save_client" | "create_intake" | "list_clients" | "answer";
-  clientName?: string;
-  industry?: string;
-  answer?: string;
-  confidence?: number;
-}
 
 interface CoordinatorToolPlanningResult {
   plan?: CoordinatorToolPlan;
@@ -424,10 +426,7 @@ function toolPlanningPrompt(
     "Choose exactly one internal Coordinator tool. Return JSON only.",
     "",
     "Available tools:",
-    "- save_client: persist only a client identity/anagraphic record. Use this when the owner only asks to save, remember, register, or add a client/lead, without project scope.",
-    "- create_intake: create the full client/project/opportunity intake package. Use this only when the owner gives project, website, app, proposal, budget, booking, automation, marketing, or delivery scope.",
-    "- list_clients: read the local client registry. Use this for questions about how many clients exist, which clients are saved, or client list/status.",
-    "- answer: respond without mutating memory. Use this for questions, status requests, ambiguity, or when a mutation is not safe.",
+    coordinatorToolPromptCatalog(),
     "",
     "Rules:",
     "- Never invent project scope from a client-only request.",
@@ -492,64 +491,6 @@ function clientRegistryAnswer(clients: readonly ClientRecord[]): string {
   const remaining = names.length > 8 ? `, più altri ${names.length - 8}` : "";
   const noun = clients.length === 1 ? "cliente salvato" : "clienti salvati";
   return `Abbiamo ${clients.length} ${noun}: ${visibleNames}${remaining}.`;
-}
-
-function parseCoordinatorToolPlan(raw: string): CoordinatorToolPlan | undefined {
-  const json = extractFirstJsonObject(raw);
-  if (!json) return undefined;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(json);
-  } catch {
-    return undefined;
-  }
-  if (!parsed || typeof parsed !== "object") return undefined;
-  const value = parsed as Record<string, unknown>;
-  const args =
-    value["args"] && typeof value["args"] === "object"
-      ? (value["args"] as Record<string, unknown>)
-      : value;
-  const rawAction = String(value["action"] ?? value["tool"] ?? "").toLowerCase();
-  const action =
-    rawAction === "save_client" || rawAction === "client.save"
-      ? "save_client"
-      : rawAction === "create_intake" || rawAction === "intake.create"
-        ? "create_intake"
-        : rawAction === "list_clients" || rawAction === "clients.list"
-          ? "list_clients"
-          : rawAction === "answer" || rawAction === "clarify"
-            ? "answer"
-            : undefined;
-  if (!action) return undefined;
-
-  const clientName = stringArg(args, "clientName") ?? stringArg(args, "client_name");
-  const industry = stringArg(args, "industry");
-  const answer = stringArg(args, "answer");
-  const confidence = typeof value["confidence"] === "number" ? value["confidence"] : undefined;
-
-  return {
-    action,
-    ...(clientName ? { clientName } : {}),
-    ...(industry ? { industry } : {}),
-    ...(answer ? { answer } : {}),
-    ...(confidence !== undefined ? { confidence } : {}),
-  };
-}
-
-function extractFirstJsonObject(raw: string): string | undefined {
-  const fenced = /```(?:json)?\s*([\s\S]*?)\s*```/i.exec(raw);
-  const text = fenced?.[1] ?? raw;
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start < 0 || end <= start) return undefined;
-  return text.slice(start, end + 1);
-}
-
-function stringArg(source: Record<string, unknown>, key: string): string | undefined {
-  const value = source[key];
-  if (typeof value !== "string") return undefined;
-  const trimmed = value.trim();
-  return trimmed || undefined;
 }
 
 async function selectCoordinatorProvider(
@@ -658,6 +599,7 @@ export class CoordinatorChatService {
   private readonly intake: CoordinatorIntakeService;
   private readonly clients: ClientRegistry;
   private readonly memory: CoordinatorGlobalMemoryService;
+  private readonly audit: AuditLog;
   private readonly env: NodeJS.ProcessEnv;
   private readonly providerSelector: CoordinatorProviderSelector;
   private readonly providerTimeoutMs: number;
@@ -674,6 +616,7 @@ export class CoordinatorChatService {
       deps.intake ?? new CoordinatorIntakeService(workspaceRoot, { config: this.config });
     this.clients = deps.clients ?? new ClientRegistry(workspaceRoot);
     this.memory = deps.memory ?? new CoordinatorGlobalMemoryService(workspaceRoot);
+    this.audit = deps.audit ?? new AuditLog(workspacePaths(workspaceRoot).auditLog);
     this.env = deps.env ?? process.env;
     this.providerSelector = deps.providerSelector ?? selectCoordinatorProvider;
     this.providerTimeoutMs = deps.providerTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
@@ -744,6 +687,29 @@ export class CoordinatorChatService {
         provider: providerMeta("failed", selection, undefined, reason),
       };
     }
+  }
+
+  private async recordToolExecution(input: {
+    tool: CoordinatorImplementedToolAction;
+    target?: string;
+  }): Promise<void> {
+    await this.audit.append({
+      actor: "supreme_coordinator",
+      action: "coordinator.tool.executed",
+      capability: `coordinator_tool.${input.tool}`,
+      ...(input.target ? { target: input.target } : {}),
+      result: "ok",
+    });
+  }
+
+  private async recordRejectedToolPlan(reason: string): Promise<void> {
+    await this.audit.append({
+      actor: "supreme_coordinator",
+      action: "coordinator.tool.rejected",
+      capability: "coordinator_tool.invalid_plan",
+      target: reason,
+      result: "ok",
+    });
   }
 
   async *stream(input: CoordinatorChatInput): AsyncGenerator<CoordinatorChatStreamEvent> {
@@ -850,6 +816,7 @@ export class CoordinatorChatService {
     const memory = memoryMeta(packet);
 
     let plannedIntakeProvider: CoordinatorChatProviderMeta | undefined;
+    let plannedIntakePlan: CoordinatorToolPlan | undefined;
     let toolPlanningProvider: CoordinatorChatProviderMeta | undefined;
     if (
       hasCoordinatorToolIntent(message, attachments) &&
@@ -865,6 +832,7 @@ export class CoordinatorChatService {
           ...(planned.plan.industry ? { industry: planned.plan.industry } : {}),
           attachments,
         });
+        await this.recordToolExecution({ tool: "save_client", target: result.client.id });
         const { ownerMessage, coordinatorMessage } = requireMessagePair(
           await this.messages.appendMany([
             {
@@ -882,6 +850,7 @@ export class CoordinatorChatService {
                 memory,
                 tool: {
                   name: "save_client",
+                  source: "provider_plan",
                   confidence: planned.plan.confidence,
                 },
                 client: {
@@ -906,6 +875,7 @@ export class CoordinatorChatService {
       if (planned.plan?.action === "list_clients") {
         const clients = await this.clients.list();
         const answer = clientRegistryAnswer(clients);
+        await this.recordToolExecution({ tool: "list_clients", target: "client_registry" });
         const { ownerMessage, coordinatorMessage } = requireMessagePair(
           await this.messages.appendMany([
             {
@@ -923,6 +893,7 @@ export class CoordinatorChatService {
                 memory,
                 tool: {
                   name: "list_clients",
+                  source: "provider_plan",
                   confidence: planned.plan.confidence,
                 },
                 clients: {
@@ -970,6 +941,41 @@ export class CoordinatorChatService {
 
       if (planned.plan?.action === "create_intake") {
         plannedIntakeProvider = planned.provider;
+        plannedIntakePlan = planned.plan;
+      } else if (planned.provider.status === "used") {
+        const answer =
+          "Non ho eseguito azioni: il piano tool del Coordinator non era valido o non supportato. Posso usare solo strumenti tipizzati come save_client, create_intake e list_clients quando la richiesta e chiara.";
+        await this.recordRejectedToolPlan("invalid_or_unsupported_provider_tool_plan");
+        const { ownerMessage, coordinatorMessage } = requireMessagePair(
+          await this.messages.appendMany([
+            {
+              role: "owner",
+              text: message,
+              attachments: messageAttachments(attachments),
+              meta: { mode: "answer" },
+            },
+            {
+              role: "coordinator",
+              text: answer,
+              meta: {
+                mode: "answer",
+                provider: planned.provider,
+                memory,
+                tool: {
+                  status: "rejected",
+                  allowed: implementedCoordinatorToolNames(),
+                },
+              },
+            },
+          ]),
+        );
+        return {
+          mode: "answer",
+          ownerMessage,
+          coordinatorMessage,
+          provider: planned.provider,
+          memory,
+        };
       }
     }
 
@@ -982,6 +988,7 @@ export class CoordinatorChatService {
         undefined,
         "client_registry_fallback",
       );
+      await this.recordToolExecution({ tool: "list_clients", target: "client_registry" });
       const { ownerMessage, coordinatorMessage } = requireMessagePair(
         await this.messages.appendMany([
           {
@@ -1031,6 +1038,7 @@ export class CoordinatorChatService {
         undefined,
         "client_only_save_fallback",
       );
+      await this.recordToolExecution({ tool: "save_client", target: result.client.id });
       const { ownerMessage, coordinatorMessage } = requireMessagePair(
         await this.messages.appendMany([
           {
@@ -1076,8 +1084,11 @@ export class CoordinatorChatService {
       const result = await this.intake.process({
         message,
         source: input.source ?? "coordinator_chat",
+        ...(plannedIntakePlan?.clientName ? { clientName: plannedIntakePlan.clientName } : {}),
+        ...(plannedIntakePlan?.industry ? { industry: plannedIntakePlan.industry } : {}),
         attachments,
       });
+      await this.recordToolExecution({ tool: "create_intake", target: result.run.id });
       const { ownerMessage, coordinatorMessage } = requireMessagePair(
         await this.messages.appendMany([
           {
@@ -1094,7 +1105,13 @@ export class CoordinatorChatService {
               mode: "intake",
               memory,
               provider,
-              ...(plannedIntakeProvider ? { tool: { name: "create_intake" } } : {}),
+              tool: {
+                name: "create_intake",
+                source: plannedIntakeProvider ? "provider_plan" : "safety_fallback",
+                ...(plannedIntakePlan?.confidence !== undefined
+                  ? { confidence: plannedIntakePlan.confidence }
+                  : {}),
+              },
             },
           },
         ]),

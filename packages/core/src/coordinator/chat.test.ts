@@ -1,9 +1,10 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ProviderAdapter } from "@bureauos/providers";
 import { describe, expect, it } from "vitest";
 import { defaultConfig } from "../config/loader.js";
+import { workspacePaths } from "../paths.js";
 import { ApprovalRegistry } from "../registries/approval.js";
 import { ClientRegistry } from "../registries/client.js";
 import { OpportunityRegistry } from "../registries/opportunity.js";
@@ -11,6 +12,10 @@ import { ProjectRegistry } from "../registries/project.js";
 import { ArtifactStore } from "../artifacts/store.js";
 import { CoordinatorChatService, type CoordinatorChatStreamEvent } from "./chat.js";
 import { CoordinatorMessageStore } from "./messages.js";
+
+async function auditText(workspaceRoot: string): Promise<string> {
+  return readFile(workspacePaths(workspaceRoot).auditLog, "utf8");
+}
 
 describe("CoordinatorChatService", () => {
   it("does not create intake records when the owner asks for analysis only", async () => {
@@ -53,6 +58,7 @@ describe("CoordinatorChatService", () => {
 
     const clients = await new ClientRegistry(dir).list();
     expect(clients.map((client) => client.name)).toEqual(["Pizzeria Amodeo"]);
+    await expect(auditText(dir)).resolves.toContain("coordinator_tool.save_client");
     await expect(new ProjectRegistry(dir).list()).resolves.toEqual([]);
     await expect(new OpportunityRegistry(dir).list()).resolves.toEqual([]);
     await expect(new ApprovalRegistry(dir).listPending()).resolves.toEqual([]);
@@ -100,10 +106,14 @@ describe("CoordinatorChatService", () => {
 
     expect(providerWasAsked).toBe(true);
     expect(result.provider.reason).toBe("coordinator_tool_plan");
-    expect(result.coordinatorMessage.meta?.tool).toMatchObject({ name: "save_client" });
+    expect(result.coordinatorMessage.meta?.tool).toMatchObject({
+      name: "save_client",
+      source: "provider_plan",
+    });
     expect(result.coordinatorMessage.text).toContain("Ho salvato il cliente Pizzeria Amodeo.");
     const clients = await new ClientRegistry(dir).list();
     expect(clients.map((client) => client.name)).toEqual(["Pizzeria Amodeo"]);
+    await expect(auditText(dir)).resolves.toContain("coordinator_tool.save_client");
     await expect(new ProjectRegistry(dir).list()).resolves.toEqual([]);
     await expect(new OpportunityRegistry(dir).list()).resolves.toEqual([]);
   });
@@ -150,14 +160,66 @@ describe("CoordinatorChatService", () => {
 
     expect(providerWasAsked).toBe(true);
     expect(result.provider.reason).toBe("coordinator_tool_plan");
-    expect(result.coordinatorMessage.meta?.tool).toMatchObject({ name: "list_clients" });
+    expect(result.coordinatorMessage.meta?.tool).toMatchObject({
+      name: "list_clients",
+      source: "provider_plan",
+    });
     expect(result.coordinatorMessage.meta?.clients).toMatchObject({ count: 2 });
     expect(result.coordinatorMessage.text).toBe(
       "Abbiamo 2 clienti salvati: Acme Labs, Pizzeria Amodeo.",
     );
+    await expect(auditText(dir)).resolves.toContain("coordinator_tool.list_clients");
     await expect(new ProjectRegistry(dir).list()).resolves.toEqual([]);
     await expect(new OpportunityRegistry(dir).list()).resolves.toEqual([]);
     await expect(new ApprovalRegistry(dir).listPending()).resolves.toEqual([]);
+  });
+
+  it("rejects unsupported provider-selected tools without executing mutations", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    await new ClientRegistry(dir).create({ name: "Pizzeria Amodeo" });
+    const fakeProvider: ProviderAdapter = {
+      id: "fake-provider",
+      type: "custom",
+      name: "Fake Provider",
+      async listModels() {
+        return ["fake-model"];
+      },
+      async validateCredentials() {
+        return { ok: true };
+      },
+      async generateText() {
+        return {
+          model: "fake-model",
+          text: JSON.stringify({
+            action: "delete_client",
+            clientName: "Pizzeria Amodeo",
+            confidence: 0.99,
+          }),
+        };
+      },
+      async *stream() {
+        yield "unused";
+      },
+    };
+    const service = new CoordinatorChatService(dir, {
+      config: defaultConfig("freelancer"),
+      providerSelector: async () => ({ provider: fakeProvider, model: "fake-model" }),
+    });
+
+    const result = await service.process({
+      source: "test",
+      message: "cancella il cliente Pizzeria Amodeo",
+    });
+
+    expect(result.mode).toBe("answer");
+    expect(result.coordinatorMessage.meta?.tool).toMatchObject({
+      status: "rejected",
+      allowed: ["save_client", "create_intake", "list_clients", "answer"],
+    });
+    expect(result.coordinatorMessage.text).toContain("Non ho eseguito azioni");
+    expect(result.coordinatorMessage.text).not.toContain("delete_client");
+    await expect(new ClientRegistry(dir).list()).resolves.toHaveLength(1);
+    await expect(auditText(dir)).resolves.toContain("coordinator.tool.rejected");
   });
 
   it("answers obvious client registry questions from local tools when the provider is unavailable", async () => {
@@ -184,6 +246,7 @@ describe("CoordinatorChatService", () => {
     expect(result.coordinatorMessage.text).toBe(
       "Abbiamo 2 clienti salvati: BureauOS, Pizzeria Amodeo.",
     );
+    await expect(auditText(dir)).resolves.toContain("coordinator_tool.list_clients");
     await expect(new ProjectRegistry(dir).list()).resolves.toEqual([]);
     await expect(new OpportunityRegistry(dir).list()).resolves.toEqual([]);
     await expect(new ApprovalRegistry(dir).listPending()).resolves.toEqual([]);
@@ -328,6 +391,60 @@ describe("CoordinatorChatService", () => {
     expect(result.result?.opportunity.title).toBe("Booking Website for Pizzeria Amodeo");
     expect(result.result?.artifacts.length).toBeGreaterThan(0);
     expect(result.result?.approvals.length).toBeGreaterThan(0);
+    expect(result.coordinatorMessage.meta?.tool).toMatchObject({
+      name: "create_intake",
+      source: "safety_fallback",
+    });
+    await expect(auditText(dir)).resolves.toContain("coordinator_tool.create_intake");
+  });
+
+  it("lets the provider choose the create_intake tool before opening project scope", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    let providerWasAsked = false;
+    const fakeProvider: ProviderAdapter = {
+      id: "fake-provider",
+      type: "custom",
+      name: "Fake Provider",
+      async listModels() {
+        return ["fake-model"];
+      },
+      async validateCredentials() {
+        return { ok: true };
+      },
+      async generateText() {
+        providerWasAsked = true;
+        return {
+          model: "fake-model",
+          text: JSON.stringify({
+            action: "create_intake",
+            clientName: "Pizzeria Amodeo",
+            confidence: 0.93,
+          }),
+        };
+      },
+      async *stream() {
+        yield "unused";
+      },
+    };
+    const service = new CoordinatorChatService(dir, {
+      config: defaultConfig("freelancer"),
+      providerSelector: async () => ({ provider: fakeProvider, model: "fake-model" }),
+    });
+
+    const result = await service.process({
+      source: "test",
+      message: "Pizzeria Amodeo vuole un sito con prenotazioni e una proposta",
+    });
+
+    expect(providerWasAsked).toBe(true);
+    expect(result.mode).toBe("intake");
+    expect(result.provider.reason).toBe("coordinator_tool_plan");
+    expect(result.coordinatorMessage.meta?.tool).toMatchObject({
+      name: "create_intake",
+      source: "provider_plan",
+    });
+    expect(result.result?.client.name).toBe("Pizzeria Amodeo");
+    await expect(auditText(dir)).resolves.toContain("coordinator_tool.create_intake");
   });
 
   it("does not turn historical pizzeria context into a current request", async () => {

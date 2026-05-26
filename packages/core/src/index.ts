@@ -155,6 +155,22 @@ export type {
   CoordinatorChatResult,
   CoordinatorChatStreamEvent,
 } from "./coordinator/chat.js";
+export {
+  COORDINATOR_MUTATION_PATH_INVENTORY,
+  COORDINATOR_TOOL_DEFINITIONS,
+  coordinatorToolPromptCatalog,
+  implementedCoordinatorToolNames,
+  listCoordinatorMutationPathInventory,
+  parseCoordinatorToolPlan,
+} from "./coordinator/tool-planning.js";
+export type {
+  CoordinatorImplementedToolAction,
+  CoordinatorMutationPathInventoryItem,
+  CoordinatorToolAction,
+  CoordinatorToolDefinition,
+  CoordinatorToolPlan,
+  CoordinatorToolRouteClass,
+} from "./coordinator/tool-planning.js";
 export { CoordinatorMessageStore } from "./coordinator/messages.js";
 export type {
   CoordinatorMessageAttachment,
