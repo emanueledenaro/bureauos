@@ -20,12 +20,14 @@ export function Header({
   onModeChange,
   onOpenSidebar,
   onOpenQuickChat,
+  onOpenApprovals,
 }: {
   state: DashboardState;
   mode: AdaptiveMode;
   onModeChange: (mode: AdaptiveMode) => void;
   onOpenSidebar: () => void;
   onOpenQuickChat: () => void;
+  onOpenApprovals: () => void;
 }) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -147,7 +149,13 @@ export function Header({
 
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="relative"
+              onClick={onOpenApprovals}
+              aria-label="Open pending approvals"
+            >
               <Bell className="h-4 w-4" />
               {state.approvals.length > 0 ? (
                 <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-warning" />

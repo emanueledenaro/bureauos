@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
+import { AlertTriangle, CheckCircle2, ShieldCheck, XCircle } from "lucide-react";
 import { Sidebar, SidebarDrawer } from "./components/layout/Sidebar";
 import { Header } from "./components/layout/Header";
 import { AgentLayer } from "./components/layout/AgentLayer";
 import { QuickChatPopover } from "./components/coordinator/QuickChatPopover";
 import { TooltipProvider } from "./components/ui/tooltip";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "./components/ui/sheet";
+import { Button } from "./components/ui/button";
 import { CoordinatorView } from "./views/CoordinatorView";
 import { PortfolioView } from "./views/PortfolioView";
 import { TodayView } from "./views/TodayView";
@@ -43,12 +52,22 @@ export function App() {
   const [modeTouched, setModeTouched] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [quickChatOpen, setQuickChatOpen] = useState(false);
+  const [approvalsOpen, setApprovalsOpen] = useState(false);
+  const [isSmallScreen, setIsSmallScreen] = useState(false);
+
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 767px)");
+    const sync = (): void => setIsSmallScreen(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
 
   useEffect(() => {
     if (!modeTouched && !state.loading) {
-      setMode(adaptiveDefaultMode(state));
+      setMode(isSmallScreen ? "coordinator" : adaptiveDefaultMode(state));
     }
-  }, [modeTouched, state]);
+  }, [isSmallScreen, modeTouched, state]);
 
   // ⌘K / Ctrl+K apre il quick-chat coordinator da qualsiasi vista.
   useEffect(() => {
@@ -195,6 +214,7 @@ export function App() {
             onModeChange={onModeChange}
             onOpenSidebar={() => setSidebarOpen(true)}
             onOpenQuickChat={() => setQuickChatOpen(true)}
+            onOpenApprovals={() => setApprovalsOpen(true)}
           />
           <main className="min-w-0 flex-1 overflow-y-auto bg-background">
             <DashboardLayout
@@ -229,8 +249,106 @@ export function App() {
           onSubmit={onCoordinatorMessage}
           onOpenFullCoordinator={openCoordinatorPage}
         />
+        <PendingApprovalsSheet
+          open={approvalsOpen}
+          onOpenChange={setApprovalsOpen}
+          state={state}
+          onResolve={onResolve}
+          onOpenApprovalsPage={() => {
+            setApprovalsOpen(false);
+            onModeChange("approvals");
+          }}
+        />
       </div>
     </TooltipProvider>
+  );
+}
+
+function PendingApprovalsSheet({
+  open,
+  onOpenChange,
+  state,
+  onResolve,
+  onOpenApprovalsPage,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  state: DashboardState;
+  onResolve: (id: string, status: "approved" | "rejected", reason?: string) => Promise<void>;
+  onOpenApprovalsPage: () => void;
+}) {
+  const pending = state.approvals.slice(0, 5);
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="bottom" className="max-h-[82vh] rounded-t-xl p-0 sm:max-h-[70vh]">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4" />
+            Pending approvals
+          </SheetTitle>
+          <SheetDescription>
+            Money, deletion, legal, production, security, and final external commitments.
+          </SheetDescription>
+        </SheetHeader>
+        <div className="min-h-0 overflow-y-auto px-4 py-4 sm:px-5">
+          {pending.length > 0 ? (
+            <div className="flex flex-col gap-3">
+              {pending.map((approval) => (
+                <div
+                  key={approval.id}
+                  className="rounded-lg border border-border/70 bg-surface-subtle/60 p-3"
+                >
+                  <div className="flex items-start gap-2.5">
+                    <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-md border border-border/60 bg-surface-raised text-warning">
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[13px] font-semibold text-foreground">
+                        {approval.target}
+                      </div>
+                      <div className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
+                        {approval.scope}
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                        <span>{approval.risk_level ?? "risk"}</span>
+                        <span aria-hidden>·</span>
+                        <span>{approval.action}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void onResolve(approval.id, "rejected", "Rejected by owner")}
+                    >
+                      <XCircle className="h-3.5 w-3.5" />
+                      Reject
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => void onResolve(approval.id, "approved", "Approved by owner")}
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Approve
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-border/70 bg-surface-subtle/50 p-4 text-[12px] text-muted-foreground">
+              No pending approvals.
+            </div>
+          )}
+        </div>
+        <div className="border-t border-border/60 px-4 py-3 sm:px-5">
+          <Button variant="outline" className="w-full" onClick={onOpenApprovalsPage}>
+            Open approvals
+          </Button>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 

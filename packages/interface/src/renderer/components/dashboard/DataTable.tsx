@@ -149,7 +149,11 @@ function TableGrid<Row>({
   );
 
   if (wrap === "overflow") {
-    return <div className="overflow-x-auto">{content}</div>;
+    return (
+      <div data-e2e-horizontal-scroll="true" className="overflow-x-auto">
+        {content}
+      </div>
+    );
   }
   return content;
 }

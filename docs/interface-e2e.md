@@ -17,7 +17,7 @@ Coverage:
 
 - desktop screenshots for Home, Coordinator, Clients, Delivery, Approvals,
   Reports, Memory, Settings, Growth, Revenue, Agents, Today, and Goals
-- mobile screenshots for Home, Coordinator, and Approvals
+- phone and tablet screenshots for every core view
 - page identity, framework-overlay, horizontal-overflow, and forbidden
   demo/fallback-data checks
 

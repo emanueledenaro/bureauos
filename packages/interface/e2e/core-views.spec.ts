@@ -26,11 +26,7 @@ const CORE_VIEWS = [
   { nav: "Goals", expected: "Goals" },
 ] as const;
 
-const MOBILE_VIEWS = [
-  { nav: "Home", expected: "Portfolio Operating Room" },
-  { nav: "Coordinator", expected: "Supreme Coordinator" },
-  { nav: "Approvals", expected: "Approvals" },
-] as const;
+const COMPACT_VIEWS = CORE_VIEWS;
 
 for (const kind of ["empty", "seeded"] as const) {
   test.describe(`Operating Room ${kind} workspace`, () => {
@@ -60,19 +56,35 @@ for (const kind of ["empty", "seeded"] as const) {
       }
     });
 
-    test("renders mobile navigation and priority views without overflow", async ({
+    test("renders every core view on phone without overflow or demo data", async ({
       page,
     }, testInfo) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await openWorkspace(page, workspace);
 
-      for (const view of MOBILE_VIEWS) {
-        await openMobileView(page, view.nav);
+      for (const view of COMPACT_VIEWS) {
+        await openCompactView(page, view.nav);
         await expect(page.locator("main")).toContainText(view.expected);
         await expectNoFrameworkOverlay(page);
         await expectNoHorizontalOverflow(page);
         await expectNoForbiddenRendererData(page);
-        await attachScreenshot(page, testInfo, `${kind}-${slug(view.nav)}-mobile`);
+        await attachScreenshot(page, testInfo, `${kind}-${slug(view.nav)}-phone`);
+      }
+    });
+
+    test("renders every core view on tablet without overflow or demo data", async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width: 768, height: 1024 });
+      await openWorkspace(page, workspace);
+
+      for (const view of COMPACT_VIEWS) {
+        await openCompactView(page, view.nav);
+        await expect(page.locator("main")).toContainText(view.expected);
+        await expectNoFrameworkOverlay(page);
+        await expectNoHorizontalOverflow(page);
+        await expectNoForbiddenRendererData(page);
+        await attachScreenshot(page, testInfo, `${kind}-${slug(view.nav)}-tablet`);
       }
     });
   });
@@ -86,12 +98,18 @@ async function openWorkspace(page: Page, workspace: InterfaceWorkspace): Promise
 }
 
 async function openDesktopView(page: Page, nav: string): Promise<void> {
-  await page.getByRole("button", { name: navMatcher(nav) }).click();
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: navMatcher(nav) })
+    .click();
 }
 
-async function openMobileView(page: Page, nav: string): Promise<void> {
+async function openCompactView(page: Page, nav: string): Promise<void> {
   await page.getByRole("button", { name: "Open navigation" }).click();
+  const drawer = page.getByRole("dialog", { name: "Navigation" });
   await page.getByRole("button", { name: navMatcher(nav) }).click();
+  await expect(drawer).toBeHidden();
+  await page.waitForTimeout(260);
 }
 
 async function expectNoFrameworkOverlay(page: Page): Promise<void> {
@@ -115,10 +133,12 @@ async function expectNoHorizontalOverflow(page: Page): Promise<void> {
       clientWidth: root.clientWidth,
       overflowingText: [...document.querySelectorAll("main *")]
         .map((element) => {
+          if (element.closest('[data-e2e-horizontal-scroll="true"]')) return undefined;
           const rect = element.getBoundingClientRect();
           const text = element.textContent?.trim().replace(/\s+/g, " ").slice(0, 80) ?? "";
           return { rect, text, tag: element.tagName.toLowerCase() };
         })
+        .filter((item): item is NonNullable<typeof item> => item !== undefined)
         .filter(
           (item) =>
             item.rect.width > 1 &&

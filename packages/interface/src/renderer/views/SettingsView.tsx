@@ -503,21 +503,23 @@ function SettingsCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-border/70 bg-surface-subtle/60 p-4">
-      <div className="flex items-center gap-2">
+    <div className="min-w-0 rounded-lg border border-border/70 bg-surface-subtle/60 p-4">
+      <div className="flex min-w-0 items-center gap-2">
         <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-        <span className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+        <span className="truncate text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
           {label}
         </span>
       </div>
-      <div className="mt-1 text-[13px] font-semibold text-foreground">{title}</div>
-      <div className="mt-3">{children}</div>
+      <div className="mt-1 truncate text-[13px] font-semibold text-foreground">{title}</div>
+      <div className="mt-3 min-w-0">{children}</div>
     </div>
   );
 }
 
 function Grid2({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">{children}</div>;
+  return (
+    <div className="grid grid-cols-1 gap-x-3 gap-y-1.5 text-[11px] sm:grid-cols-2">{children}</div>
+  );
 }
 
 function Cell({ label, value }: { label: string; value: string }) {

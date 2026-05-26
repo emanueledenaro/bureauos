@@ -30,5 +30,16 @@ export function KpiBar({
     4: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4",
     5: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5",
   };
-  return <div className={cn("grid gap-3", COLS[count], className)}>{children}</div>;
+  return (
+    <div
+      data-e2e-horizontal-scroll="true"
+      className={cn(
+        "grid grid-flow-col auto-cols-[minmax(220px,80vw)] gap-3 overflow-x-auto pb-1 no-scrollbar sm:grid-flow-row sm:auto-cols-auto sm:overflow-visible sm:pb-0",
+        COLS[count],
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
 }

@@ -11,6 +11,7 @@ import {
   Settings as SettingsIcon,
   ShieldCheck,
   ShieldAlert,
+  Target,
   TrendingUp,
   Users,
   Wallet,
@@ -53,6 +54,7 @@ const PRIMARY: NavItem[] = [
 
 const SECONDARY: NavItem[] = [
   { id: "today", label: "Inbox", icon: Inbox, badgeKey: "runs" },
+  { id: "goals", label: "Goals", icon: Target },
   { id: "approvals", label: "Approvals", icon: ShieldCheck, badgeKey: "approvals" },
   { id: "reports", label: "Reports", icon: FileText },
   { id: "settings", label: "Settings", icon: SettingsIcon },
