@@ -20,10 +20,12 @@ messages. Keep public claims conservative and aligned with
 
 - Private-context scan for local agent/operator artifacts before public PRs.
 - Security audit is now part of the release gate.
+- Electron upgraded to the patched 39.8.x line so the high-severity audit gate
+  no longer reports Electron advisories.
 
 ### Known Limitations
 
 - v1 packaging is source/build oriented; signed desktop distribution is not yet
   part of the release target.
-- Security audit currently blocks v1 until high-severity Electron advisories are
-  resolved.
+- Security audit still reports moderate Vite/esbuild dev-server advisories below
+  the current high-severity v1 blocking threshold.
