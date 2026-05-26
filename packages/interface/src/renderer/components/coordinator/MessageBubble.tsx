@@ -7,9 +7,8 @@ import { formatBytes, formatTime } from "../../lib/format";
 import type { CoordinatorMessageRecord } from "../../lib/api";
 
 /**
- * Singolo messaggio della chat. Owner = bubble primary a destra, Coordinator
- * = bubble secondary a sinistra con avatar. La bubble respira (max-w-prose),
- * il timestamp è sopra alla bubble per non sporcare la lettura.
+ * Singolo messaggio della chat. Owner compatto a destra, Coordinator più
+ * simile a un executive note: avatar, metadati, contenuto leggibile e poco boxy.
  */
 export function MessageBubble({ message }: { message: CoordinatorMessageRecord }) {
   const isOwner = message.role === "owner";
@@ -17,7 +16,7 @@ export function MessageBubble({ message }: { message: CoordinatorMessageRecord }
     <div className={cn("flex w-full gap-2.5", isOwner ? "justify-end" : "justify-start")}>
       {!isOwner ? (
         <Avatar className="mt-5 h-7 w-7">
-          <AvatarFallback className="bg-gradient-to-br from-primary/40 to-info/40 text-foreground text-[10px]">
+          <AvatarFallback className="bg-surface-raised text-foreground text-[10px] ring-1 ring-border/70">
             SC
           </AvatarFallback>
         </Avatar>
@@ -37,10 +36,10 @@ export function MessageBubble({ message }: { message: CoordinatorMessageRecord }
         </div>
         <div
           className={cn(
-            "max-w-prose rounded-2xl px-3.5 py-2.5 text-body-lg leading-[20px]",
+            "max-w-[min(760px,100%)] px-3.5 py-2.5 text-body-lg leading-[20px]",
             isOwner
-              ? "rounded-br-sm bg-primary text-primary-foreground"
-              : "rounded-tl-sm border border-border bg-surface-raised text-foreground",
+              ? "rounded-lg bg-primary text-primary-foreground shadow-[0_8px_22px_-18px_hsl(var(--primary)/0.7)]"
+              : "border-l-2 border-primary/55 bg-transparent pl-3 text-foreground",
           )}
         >
           {isOwner ? (

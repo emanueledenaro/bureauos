@@ -2,10 +2,11 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback } from "../ui/avatar";
 import { Card } from "../ui/card";
-import { EmptyState } from "../dashboard/EmptyState";
 import { ActionBanner } from "../dashboard/ActionBanner";
+import { StatusPill } from "../dashboard/StatusPill";
 import { MessageBubble } from "./MessageBubble";
 import { Composer } from "./Composer";
+import { buildTodayActions } from "../../lib/builders";
 import {
   Api,
   type CoordinatorAttachmentInput,
@@ -13,7 +14,7 @@ import {
   type CoordinatorChatStreamHandlers,
   type CoordinatorMessageRecord,
 } from "../../lib/api";
-import type { ChatAttachment } from "../../lib/types";
+import type { ChatAttachment, DashboardState } from "../../lib/types";
 
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
@@ -50,9 +51,11 @@ async function toCoordinatorAttachment(file: File): Promise<CoordinatorAttachmen
  * conversazione + scroll automatico verso il fondo quando arrivano messaggi.
  */
 export function CoordinatorPanel({
+  state,
   onMessage,
   onStreamMessage,
 }: {
+  state: DashboardState;
   onMessage: (
     message: string,
     attachments?: CoordinatorAttachmentInput[],
@@ -72,6 +75,13 @@ export function CoordinatorPanel({
   const attachmentsRef = useRef<ChatAttachment[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastScrollHeightRef = useRef(0);
+  const pendingActions = buildTodayActions(state);
+  const activeRuns = state.runs.filter((run) => !["completed", "cancelled"].includes(run.status));
+  const suggestedIntents = [
+    pendingActions[0] ? `Take over: ${pendingActions[0].title}` : "Decide today's operating focus",
+    state.projects.length > 0 ? "Reprioritize delivery work" : "Prepare the operating plan",
+    state.clients.length > 0 ? "Review clients and follow-ups" : "Set up the first client",
+  ];
 
   useEffect(() => {
     attachmentsRef.current = attachments;
@@ -206,30 +216,56 @@ export function CoordinatorPanel({
   };
 
   return (
-    <Card className="flex h-full min-h-0 flex-col overflow-hidden">
-      <header className="flex items-center justify-between border-b border-border px-4 py-3">
-        <div className="flex items-center gap-3">
+    <Card className="flex h-full min-h-0 flex-col overflow-hidden border-border/70 bg-card/95">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-surface-subtle/25 px-4 py-3">
+        <div className="flex min-w-0 items-center gap-3">
           <Avatar className="h-9 w-9">
-            <AvatarFallback className="bg-gradient-to-br from-primary/40 to-info/40 text-foreground">
+            <AvatarFallback className="bg-surface-raised text-foreground ring-1 ring-border/70">
               SC
             </AvatarFallback>
           </Avatar>
-          <div className="leading-tight">
-            <div className="text-section-title">Supreme Coordinator</div>
+          <div className="min-w-0 leading-tight">
+            <div className="truncate text-section-title">Supreme Coordinator</div>
             <div className="text-meta mt-0.5 flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse-soft" />
-              Online · {messages.length} messages
+              Company command thread · {messages.length} messages
             </div>
           </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <StatusPill
+            value={`${state.approvals.length} approvals`}
+            tone={state.approvals.length > 0 ? "warning" : "success"}
+          />
+          <StatusPill
+            value={`${activeRuns.length} active runs`}
+            tone={activeRuns.length > 0 ? "info" : "success"}
+          />
         </div>
       </header>
 
       <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
         {messages.length === 0 && !busy ? (
-          <EmptyState
-            title="No coordinator thread yet"
-            description="The first owner message will create durable client, project, opportunity, artifact, and approval records."
-          />
+          <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center py-10">
+            <div className="rounded-lg border border-border/70 bg-surface-subtle/40 p-5">
+              <div className="text-eyebrow">Executive channel</div>
+              <h2 className="mt-2 text-[20px] font-semibold leading-7 text-foreground">
+                Bring decisions, clients, projects, and priorities here.
+              </h2>
+              <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                {suggestedIntents.map((intent) => (
+                  <button
+                    key={intent}
+                    type="button"
+                    onClick={() => setDraft(intent)}
+                    className="rounded-md border border-border/60 bg-background/35 p-3 text-left text-body-secondary font-medium text-foreground transition-colors hover:border-border hover:bg-surface-raised focus-ring"
+                  >
+                    {intent}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
         ) : null}
 
         {messages.map((message) => (
@@ -241,9 +277,9 @@ export function CoordinatorPanel({
             <Avatar className="h-7 w-7">
               <AvatarFallback className="text-[10px]">SC</AvatarFallback>
             </Avatar>
-            <div className="flex items-center gap-2 rounded-2xl rounded-tl-sm border border-border bg-surface-raised px-3 py-2 text-body text-muted-foreground">
+            <div className="flex items-center gap-2 rounded-lg border-l-2 border-primary/55 bg-transparent px-3 py-2 text-body text-muted-foreground">
               <Loader2 className="h-3 w-3 animate-spin" />
-              Coordinator working...
+              Reading company context...
             </div>
           </div>
         ) : null}
@@ -266,6 +302,7 @@ export function CoordinatorPanel({
         onRemoveAttachment={removeAttachment}
         onSubmit={() => void submit()}
         busy={busy}
+        placeholder="Message a decision, client, project, or priority..."
       />
     </Card>
   );
