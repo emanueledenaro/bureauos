@@ -41,7 +41,7 @@ export function GoalCard({ goal, onOpen }: { goal: GoalItem; onOpen: () => void 
         {goal.signals.map((signal) => (
           <span
             key={signal}
-            className="text-meta max-w-full truncate rounded-full border border-border/60 bg-surface-raised px-2 py-1"
+            className="text-meta max-w-full truncate rounded-md border border-border/60 bg-background/35 px-2 py-1"
           >
             {signal}
           </span>

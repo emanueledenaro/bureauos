@@ -43,7 +43,7 @@ export function ClientAccountCard({ item }: { item: ClientIntelligenceItem }) {
       </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <div className="rounded-md border border-border/60 bg-surface-raised/60 p-3">
+        <div className="rounded-md border border-border/60 bg-background/35 p-3">
           <div className="flex items-center gap-1.5 text-muted-foreground">
             <Briefcase className="h-3 w-3" />
             <span className="text-eyebrow">Delivery</span>
@@ -60,7 +60,7 @@ export function ClientAccountCard({ item }: { item: ClientIntelligenceItem }) {
             </div>
           ) : null}
         </div>
-        <div className="rounded-md border border-border/60 bg-surface-raised/60 p-3">
+        <div className="rounded-md border border-border/60 bg-background/35 p-3">
           <div className="flex items-center gap-1.5 text-muted-foreground">
             <TrendingUp className="h-3 w-3" />
             <span className="text-eyebrow">Revenue</span>
@@ -79,7 +79,7 @@ export function ClientAccountCard({ item }: { item: ClientIntelligenceItem }) {
         </div>
       </div>
 
-      <div className="rounded-md border border-border/60 bg-surface-raised/60 p-3">
+      <div className="rounded-md border border-border/60 bg-background/35 p-3">
         <div className="text-eyebrow">Next action</div>
         <div className="text-body mt-1 leading-relaxed text-foreground">{item.next_action}</div>
       </div>
@@ -88,7 +88,7 @@ export function ClientAccountCard({ item }: { item: ClientIntelligenceItem }) {
         {memoryPaths.slice(0, 3).map((path) => (
           <span
             key={path}
-            className="text-meta max-w-full truncate rounded border border-border/60 bg-surface-raised/40 px-2 py-1 font-mono"
+            className="text-meta max-w-full truncate rounded-md border border-border/60 bg-background/35 px-2 py-1 font-mono"
             title={path}
           >
             {path}

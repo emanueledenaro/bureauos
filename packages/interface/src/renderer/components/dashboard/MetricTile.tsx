@@ -48,9 +48,7 @@ export function MetricTile({
         {action}
       </div>
       <div className="flex items-end justify-between gap-3">
-        <div className="text-[22px] font-semibold leading-none tracking-tight text-foreground">
-          {value}
-        </div>
+        <div className="text-[22px] font-semibold leading-none text-foreground">{value}</div>
         {sparkline && sparkline.length > 1 ? (
           <Sparkline values={sparkline} tone={tone} className="h-8 w-20" />
         ) : null}

@@ -336,7 +336,7 @@ export function MemoryView({ state }: { state: DashboardState }) {
                 .map((artifact) => (
                   <div
                     key={artifact.id}
-                    className="rounded-md border border-border/60 bg-surface-raised/60 p-3"
+                    className="rounded-md border border-border/60 bg-background/35 p-3"
                   >
                     <div className="truncate text-[11px] font-semibold text-foreground">
                       {formatLabel(artifact.type)}

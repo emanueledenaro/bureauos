@@ -143,15 +143,15 @@
 
 @layer components {
   .panel {
-    @apply rounded-lg border border-border bg-card text-card-foreground shadow-[0_1px_0_0_hsl(var(--border)/0.5),0_8px_24px_-14px_hsl(0_0%_0%/0.6)];
+    @apply rounded-lg border border-border/70 bg-card/95 text-card-foreground shadow-[0_1px_0_0_hsl(var(--border)/0.35),0_8px_24px_-18px_hsl(0_0%_0%/0.6)];
   }
 
   .panel-muted {
-    @apply rounded-lg border border-border bg-surface-subtle text-card-foreground;
+    @apply rounded-lg border border-border/70 bg-surface-subtle/45 text-card-foreground;
   }
 
   .surface-elevated {
-    @apply rounded-lg border border-border bg-surface-raised;
+    @apply rounded-lg border border-border/70 bg-surface-raised/75;
   }
 
   /* Semantic typography classes — scala formale a 8 step */

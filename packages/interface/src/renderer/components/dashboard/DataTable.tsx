@@ -57,7 +57,7 @@ export function DataTable<Row>({
     ) : null;
 
   const table = (
-    <div className="overflow-hidden rounded-lg border border-border">
+    <div className="overflow-hidden rounded-lg border border-border/70 bg-card/95">
       {mobileFallback === "cards" ? (
         <>
           <div className="hidden md:block">
@@ -120,7 +120,7 @@ function TableGrid<Row>({
   const content = (
     <div style={{ minWidth: `${minWidth}px` }}>
       <div
-        className={cn("grid bg-surface-subtle/60 text-eyebrow", rowPadding)}
+        className={cn("grid bg-surface-subtle/35 text-eyebrow", rowPadding)}
         style={{ gridTemplateColumns: gridTemplate }}
       >
         {columns.map((column) => (
@@ -133,7 +133,7 @@ function TableGrid<Row>({
         <div
           key={rowKey(row, index)}
           className={cn(
-            "grid items-center gap-3 border-t border-border/60 text-body transition-colors hover:bg-surface-subtle/40",
+            "grid items-center gap-3 border-t border-border/50 text-body transition-colors hover:bg-surface-subtle/35",
             rowPadding,
           )}
           style={{ gridTemplateColumns: gridTemplate }}

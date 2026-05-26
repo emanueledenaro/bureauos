@@ -20,7 +20,7 @@ import {
 import { cn } from "../../lib/utils";
 import type { AdaptiveMode, DashboardState } from "../../lib/types";
 import { Badge } from "../ui/badge";
-import { Sheet, SheetContent, SheetTitle } from "../ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "../ui/sheet";
 
 interface NavItem {
   id: AdaptiveMode;
@@ -191,6 +191,7 @@ export function SidebarDrawer({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="left" className="w-[260px] p-0" hideClose>
         <SheetTitle className="sr-only">Navigation</SheetTitle>
+        <SheetDescription className="sr-only">Primary Operating Room navigation.</SheetDescription>
         <SidebarContent
           state={state}
           mode={mode}

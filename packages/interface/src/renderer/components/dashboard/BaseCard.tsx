@@ -4,13 +4,13 @@ import { cn } from "../../lib/utils";
 import type { Tone } from "../../lib/tone";
 
 const baseCardVariants = cva(
-  "group flex flex-col gap-3 rounded-lg border border-border bg-surface-subtle text-card-foreground transition-colors",
+  "group flex flex-col gap-3 rounded-lg border border-border/70 bg-surface-subtle/45 text-card-foreground transition-colors",
   {
     variants: {
       variant: {
         default: "",
         interactive:
-          "cursor-pointer hover:border-border hover:bg-surface-raised hover:shadow-[0_10px_30px_-18px_hsl(0_0%_0%/0.7)]",
+          "cursor-pointer hover:border-border hover:bg-surface-subtle/75 hover:shadow-[0_10px_30px_-20px_hsl(0_0%_0%/0.7)]",
         accent: "border-l-2",
       },
       padding: {

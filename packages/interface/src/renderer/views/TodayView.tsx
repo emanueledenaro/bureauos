@@ -200,7 +200,7 @@ export function TodayView({
       />
 
       <div className="mt-section grid gap-3 lg:grid-cols-2">
-        <div className="rounded-lg border border-border bg-surface-subtle p-4">
+        <div className="rounded-lg border border-border/70 bg-surface-subtle/45 p-4">
           <div className="flex items-center gap-2">
             <Activity className="h-3.5 w-3.5 text-muted-foreground" />
             <div className="text-section-title">Active Runs</div>
@@ -223,7 +223,7 @@ export function TodayView({
           </div>
         </div>
 
-        <div className="rounded-lg border border-border bg-surface-subtle p-4">
+        <div className="rounded-lg border border-border/70 bg-surface-subtle/45 p-4">
           <div className="flex items-center gap-2">
             <Activity className="h-3.5 w-3.5 text-muted-foreground" />
             <div className="text-section-title">Recent Signals</div>
