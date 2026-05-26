@@ -62,7 +62,7 @@ exception.
 | Local API safety | Local API exposes only workspace state needed by the interface and must document trust assumptions before v1. | partial | API routes, settings summary |
 | Tests | Core behavior has automated coverage and v1 release must pass build, typecheck, test, lint, and targeted smoke checks. | partial | workspace scripts and CI |
 | Documentation | README, roadmap, implementation coverage, policy docs, security docs, and this checklist accurately describe shipped vs. future behavior. | partial | public docs |
-| Release process | v1 release notes, changelog entry, version tag, verification evidence, and known limitations are prepared before tagging. | designed | release checklist to be added |
+| Release process | v1 release notes, changelog entry, version tag, verification evidence, and known limitations are prepared before tagging. | partial | `docs/release-process.md`, `CHANGELOG.md`, `release:check` |
 
 ## Deferred From v1
 
@@ -115,6 +115,7 @@ Before tagging v1, collect evidence for these checks in the release notes.
 
 ```bash
 pnpm install
+pnpm run release:check
 pnpm -r run build
 pnpm -r run typecheck
 pnpm -r run test

@@ -33,6 +33,8 @@ node /path/to/bureauos/packages/cli/dist/bin/bureau.js audit tail -n 10
 
 For a guided safe local demo, see
 [`docs/getting-started.md`](./docs/getting-started.md).
+Release readiness and packaging are tracked in
+[`docs/release-process.md`](./docs/release-process.md).
 
 ### Owner Interface (ElectronJS)
 
