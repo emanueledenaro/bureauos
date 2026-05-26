@@ -422,5 +422,17 @@ export type {
   DaemonStateRecord,
   DaemonStatus,
   DaemonStatusSnapshot,
+  DaemonLockRecord,
+  DaemonLockSnapshot,
+  DaemonLockAcquisition,
   ProcessAliveCheck,
 } from "./daemon/state.js";
+export { DaemonLifecycleSupervisor } from "./daemon/supervisor.js";
+export type {
+  DaemonLifecycleSupervisorOptions,
+  DaemonSpawn,
+  DaemonKill,
+  DaemonStartResult,
+  DaemonStopResult,
+  SpawnedDaemonProcess,
+} from "./daemon/supervisor.js";

@@ -15,6 +15,8 @@ messages. Keep public claims conservative and aligned with
 - Release process and automated release check command.
 - Repository hygiene guard for private local agent context.
 - Phase 8 PR execution path with fake-runtime E2E coverage.
+- Daemon lifecycle supervisor with CLI/API start, stop, status, lock, and
+  startup diagnostics coverage.
 
 ### Security
 

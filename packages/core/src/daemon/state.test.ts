@@ -53,6 +53,21 @@ describe("DaemonStateStore", () => {
     expect(status.status).toBe("stale");
   });
 
+  it("prevents duplicate active locks and cleans up stale locks", async () => {
+    const store = new DaemonStateStore(dir, (pid) => pid === 1234);
+
+    const first = await store.acquireLock({ pid: 1234, message: "active daemon" });
+    const duplicate = await store.acquireLock({ pid: 5678, message: "second daemon" });
+
+    expect(first).toMatchObject({ acquired: true, alive: true, state: { pid: 1234 } });
+    expect(duplicate).toMatchObject({ acquired: false, alive: true, state: { pid: 1234 } });
+
+    const staleAwareStore = new DaemonStateStore(dir, (pid) => pid === 5678);
+    const recovered = await staleAwareStore.acquireLock({ pid: 5678, message: "new daemon" });
+
+    expect(recovered).toMatchObject({ acquired: true, alive: true, state: { pid: 5678 } });
+  });
+
   it("preserves the status file as workspace-local JSON", async () => {
     const store = new DaemonStateStore(dir, () => true);
 

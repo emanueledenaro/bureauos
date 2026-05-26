@@ -48,6 +48,12 @@ import { ProjectHealthReviewService } from "../autonomy/project-health.js";
 import { ProjectRepositoryVerificationService } from "../autonomy/repository-verification.js";
 import { AutonomousRetryService } from "../autonomy/retry.js";
 import { MemoryTriggerService } from "../autonomy/memory-triggers.js";
+import type { DaemonStatusSnapshot } from "../daemon/state.js";
+import {
+  DaemonLifecycleSupervisor,
+  type DaemonStartResult,
+  type DaemonStopResult,
+} from "../daemon/supervisor.js";
 import { GitHubWebhookIngestionService } from "../github/webhook-ingestion.js";
 import { GitHubSignalTriggerService } from "../github/signal-triggers.js";
 import type { GitHubSignalClient } from "../github/signal-sync.js";
@@ -80,6 +86,7 @@ export interface ApiServerOptions {
   config: BureauConfig;
   port?: number;
   token?: string;
+  daemonSupervisor?: DaemonApiSupervisor;
   githubClient?: GitHubIssuePublishClient &
     Partial<GitHubPullRequestPublishClient> &
     Partial<GitHubRepositoryProvisionClient> &
@@ -104,6 +111,12 @@ interface RouteContext {
 }
 
 type RouteHandler = (ctx: RouteContext) => Promise<void> | void;
+
+interface DaemonApiSupervisor {
+  status(): Promise<DaemonStatusSnapshot>;
+  start(input?: { port?: number }): Promise<DaemonStartResult>;
+  stop(): Promise<DaemonStopResult>;
+}
 
 type ProviderStatus = ProviderConnection & {
   status: "ok" | "missing";
@@ -375,8 +388,52 @@ function settingsSummary(options: ApiServerOptions): SettingsSummary {
   };
 }
 
+function daemonSupervisor(options: ApiServerOptions): DaemonApiSupervisor {
+  return (
+    options.daemonSupervisor ??
+    new DaemonLifecycleSupervisor({
+      workspaceRoot: options.workspaceRoot,
+      scriptPath: process.argv[1],
+    })
+  );
+}
+
 const ROUTES: Record<string, RouteHandler> = {
   "GET /health": ({ res }) => ok(res, { ok: true }),
+
+  "GET /daemon/status": async ({ res, options }) => {
+    ok(res, await daemonSupervisor(options).status());
+  },
+
+  "POST /daemon/start": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as { port?: number };
+    const supervisor = daemonSupervisor(options);
+    const result = await supervisor.start({
+      ...(typeof body.port === "number" ? { port: body.port } : {}),
+    });
+    ok(res, result, result.ok ? 202 : result.status === "already_running" ? 409 : 500);
+  },
+
+  "POST /daemon/stop": async ({ res, options }) => {
+    const supervisor = daemonSupervisor(options);
+    const snapshot = await supervisor.status();
+    if (snapshot.state?.pid === process.pid && snapshot.alive) {
+      ok(
+        res,
+        {
+          ok: true,
+          status: "stopping",
+          message: `stop signal scheduled for pid ${process.pid}`,
+          snapshot,
+        },
+        202,
+      );
+      setTimeout(() => void supervisor.stop(), 10);
+      return;
+    }
+    const result = await supervisor.stop();
+    ok(res, result, result.ok ? 200 : 500);
+  },
 
   "GET /settings": ({ res, options }) => {
     ok(res, settingsSummary(options));

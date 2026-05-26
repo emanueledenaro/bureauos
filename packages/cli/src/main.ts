@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import {
   ApprovalRegistry,
@@ -14,6 +13,7 @@ import {
   ConfigError,
   CoordinatorIntakeService,
   DaemonStateStore,
+  DaemonLifecycleSupervisor,
   GitHubIssueDraftService,
   GitHubIssuePublishService,
   GitHubPullRequestPublishService,
@@ -1387,6 +1387,18 @@ const runDaemonForeground: Handler = async (args) => {
   });
 
   try {
+    const lock = await state.acquireLock({
+      pid: process.pid,
+      message: "foreground daemon run",
+    });
+    if (!lock.acquired) {
+      const message = lock.state
+        ? `daemon already running with pid ${lock.state.pid}`
+        : "daemon lock could not be acquired";
+      await state.markError(message);
+      return err(`daemon run: ${message}`);
+    }
+
     scheduler.start();
     const server = await startApiServer({
       workspaceRoot: process.cwd(),
@@ -1412,6 +1424,7 @@ const runDaemonForeground: Handler = async (args) => {
       scheduler.stop();
       await server.close();
       await state.markStopped(`received ${signal}`);
+      await state.releaseLock(process.pid);
       process.exit(0);
     };
 
@@ -1422,6 +1435,7 @@ const runDaemonForeground: Handler = async (args) => {
   } catch (error) {
     scheduler.stop();
     await state.markError((error as Error).message);
+    await state.releaseLock(process.pid);
     throw error;
   }
 };
@@ -1430,32 +1444,15 @@ const handleDaemonStart: Handler = async (args) => {
   const flags = parseFlags(args, { port: { type: "number", alias: "p" } });
   if (typeof flags === "string") return err(`daemon start: ${flags}`);
   await loadWorkspaceConfig(process.cwd());
-  const state = new DaemonStateStore(process.cwd());
-  const current = await state.status();
-  if (current.status === "running" && current.alive) {
-    return err(`daemon already running with pid ${current.state?.pid ?? "unknown"}`);
-  }
-
-  const script = process.argv[1];
-  if (!script) return err("daemon start: cannot locate bureau executable");
-  const childArgs = [script, "daemon", "run"];
-  if (typeof flags.port === "number") childArgs.push("--port", String(flags.port));
-  const child = spawn(process.execPath, childArgs, {
-    cwd: process.cwd(),
-    detached: true,
-    env: process.env,
-    stdio: "ignore",
+  const supervisor = new DaemonLifecycleSupervisor({
+    workspaceRoot: process.cwd(),
+    scriptPath: process.argv[1],
   });
-  child.unref();
-  if (!child.pid) return err("daemon start: failed to spawn background process");
-
-  const port = typeof flags.port === "number" ? flags.port : 0;
-  await state.markRunning({
-    pid: child.pid,
-    apiUrl: port > 0 ? `http://127.0.0.1:${port}` : "starting",
-    port,
+  const result = await supervisor.start({
+    ...(typeof flags.port === "number" ? { port: flags.port } : {}),
   });
-  process.stdout.write(`bureau: daemon started pid ${child.pid}\n`);
+  if (!result.ok) return err(`daemon start: ${result.message}`);
+  process.stdout.write(`bureau: ${result.message}\n`);
   process.stdout.write(`bureau: run \`bureau daemon status\` to inspect it\n`);
   return 0;
 };
@@ -1483,21 +1480,8 @@ const handleDaemonStatus: Handler = async () => {
 
 const handleDaemonStop: Handler = async () => {
   await loadWorkspaceConfig(process.cwd());
-  const state = new DaemonStateStore(process.cwd());
-  const snapshot = await state.status();
-  if (!snapshot.state || snapshot.status !== "running" || !snapshot.alive || !snapshot.state.pid) {
-    await state.markStopped("not running");
-    process.stdout.write("bureau: daemon is not running\n");
-    return 0;
-  }
-
-  try {
-    process.kill(snapshot.state.pid, "SIGTERM");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
-  }
-  await state.markStopped("owner requested stop");
-  process.stdout.write(`bureau: stop signal sent to pid ${snapshot.state.pid}\n`);
+  const result = await new DaemonLifecycleSupervisor({ workspaceRoot: process.cwd() }).stop();
+  process.stdout.write(`bureau: ${result.message}\n`);
   return 0;
 };
 

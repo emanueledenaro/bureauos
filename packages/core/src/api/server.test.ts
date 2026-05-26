@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { defaultConfig } from "../config/loader.js";
 import { initWorkspace } from "../init/initializer.js";
 import { workspacePaths } from "../paths.js";
+import type { DaemonStatusSnapshot } from "../daemon/state.js";
+import type { DaemonStartResult, DaemonStopResult } from "../daemon/supervisor.js";
 import type {
   GitHubIssuePublishClient,
   GitHubIssuePublishClientIssue,
@@ -219,6 +221,146 @@ describe("API server", () => {
     expect(body.agents.roles).toBeGreaterThan(0);
     expect(body.capabilities.catalog).toBeGreaterThan(0);
     expect(JSON.stringify(body)).not.toContain("must-not-leak");
+  });
+
+  it("exposes daemon status through the API", async () => {
+    const snapshot: DaemonStatusSnapshot = {
+      path: join(dir, ".bureauos", "daemon", "status.json"),
+      alive: false,
+      status: "stopped",
+    };
+    server = await startApiServer({
+      workspaceRoot: dir,
+      config: defaultConfig("agency"),
+      daemonSupervisor: {
+        status: async () => snapshot,
+        start: async () => {
+          throw new Error("unexpected daemon start");
+        },
+        stop: async () => {
+          throw new Error("unexpected daemon stop");
+        },
+      },
+    });
+
+    const response = await fetch(`${server.url}/daemon/status`);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      status: "stopped",
+      alive: false,
+    });
+  });
+
+  it("starts the daemon through the API without bypassing the supervisor", async () => {
+    let requestedPort: number | undefined;
+    const snapshot: DaemonStatusSnapshot = {
+      path: join(dir, ".bureauos", "daemon", "status.json"),
+      alive: true,
+      status: "starting",
+      state: {
+        status: "starting",
+        workspace_root: dir,
+        pid: 4567,
+        api_url: "http://127.0.0.1:4848",
+        port: 4848,
+        scheduler_active: false,
+        started_at: "2026-05-26T10:00:00.000Z",
+        updated_at: "2026-05-26T10:00:00.000Z",
+      },
+    };
+    const startResult: DaemonStartResult = {
+      ok: true,
+      status: "started",
+      message: "daemon started pid 4567",
+      pid: 4567,
+      snapshot,
+    };
+    server = await startApiServer({
+      workspaceRoot: dir,
+      config: defaultConfig("agency"),
+      daemonSupervisor: {
+        status: async () => snapshot,
+        start: async (input = {}) => {
+          requestedPort = input.port;
+          return startResult;
+        },
+        stop: async () => {
+          throw new Error("unexpected daemon stop");
+        },
+      },
+    });
+
+    const response = await fetch(`${server.url}/daemon/start`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ port: 4848 }),
+    });
+
+    expect(response.status).toBe(202);
+    expect(requestedPort).toBe(4848);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      status: "started",
+      pid: 4567,
+    });
+  });
+
+  it("stops the daemon through the API without killing the API process", async () => {
+    let stopped = false;
+    const snapshot: DaemonStatusSnapshot = {
+      path: join(dir, ".bureauos", "daemon", "status.json"),
+      alive: true,
+      status: "running",
+      state: {
+        status: "running",
+        workspace_root: dir,
+        pid: 5678,
+        api_url: "http://127.0.0.1:3737",
+        port: 3737,
+        scheduler_active: true,
+        started_at: "2026-05-26T10:00:00.000Z",
+        updated_at: "2026-05-26T10:00:00.000Z",
+      },
+    };
+    const stopResult: DaemonStopResult = {
+      ok: true,
+      status: "stopped",
+      message: "stop signal sent to pid 5678",
+      pid: 5678,
+      snapshot: {
+        ...snapshot,
+        alive: false,
+        status: "stopped",
+        ...(snapshot.state
+          ? { state: { ...snapshot.state, status: "stopped" as const, scheduler_active: false } }
+          : {}),
+      },
+    };
+    server = await startApiServer({
+      workspaceRoot: dir,
+      config: defaultConfig("agency"),
+      daemonSupervisor: {
+        status: async () => snapshot,
+        start: async () => {
+          throw new Error("unexpected daemon start");
+        },
+        stop: async () => {
+          stopped = true;
+          return stopResult;
+        },
+      },
+    });
+
+    const response = await fetch(`${server.url}/daemon/stop`, { method: "POST" });
+
+    expect(response.status).toBe(200);
+    expect(stopped).toBe(true);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      status: "stopped",
+      pid: 5678,
+    });
   });
 
   it("reads and updates growth memory for the ElectronJS growth page", async () => {

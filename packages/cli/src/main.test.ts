@@ -3,6 +3,7 @@ import { constants as FS } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { DaemonStateStore } from "@bureauos/core";
 import { main } from "./main.js";
 
 async function exists(path: string): Promise<boolean> {
@@ -168,6 +169,20 @@ describe("bureau cli", () => {
       status: "stopped",
       scheduler_active: false,
       message: "not running",
+    });
+  });
+
+  it("refuses to start a duplicate daemon when an active lock exists", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+    const state = new DaemonStateStore(dir);
+    await state.acquireLock({ pid: process.pid, message: "test daemon" });
+
+    const code = await main(["node", "bureau", "daemon", "start"]);
+
+    expect(code).toBe(1);
+    await expect(state.lockStatus()).resolves.toMatchObject({
+      alive: true,
+      state: { pid: process.pid },
     });
   });
 

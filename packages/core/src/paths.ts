@@ -41,6 +41,7 @@ export interface WorkspacePaths {
   auditLog: string;
   daemonDir: string;
   daemonStatus: string;
+  daemonLock: string;
   daemonLog: string;
   approvalsPendingDir: string;
   approvalsResolvedDir: string;
@@ -87,6 +88,7 @@ export function workspacePaths(root: string): WorkspacePaths {
     auditLog: join(ws, "audit", "audit.log"),
     daemonDir: join(ws, "daemon"),
     daemonStatus: join(ws, "daemon", "status.json"),
+    daemonLock: join(ws, "daemon", "daemon.lock"),
     daemonLog: join(ws, "daemon", "daemon.log"),
     approvalsPendingDir: join(ws, "approvals", "pending"),
     approvalsResolvedDir: join(ws, "approvals", "resolved"),
