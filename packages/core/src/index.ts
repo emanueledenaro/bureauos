@@ -89,8 +89,9 @@ export type {
 
 // Memory helpers
 export { appendDailyNote } from "./memory/daily.js";
-export { appendDecision } from "./memory/decisions.js";
-export type { DecisionInput } from "./memory/decisions.js";
+export type { DailyNoteSection } from "./memory/daily.js";
+export { appendDecision, recordDecision } from "./memory/decisions.js";
+export type { DecisionInput, DecisionWriteResult } from "./memory/decisions.js";
 export {
   MEMORY_BOUNDARY_CAPABILITY,
   MEMORY_CAPABILITY,

@@ -1,10 +1,41 @@
-import { appendFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { workspacePaths } from "../paths.js";
 import { ensureDir, fileExists } from "../registries/base.js";
 
+export type DailyNoteSection = "Events" | "Runs" | "Decisions" | "Follow-ups";
+
 function todayIso(d = new Date()): string {
   return d.toISOString().slice(0, 10);
+}
+
+function emptyDailyNote(iso: string): string {
+  return `# ${iso}\n\n## Events\n\n(none yet)\n\n## Runs\n\n(none yet)\n\n## Decisions\n\n(none yet)\n\n## Follow-ups\n\n(none yet)\n`;
+}
+
+function appendToSection(content: string, section: DailyNoteSection, line: string): string {
+  const header = `## ${section}`;
+  const headerIndex = content.indexOf(header);
+  const normalizedLine = `- ${line.trim()}`;
+  if (headerIndex < 0) {
+    const base = content.endsWith("\n") ? content : `${content}\n`;
+    return `${base}\n${header}\n\n${normalizedLine}\n`;
+  }
+
+  const sectionStart = headerIndex + header.length;
+  const nextHeaderIndex = content.indexOf("\n## ", sectionStart);
+  const beforeSection = content.slice(0, sectionStart);
+  const sectionBody = content.slice(
+    sectionStart,
+    nextHeaderIndex >= 0 ? nextHeaderIndex : content.length,
+  );
+  const afterSection = nextHeaderIndex >= 0 ? content.slice(nextHeaderIndex) : "";
+  const existingLines = sectionBody
+    .split(/\r?\n/)
+    .map((item) => item.trimEnd())
+    .filter((item) => item.trim() !== "" && item.trim() !== "(none yet)");
+  const updatedBody = ["", "", ...existingLines, normalizedLine].join("\n");
+  return `${beforeSection}${updatedBody}\n${afterSection.replace(/^\n/, "")}`;
 }
 
 /**
@@ -13,7 +44,7 @@ function todayIso(d = new Date()): string {
  */
 export async function appendDailyNote(
   workspaceRoot: string,
-  section: "Events" | "Runs" | "Decisions" | "Follow-ups",
+  section: DailyNoteSection,
   line: string,
   date = new Date(),
 ): Promise<string> {
@@ -21,10 +52,7 @@ export async function appendDailyNote(
   const paths = workspacePaths(workspaceRoot);
   const path = join(paths.dailyDir, `${iso}.md`);
   await ensureDir(paths.dailyDir);
-  if (!(await fileExists(path))) {
-    const seed = `# ${iso}\n\n## Events\n\n## Runs\n\n## Decisions\n\n## Follow-ups\n`;
-    await appendFile(path, seed, "utf8");
-  }
-  await appendFile(path, `\n- (${section}) ${line}\n`, "utf8");
+  const current = (await fileExists(path)) ? await readFile(path, "utf8") : emptyDailyNote(iso);
+  await writeFile(path, appendToSection(current, section, line), "utf8");
   return path;
 }

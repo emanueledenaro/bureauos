@@ -24,6 +24,8 @@ import { CoordinatorChatService } from "../coordinator/chat.js";
 import { CoordinatorMessageStore } from "../coordinator/messages.js";
 import { CoordinatorToolRuntime } from "../coordinator/tool-runtime.js";
 import { CoordinatorGlobalMemoryService } from "../memory/global.js";
+import { appendDailyNote, type DailyNoteSection } from "../memory/daily.js";
+import { recordDecision } from "../memory/decisions.js";
 import { ProjectDispatchService } from "../dispatch/project-dispatch.js";
 import { GitHubIssueDraftService } from "../github/issue-drafts.js";
 import {
@@ -413,6 +415,26 @@ function daemonSupervisor(options: ApiServerOptions): DaemonApiSupervisor {
   );
 }
 
+function parseDailyNoteSection(value: string | undefined): DailyNoteSection | undefined {
+  const section = value ?? "Follow-ups";
+  if (
+    section === "Events" ||
+    section === "Runs" ||
+    section === "Decisions" ||
+    section === "Follow-ups"
+  ) {
+    return section;
+  }
+  return undefined;
+}
+
+function arrayField<const K extends string>(key: K, value: unknown): Partial<Record<K, string[]>> {
+  if (!Array.isArray(value)) return {};
+  return {
+    [key]: value.filter((item): item is string => typeof item === "string"),
+  } as Partial<Record<K, string[]>>;
+}
+
 const ROUTES: Record<string, RouteHandler> = {
   "GET /health": ({ res }) => ok(res, { ok: true }),
 
@@ -719,6 +741,66 @@ const ROUTES: Record<string, RouteHandler> = {
         source: "api",
       }),
     );
+  },
+
+  "POST /memory/daily-note": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as {
+      section?: string;
+      line?: string;
+    };
+    if (!body.line || !body.line.trim()) {
+      ok(res, { error: "line required" }, 400);
+      return;
+    }
+    const section = parseDailyNoteSection(body.section);
+    if (!section) {
+      ok(res, { error: "section must be Events, Runs, Decisions, or Follow-ups" }, 400);
+      return;
+    }
+    const path = await appendDailyNote(options.workspaceRoot, section, body.line);
+    await deps(options).audit.append({
+      actor: "api",
+      action: "memory.daily_note_appended",
+      target: section,
+      result: "ok",
+    });
+    ok(res, { path, section }, 201);
+  },
+
+  "POST /memory/decisions": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as {
+      what?: string;
+      why?: string;
+      actor?: string;
+      runId?: string;
+      clientId?: string;
+      projectId?: string;
+      alternativesRejected?: unknown;
+      evidence?: unknown;
+      affects?: unknown;
+      revisitWhen?: string;
+    };
+    if (!body.what || !body.what.trim()) {
+      ok(res, { error: "what required" }, 400);
+      return;
+    }
+    if (!body.why || !body.why.trim()) {
+      ok(res, { error: "why required" }, 400);
+      return;
+    }
+    const result = await recordDecision(options.workspaceRoot, {
+      actor: body.actor?.trim() || "owner",
+      what: body.what,
+      why: body.why,
+      ...(typeof body.runId === "string" ? { runId: body.runId } : {}),
+      ...(typeof body.clientId === "string" ? { clientId: body.clientId } : {}),
+      ...(typeof body.projectId === "string" ? { projectId: body.projectId } : {}),
+      ...(typeof body.revisitWhen === "string" ? { revisitWhen: body.revisitWhen } : {}),
+      ...arrayField("alternativesRejected", body.alternativesRejected),
+      ...arrayField("evidence", body.evidence),
+      ...arrayField("affects", body.affects),
+    });
+    ok(res, result, 201);
   },
 
   "POST /coordinator/messages": async ({ res, options, req }) => {

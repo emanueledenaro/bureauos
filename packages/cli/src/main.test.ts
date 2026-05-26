@@ -82,6 +82,57 @@ describe("bureau cli", () => {
     expect(code).toBe(1);
   });
 
+  it("records durable decisions and daily notes from CLI", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+
+    const decision = await captureStdout(() =>
+      main([
+        "node",
+        "bureau",
+        "decision",
+        "--what",
+        "Keep Coordinator replies clean",
+        "--why",
+        "Owner-facing chat should not expose internal traces.",
+        "--actor",
+        "supreme_coordinator",
+        "--affects",
+        "SER-42,coordinator",
+      ]),
+    );
+    expect(decision.code).toBe(0);
+    expect(decision.output).toContain("bureau: decision decision_");
+
+    expect(
+      await main([
+        "node",
+        "bureau",
+        "follow-up",
+        "--section",
+        "Decisions",
+        "--line",
+        "Review durable memory write-back.",
+      ]),
+    ).toBe(0);
+
+    const decisions = await readFile(join(dir, ".bureauos", "memory", "DECISIONS.md"), "utf8");
+    expect(decisions).toContain("Keep Coordinator replies clean");
+    expect(decisions).toContain("SER-42, coordinator");
+
+    const dailyDir = join(dir, ".bureauos", "memory", "memory");
+    const dailyBodies = await Promise.all(
+      (await readdir(dailyDir)).map((file) => readFile(join(dailyDir, file), "utf8")),
+    );
+    expect(dailyBodies.some((body) => body.includes("Review durable memory write-back."))).toBe(
+      true,
+    );
+    expect(dailyBodies.some((body) => body.includes("- (Decisions)"))).toBe(false);
+
+    const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
+    expect(audit).toContain("memory.decision_recorded");
+    expect(audit).toContain("memory.daily_note_appended");
+  });
+
   it("runs supreme coordinator intake from a raw owner message", async () => {
     await main(["node", "bureau", "init", "--name", "BOS"]);
     const code = await main([

@@ -295,6 +295,46 @@ describe("API server", () => {
     });
   });
 
+  it("writes daily notes and decision records through the memory API", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const noteResponse = await fetch(`${server.url}/memory/daily-note`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        section: "Events",
+        line: "Owner asked for durable memory write-back.",
+      }),
+    });
+    expect(noteResponse.status).toBe(201);
+    const note = (await noteResponse.json()) as { path: string; section: string };
+    expect(note.section).toBe("Events");
+    await expect(readFile(note.path, "utf8")).resolves.toContain(
+      "Owner asked for durable memory write-back.",
+    );
+
+    const decisionResponse = await fetch(`${server.url}/memory/decisions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        actor: "supreme_coordinator",
+        what: "Keep owner-visible decisions durable",
+        why: "Coordinator should remember important operating choices.",
+        evidence: ["SER-42"],
+      }),
+    });
+    expect(decisionResponse.status).toBe(201);
+    const decision = (await decisionResponse.json()) as { id: string; globalPath: string };
+    expect(decision.id).toMatch(/^decision_/);
+    await expect(readFile(decision.globalPath, "utf8")).resolves.toContain(
+      "Keep owner-visible decisions durable",
+    );
+
+    const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(audit).toContain("memory.daily_note_appended");
+    expect(audit).toContain("memory.decision_recorded");
+  });
+
   it("exposes safe workspace settings for the ElectronJS settings page", async () => {
     const config = defaultConfig("agency");
     config.organization.name = "Settings Agency";

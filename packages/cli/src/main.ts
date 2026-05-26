@@ -36,18 +36,19 @@ import {
   Scheduler,
   VERSION,
   appendDailyNote,
-  appendDecision,
   createCoordinatorRunDispatcher,
   defaultConfig,
   initWorkspace,
   loadConfig,
   linearIssueSourceWorkItem,
+  recordDecision,
   startApiServer,
   sourceWorkItemFromTriggerSource,
   sourceWorkItemLabel,
   workspacePaths,
   type BureauConfig,
   type CreateProjectInput,
+  type DailyNoteSection,
   type Preset,
   type RunType,
 } from "@bureauos/core";
@@ -236,6 +237,19 @@ function parseFlags(
 function err(message: string): number {
   process.stderr.write(`bureau: ${message}\n`);
   return 1;
+}
+
+function parseDailyNoteSection(value: string | undefined): DailyNoteSection | undefined {
+  const section = value ?? "Follow-ups";
+  if (
+    section === "Events" ||
+    section === "Runs" ||
+    section === "Decisions" ||
+    section === "Follow-ups"
+  ) {
+    return section;
+  }
+  return undefined;
 }
 
 async function loadWorkspaceConfig(cwd: string): Promise<BureauConfig> {
@@ -1774,7 +1788,7 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
     if (typeof flags === "string") return err(`decision: ${flags}`);
     if (typeof flags.what !== "string") return err("decision: --what required");
     if (typeof flags.why !== "string") return err("decision: --why required");
-    await appendDecision(process.cwd(), {
+    const result = await recordDecision(process.cwd(), {
       actor: typeof flags.actor === "string" ? flags.actor : "owner",
       what: flags.what,
       why: flags.why,
@@ -1788,13 +1802,7 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
           }
         : {}),
     });
-    await new AuditLog(workspacePaths(process.cwd()).auditLog).append({
-      actor: "cli",
-      action: "decision.append",
-      target: flags.what,
-      result: "ok",
-    });
-    process.stdout.write(`bureau: decision recorded in DECISIONS.md\n`);
+    process.stdout.write(`bureau: decision ${result.id} recorded in DECISIONS.md\n`);
     return 0;
   },
   "follow-up": async (args: readonly string[]) => {
@@ -1804,12 +1812,17 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
     });
     if (typeof flags === "string") return err(`follow-up: ${flags}`);
     if (typeof flags.line !== "string") return err("follow-up: --line required");
-    const section = (typeof flags.section === "string" ? flags.section : "Follow-ups") as
-      | "Events"
-      | "Runs"
-      | "Decisions"
-      | "Follow-ups";
+    const section = parseDailyNoteSection(
+      typeof flags.section === "string" ? flags.section : undefined,
+    );
+    if (!section) return err("follow-up: --section must be Events, Runs, Decisions, or Follow-ups");
     const path = await appendDailyNote(process.cwd(), section, flags.line);
+    await new AuditLog(workspacePaths(process.cwd()).auditLog).append({
+      actor: "cli",
+      action: "memory.daily_note_appended",
+      target: section,
+      result: "ok",
+    });
     process.stdout.write(`bureau: appended to ${path}\n`);
     return 0;
   },
