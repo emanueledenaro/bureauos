@@ -22,6 +22,8 @@ messages. Keep public claims conservative and aligned with
 
 ### Fixed
 
+- Low-context Coordinator greetings such as `ciao` are now concise and natural
+  instead of returning an operating-status policy report.
 - Coordinator provider calls now time out into a local-memory fallback instead
   of leaving the Operating Room chat stuck in a sending state.
 

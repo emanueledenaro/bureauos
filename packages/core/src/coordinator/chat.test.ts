@@ -76,6 +76,7 @@ describe("CoordinatorChatService", () => {
     expect(result.mode).toBe("answer");
     expect(providerWasAsked).toBe(false);
     expect(result.provider.reason).toBe("low_context_current_message");
+    expect(result.coordinatorMessage.text).toBe("Ciao Emanuele, ci sono.");
     expect(result.coordinatorMessage.text.toLowerCase()).not.toContain("pizzeria");
     expect(result.coordinatorMessage.text.toLowerCase()).not.toContain("prenotazioni");
   });
@@ -116,7 +117,9 @@ describe("CoordinatorChatService", () => {
 
     expect(result.provider.reason).toBe("low_context_current_message");
     expect(providerWasAsked).toBe(false);
-    expect(result.coordinatorMessage.text).toContain("Sono operativo");
+    expect(result.coordinatorMessage.text).toBe("Ciao Emanuele, ci sono.");
+    expect(result.coordinatorMessage.text.toLowerCase()).not.toContain("postura attiva");
+    expect(result.coordinatorMessage.text.toLowerCase()).not.toContain("memoria storica");
     expect(result.coordinatorMessage.text.toLowerCase()).not.toContain("i need to");
     expect(result.coordinatorMessage.text.toLowerCase()).not.toContain("crafting");
   });
