@@ -27,7 +27,16 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
   });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (!res.ok) {
+    let error = `${res.status} ${res.statusText}`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body.error) error = `${res.status} ${body.error}`;
+    } catch {
+      // Keep the HTTP status when the server returns an empty or non-JSON error.
+    }
+    throw new Error(error);
+  }
   return (await res.json()) as T;
 }
 
@@ -233,6 +242,8 @@ export interface ApprovalRecord {
   actor: string;
   target: string;
   scope: string;
+  run_id?: string;
+  risk_level?: string;
   status: string;
   expires_at?: string;
   one_off?: boolean;

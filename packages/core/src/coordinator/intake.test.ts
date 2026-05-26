@@ -6,6 +6,7 @@ import { defaultConfig } from "../config/loader.js";
 import { initWorkspace } from "../init/initializer.js";
 import { workspacePaths } from "../paths.js";
 import { ApprovalRegistry } from "../registries/approval.js";
+import { ClientRegistry } from "../registries/client.js";
 import { ArtifactStore } from "../artifacts/store.js";
 import { CoordinatorIntakeService } from "./intake.js";
 
@@ -79,5 +80,30 @@ describe("CoordinatorIntakeService", () => {
 
     const audit = await readFile(paths.auditLog, "utf8");
     expect(audit).toContain("coordinator.intake.completed");
+  });
+
+  it("reuses a named existing client from lowercase owner intake", async () => {
+    const clients = new ClientRegistry(dir);
+    const existing = await clients.create({
+      name: "Pizzeria Amodeo",
+      industry: "food_and_beverage",
+      status: "lead",
+    });
+    const service = new CoordinatorIntakeService(dir, { config: defaultConfig("agency") });
+
+    const result = await service.process({
+      message:
+        "pizzeria amodeo vorrebbe un sito basico di html e css per una pizza specifica la margherita",
+      source: "owner_chat",
+    });
+
+    expect(result.client.id).toBe(existing.id);
+    expect(result.client.name).toBe("Pizzeria Amodeo");
+    expect(result.project.name).toBe("Pizzeria Amodeo Website");
+    expect(result.opportunity.title).toBe("Website for Pizzeria Amodeo");
+    expect(result.summary).toContain("Prepared intake for existing client Pizzeria Amodeo");
+
+    const listed = await clients.list();
+    expect(listed.map((client) => client.name)).toEqual(["Pizzeria Amodeo"]);
   });
 });

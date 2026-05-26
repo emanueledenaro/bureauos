@@ -216,6 +216,88 @@ describe("API server", () => {
     expect(pending.map((approval) => approval.id)).not.toContain(first?.id);
   });
 
+  it("requires a decision note before approving high-risk approvals", async () => {
+    const approval = await new ApprovalRegistry(dir).request({
+      action: "deploy_production",
+      actor: "supreme_coordinator",
+      target: "bureauos.app",
+      scope: "Deploy production release",
+      riskLevel: "critical",
+    });
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const withoutNote = await fetch(`${server.url}/approvals/resolve`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: approval.id, status: "approved" }),
+    });
+    expect(withoutNote.status).toBe(400);
+    expect(await withoutNote.json()).toMatchObject({
+      error: "decision note required for critical-risk approvals",
+    });
+
+    const pending = await new ApprovalRegistry(dir).listPending();
+    expect(pending.map((item) => item.id)).toContain(approval.id);
+
+    const approved = await fetch(`${server.url}/approvals/resolve`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        id: approval.id,
+        status: "approved",
+        reason: "Release verified by owner.",
+      }),
+    });
+    expect(approved.status).toBe(200);
+    await expect(approved.json()).resolves.toMatchObject({
+      id: approval.id,
+      status: "approved",
+      reason: "Release verified by owner.",
+      risk_level: "critical",
+    });
+  });
+
+  it("records deny decisions and rejects stale approval resolutions", async () => {
+    const approval = await new ApprovalRegistry(dir).request({
+      action: "send_final_proposals",
+      actor: "supreme_coordinator",
+      target: "opp_123",
+      scope: "Send final proposal to client",
+      riskLevel: "high",
+    });
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const rejected = await fetch(`${server.url}/approvals/resolve`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        id: approval.id,
+        status: "rejected",
+        reason: "Pricing not approved.",
+      }),
+    });
+    expect(rejected.status).toBe(200);
+    await expect(rejected.json()).resolves.toMatchObject({
+      id: approval.id,
+      status: "rejected",
+      reason: "Pricing not approved.",
+    });
+
+    const stale = await fetch(`${server.url}/approvals/resolve`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        id: approval.id,
+        status: "approved",
+        reason: "Retry from stale UI.",
+      }),
+    });
+    expect(stale.status).toBe(409);
+    await expect(stale.json()).resolves.toMatchObject({
+      error: "approval is no longer pending",
+    });
+  });
+
   it("exposes safe workspace settings for the ElectronJS settings page", async () => {
     const config = defaultConfig("agency");
     config.organization.name = "Settings Agency";

@@ -9,7 +9,11 @@ import { workspacePaths } from "../paths.js";
 import { ClientRegistry } from "../registries/client.js";
 import { ProjectRegistry } from "../registries/project.js";
 import { OpportunityRegistry } from "../registries/opportunity.js";
-import { ApprovalRegistry } from "../registries/approval.js";
+import {
+  ApprovalRegistry,
+  approvalRequiresDecisionNote,
+  approvalRiskLevel,
+} from "../registries/approval.js";
 import { ArtifactStore } from "../artifacts/store.js";
 import { AuditLog } from "../audit/log.js";
 import { PolicyEngine } from "../policy/engine.js";
@@ -1306,16 +1310,35 @@ const ROUTES: Record<string, RouteHandler> = {
   "POST /approvals/resolve": async ({ res, options, req }) => {
     const body = (await readJson(req)) as {
       id?: string;
-      status?: "approved" | "rejected";
+      status?: string;
       reason?: string;
     };
     if (!body.id || !body.status) {
-      res.statusCode = 400;
       ok(res, { error: "id and status required" }, 400);
       return;
     }
+    if (body.status !== "approved" && body.status !== "rejected") {
+      ok(res, { error: "status must be approved or rejected" }, 400);
+      return;
+    }
     const d = deps(options);
-    const updated = await d.approvals.resolve(body.id, body.status, "owner", body.reason ?? "");
+    const pending = await d.approvals.getPending(body.id);
+    if (!pending) {
+      ok(res, { error: "approval is no longer pending" }, 409);
+      return;
+    }
+    const reason = (body.reason ?? "").trim();
+    if (approvalRequiresDecisionNote(pending) && !reason) {
+      ok(
+        res,
+        {
+          error: `decision note required for ${approvalRiskLevel(pending)}-risk approvals`,
+        },
+        400,
+      );
+      return;
+    }
+    const updated = await d.approvals.resolve(body.id, body.status, "owner", reason);
     await d.audit.append({
       actor: "owner",
       action: `approval.${body.status}`,

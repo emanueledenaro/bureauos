@@ -9,7 +9,11 @@ import { appendDailyNote } from "../memory/daily.js";
 import { appendDecision } from "../memory/decisions.js";
 import { workspacePaths } from "../paths.js";
 import { PolicyEngine } from "../policy/engine.js";
-import { ApprovalRegistry, type ApprovalRecord } from "../registries/approval.js";
+import {
+  ApprovalRegistry,
+  type ApprovalRecord,
+  type ApprovalRiskLevel,
+} from "../registries/approval.js";
 import { ClientRegistry, type ClientRecord } from "../registries/client.js";
 import { OpportunityRegistry, type OpportunityRecord } from "../registries/opportunity.js";
 import { ProjectRegistry, type ProjectRecord } from "../registries/project.js";
@@ -115,6 +119,30 @@ function cleanBusinessName(input: string): string {
   }
 
   return cleaned.replace(/[,.!?;:]+$/g, "").trim();
+}
+
+function normalizeLookupText(input: string): string {
+  return input
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+async function findExistingClientMention(
+  registry: ClientRegistry,
+  message: string,
+): Promise<ClientRecord | undefined> {
+  const normalizedMessage = ` ${normalizeLookupText(message)} `;
+  if (!normalizedMessage.trim()) return undefined;
+  const clients = await registry.list();
+  return clients
+    .map((client) => ({ client, normalizedName: normalizeLookupText(client.name) }))
+    .filter(({ normalizedName }) => normalizedName.length >= 3)
+    .filter(({ normalizedName }) => normalizedMessage.includes(` ${normalizedName} `))
+    .sort((a, b) => b.normalizedName.length - a.normalizedName.length)[0]?.client;
 }
 
 function sanitizeAttachmentName(input: string): string {
@@ -588,25 +616,34 @@ function approvalRequests(args: {
   classification: IntakeClassification;
   project: ProjectRecord;
   opportunity: OpportunityRecord;
-}): Array<{ action: string; target: string; scope: string; body: string }> {
+}): Array<{
+  action: string;
+  target: string;
+  scope: string;
+  riskLevel: ApprovalRiskLevel;
+  body: string;
+}> {
   const { classification, project, opportunity } = args;
   return [
     {
       action: "send_final_proposals",
       target: opportunity.id,
       scope: `Send final proposal for ${opportunity.title}`,
+      riskLevel: "high",
       body: "The coordinator can draft the proposal, but final send requires owner approval.",
     },
     {
       action: "accept_projects",
       target: project.id,
       scope: `Accept client scope for ${project.name}`,
+      riskLevel: classification.risk_level === "high" ? "high" : "medium",
       body: "Project acceptance commits delivery capacity and must be approved by the owner.",
     },
     {
       action: "publish_public_content",
       target: project.id,
       scope: `Publish public content about ${project.name}`,
+      riskLevel: "high",
       body: "Publishing public proof requires client permission and owner approval.",
     },
     ...(classification.requested_growth
@@ -615,6 +652,7 @@ function approvalRequests(args: {
             action: "launch_ad_campaigns",
             target: project.id,
             scope: `Launch ads for ${project.name}`,
+            riskLevel: "high" as const,
             body: "Paid advertising requires owner approval for campaign, claims, and budget.",
           },
         ]
@@ -659,7 +697,14 @@ export class CoordinatorIntakeService {
     if (!message) throw new Error("coordinator intake requires a message");
     const attachments = input.attachments ?? [];
 
-    const classification = classify({ ...input, message });
+    const existingClient = await findExistingClientMention(this.clients, message);
+    const classification = classify({
+      ...input,
+      message,
+      ...(existingClient ? { clientName: existingClient.name } : {}),
+    });
+    const clientBeforeIntake =
+      existingClient ?? (await this.clients.get(slugify(classification.client_name)));
     const client = await getOrCreateClient(this.clients, { ...input, message }, classification);
     const project = await getOrCreateProject(
       this.projects,
@@ -728,6 +773,8 @@ export class CoordinatorIntakeService {
           actor: "supreme_coordinator",
           target: request.target,
           scope: request.scope,
+          runId: run.id,
+          riskLevel: request.riskLevel,
           oneOff: true,
           body: request.body,
         }),
@@ -768,11 +815,11 @@ export class CoordinatorIntakeService {
     await appendDailyNote(
       this.workspaceRoot,
       "Events",
-      `Coordinator intake created ${client.name}, ${project.name}, and ${opportunity.title}.`,
+      `Coordinator intake opened ${project.name} for ${client.name} and ${opportunity.title}.`,
     );
     await appendDecision(this.workspaceRoot, {
       actor: "supreme_coordinator",
-      what: `Created project team for ${project.name}`,
+      what: `Opened project team for ${project.name}`,
       why: "Owner intake described a client opportunity that should move into structured delivery.",
       runId: run.id,
       affects: [client.id, project.id, opportunity.id],
@@ -786,7 +833,7 @@ export class CoordinatorIntakeService {
     });
 
     return {
-      summary: `Created client ${client.name}, project ${project.name}, opportunity ${opportunity.title}, ${artifacts.length} artifacts, and ${approvals.length} approval gates.`,
+      summary: `${clientBeforeIntake ? "Prepared intake for existing client" : "Created client"} ${client.name}, project ${project.name}, opportunity ${opportunity.title}, ${artifacts.length} artifacts, and ${approvals.length} approval gates.`,
       next_actions: [
         "Review pending approvals before any external commitment.",
         "Use generated proposal and pricing briefs as draft-only assets.",

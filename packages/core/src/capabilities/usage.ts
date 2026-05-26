@@ -8,7 +8,11 @@ import { AuditLog } from "../audit/log.js";
 import type { BureauConfig } from "../config/schema.js";
 import { workspacePaths } from "../paths.js";
 import { PolicyEngine, type PolicyDecision } from "../policy/engine.js";
-import { ApprovalRegistry, type ApprovalRecord } from "../registries/approval.js";
+import {
+  ApprovalRegistry,
+  type ApprovalRecord,
+  type ApprovalRiskLevel,
+} from "../registries/approval.js";
 
 export interface CapabilityUseInput {
   agent: string;
@@ -250,6 +254,7 @@ export class CapabilityUseService {
             actor: input.agent,
             target,
             scope: `${input.capabilityId}.${input.action}`,
+            riskLevel: capability.risk_class,
             reason: blockedReason,
           })
         : undefined;
@@ -332,6 +337,7 @@ export class CapabilityUseService {
     actor: string;
     target: string;
     scope: string;
+    riskLevel: ApprovalRiskLevel;
     reason: string;
   }): Promise<ApprovalRecord> {
     const pending = await this.approvals.listPending();
@@ -344,6 +350,7 @@ export class CapabilityUseService {
       actor: input.actor,
       target: input.target,
       scope: input.scope,
+      riskLevel: input.riskLevel,
       body: `# Approval: capability use
 
 Capability scope: ${input.scope}

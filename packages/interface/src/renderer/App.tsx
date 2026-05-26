@@ -73,9 +73,16 @@ export function App() {
     setMode(nextMode);
   };
 
-  const onResolve = async (id: string, status: "approved" | "rejected"): Promise<void> => {
-    await Api.resolveApproval(id, status);
-    await refresh();
+  const onResolve = async (
+    id: string,
+    status: "approved" | "rejected",
+    reason?: string,
+  ): Promise<void> => {
+    try {
+      await Api.resolveApproval(id, status, reason);
+    } finally {
+      await refresh();
+    }
   };
 
   const onCoordinatorMessage = async (
@@ -248,7 +255,7 @@ function DashboardLayout({
   mode: AdaptiveMode;
   state: DashboardState;
   onModeChange: (mode: AdaptiveMode) => void;
-  onResolve: (id: string, status: "approved" | "rejected") => Promise<void>;
+  onResolve: (id: string, status: "approved" | "rejected", reason?: string) => Promise<void>;
   onCoordinatorMessage: (
     message: string,
     attachments?: CoordinatorAttachmentInput[],
@@ -311,7 +318,13 @@ function DashboardLayout({
   return (
     <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 p-3 sm:p-4 lg:p-5">
       {mainView}
-      <TimelineView events={state.audit} artifacts={state.artifacts} runs={state.runs} />
+      <TimelineView
+        events={state.audit}
+        artifacts={state.artifacts}
+        runs={state.runs}
+        approvals={state.approvals}
+        resolvedApprovals={state.resolvedApprovals}
+      />
       <RevenuePulseView
         pulse={state.pulse}
         clients={state.clients}
@@ -340,7 +353,7 @@ function renderMainView({
   mode: AdaptiveMode;
   state: DashboardState;
   onModeChange: (mode: AdaptiveMode) => void;
-  onResolve: (id: string, status: "approved" | "rejected") => Promise<void>;
+  onResolve: (id: string, status: "approved" | "rejected", reason?: string) => Promise<void>;
   onProviderLogin: (input: {
     provider: string;
     mode?: "oauth" | "api-key" | "local";

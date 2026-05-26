@@ -21,7 +21,8 @@ import { StatusPill } from "../components/dashboard/StatusPill";
 import { cn } from "../lib/utils";
 import { formatLabel, timeAgo } from "../lib/format";
 import { runTone, type Tone } from "../lib/tone";
-import type { ArtifactRecord, AuditEvent, RunRecord } from "../lib/api";
+import { approvalMatchesRun, approvalRiskLevel, approvalRiskTone } from "../lib/approvals";
+import type { ApprovalRecord, ArtifactRecord, AuditEvent, RunRecord } from "../lib/api";
 
 export type TimelineEventIcon =
   | "activity"
@@ -158,10 +159,14 @@ export function TimelineView({
   events,
   artifacts,
   runs,
+  approvals = [],
+  resolvedApprovals = [],
 }: {
   events: AuditEvent[];
   artifacts: ArtifactRecord[];
   runs: RunRecord[];
+  approvals?: ApprovalRecord[];
+  resolvedApprovals?: ApprovalRecord[];
 }) {
   const sortedRuns = useMemo(
     () => [...runs].sort((a, b) => (b.created ?? "").localeCompare(a.created ?? "")),
@@ -190,6 +195,11 @@ export function TimelineView({
             artifact.run_id === selectedRun.id || selectedRun.artifacts?.includes(artifact.id),
         )
         .sort((a, b) => (a.created ?? "").localeCompare(b.created ?? ""))
+    : [];
+  const selectedRunApprovals = selectedRun
+    ? [...approvals, ...resolvedApprovals]
+        .filter((approval) => approvalMatchesRun(approval, selectedRun))
+        .sort((a, b) => (b.updated ?? b.created ?? "").localeCompare(a.updated ?? a.created ?? ""))
     : [];
   const selectedRunRisk = selectedRun ? runRiskLevel(selectedRun) : "low";
   const selectedRunBlocker = selectedRun ? runBlockingReason(selectedRun) : undefined;
@@ -308,6 +318,55 @@ export function TimelineView({
                   <div className="mt-1 text-[11px] text-foreground">{selectedRunBlocker}</div>
                   <div className="mt-1 text-[11px] text-muted-foreground">
                     Next: {runNextAction(selectedRun)}
+                  </div>
+                </div>
+              ) : null}
+
+              {selectedRunApprovals.length > 0 ? (
+                <div className="mt-4 rounded-md border border-border/60 bg-surface-subtle/30">
+                  <div className="flex items-center justify-between gap-2 border-b border-border/60 px-3 py-2">
+                    <div className="text-[11px] font-semibold uppercase text-muted-foreground">
+                      Approval gates
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">
+                      {selectedRunApprovals.length} decision
+                      {selectedRunApprovals.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  <div className="divide-y divide-border/60">
+                    {selectedRunApprovals.map((approval) => {
+                      const risk = approvalRiskLevel(approval);
+                      return (
+                        <div
+                          key={approval.id}
+                          className="grid grid-cols-[minmax(0,1fr)_92px_92px] gap-2 px-3 py-2 text-[11px]"
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate font-medium text-foreground">
+                              {formatLabel(approval.action)}
+                            </span>
+                            <span className="block truncate text-muted-foreground">
+                              {approval.reason || approval.scope}
+                            </span>
+                          </span>
+                          <span className="flex justify-end">
+                            <StatusPill
+                              value={formatLabel(approval.status)}
+                              tone={
+                                approval.status === "pending"
+                                  ? "warning"
+                                  : approval.status === "approved"
+                                    ? "success"
+                                    : "danger"
+                              }
+                            />
+                          </span>
+                          <span className="flex justify-end">
+                            <StatusPill value={risk} tone={approvalRiskTone(risk)} />
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               ) : null}

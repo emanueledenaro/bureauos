@@ -1,4 +1,4 @@
-import { Check, ChevronRight, ShieldCheck, X } from "lucide-react";
+import { ChevronRight, ShieldCheck } from "lucide-react";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -8,11 +8,9 @@ import type { ApprovalRecord } from "../lib/api";
 
 export function PendingApprovalsView({
   approvals,
-  onResolve,
   onOpen,
 }: {
   approvals: ApprovalRecord[];
-  onResolve: (id: string, status: "approved" | "rejected") => Promise<void>;
   onOpen: () => void;
 }) {
   const visible = approvals.slice(0, 3);
@@ -55,23 +53,9 @@ export function PendingApprovalsView({
                   </span>
                 </div>
                 <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="success"
-                    className="flex-1"
-                    onClick={() => void onResolve(approval.id, "approved")}
-                  >
-                    <Check className="h-3 w-3" />
-                    Approve
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => void onResolve(approval.id, "rejected")}
-                  >
-                    <X className="h-3 w-3" />
-                    Reject
+                  <Button size="sm" variant="outline" className="flex-1" onClick={onOpen}>
+                    Review
+                    <ChevronRight className="h-3 w-3" />
                   </Button>
                 </div>
               </div>
