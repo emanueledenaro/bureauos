@@ -136,10 +136,10 @@ export const COORDINATOR_MUTATION_PATH_INVENTORY: readonly CoordinatorMutationPa
     {
       id: "api.post_coordinator_intake",
       entrypoint: "POST /coordinator/intake",
-      classification: "legacy",
+      classification: "agentic_tool_path",
       tool: "create_intake",
       rationale:
-        "Compatibility endpoint still calls CoordinatorIntakeService directly and should move behind the chat tool runtime.",
+        "Compatibility endpoint builds an explicit create_intake tool execution and runs it through the shared Coordinator tool runtime.",
     },
     {
       id: "cli.bureau_intake",

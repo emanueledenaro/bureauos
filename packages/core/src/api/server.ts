@@ -15,12 +15,10 @@ import { AuditLog } from "../audit/log.js";
 import { PolicyEngine } from "../policy/engine.js";
 import { RunEngine } from "../runs/engine.js";
 import { AGENT_ROLES } from "../agents/roles.js";
-import {
-  CoordinatorIntakeService,
-  type CoordinatorAttachmentInput,
-} from "../coordinator/intake.js";
+import type { CoordinatorAttachmentInput } from "../coordinator/intake.js";
 import { CoordinatorChatService } from "../coordinator/chat.js";
 import { CoordinatorMessageStore } from "../coordinator/messages.js";
+import { CoordinatorToolRuntime } from "../coordinator/tool-runtime.js";
 import { CoordinatorGlobalMemoryService } from "../memory/global.js";
 import { ProjectDispatchService } from "../dispatch/project-dispatch.js";
 import { GitHubIssueDraftService } from "../github/issue-drafts.js";
@@ -1162,10 +1160,10 @@ const ROUTES: Record<string, RouteHandler> = {
       return;
     }
     const attachments = parseAttachments(body.attachments);
-    const service = new CoordinatorIntakeService(options.workspaceRoot, {
+    const runtime = new CoordinatorToolRuntime(options.workspaceRoot, {
       config: options.config,
     });
-    const result = await service.process({
+    const execution = await runtime.executeCreateIntake({
       message: body.message,
       source: body.source ?? "electron",
       ...(body.clientName ? { clientName: body.clientName } : {}),
@@ -1174,17 +1172,28 @@ const ROUTES: Record<string, RouteHandler> = {
       ...(typeof body.expectedValue === "number" ? { expectedValue: body.expectedValue } : {}),
       ...(typeof body.expectedMargin === "number" ? { expectedMargin: body.expectedMargin } : {}),
       attachments,
+      toolSource: "api_endpoint",
     });
+    const result = execution.result;
     await new CoordinatorMessageStore(options.workspaceRoot).appendMany([
       {
         role: "owner",
         text: body.message,
         attachments: attachmentMetadata(attachments),
+        meta: { mode: "intake" },
       },
       {
         role: "coordinator",
         text: result.summary,
         result,
+        meta: {
+          mode: "intake",
+          provider: {
+            status: "unavailable",
+            reason: "api_explicit_create_intake_tool",
+          },
+          tool: execution.tool,
+        },
       },
     ]);
     ok(res, result, 201);

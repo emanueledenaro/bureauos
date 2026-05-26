@@ -171,6 +171,14 @@ export type {
   CoordinatorToolPlan,
   CoordinatorToolRouteClass,
 } from "./coordinator/tool-planning.js";
+export { CoordinatorToolRuntime, coordinatorToolMeta } from "./coordinator/tool-runtime.js";
+export type {
+  CoordinatorCreateIntakeToolExecution,
+  CoordinatorCreateIntakeToolInput,
+  CoordinatorToolExecutionSource,
+  CoordinatorToolMeta,
+  CoordinatorToolRuntimeDeps,
+} from "./coordinator/tool-runtime.js";
 export { CoordinatorMessageStore } from "./coordinator/messages.js";
 export type {
   CoordinatorMessageAttachment,

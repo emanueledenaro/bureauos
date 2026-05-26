@@ -24,6 +24,7 @@ import {
 } from "./messages.js";
 import { coordinatorIdentityAnswer, coordinatorIdleAnswer } from "./idle.js";
 import { sanitizeCoordinatorVisibleText } from "./sanitize.js";
+import { CoordinatorToolRuntime } from "./tool-runtime.js";
 import {
   coordinatorToolPromptCatalog,
   implementedCoordinatorToolNames,
@@ -69,6 +70,7 @@ export interface CoordinatorChatDeps {
   clients?: ClientRegistry;
   memory?: CoordinatorGlobalMemoryService;
   audit?: AuditLog;
+  tools?: CoordinatorToolRuntime;
   env?: NodeJS.ProcessEnv;
   providerSelector?: CoordinatorProviderSelector;
   providerTimeoutMs?: number;
@@ -600,6 +602,7 @@ export class CoordinatorChatService {
   private readonly clients: ClientRegistry;
   private readonly memory: CoordinatorGlobalMemoryService;
   private readonly audit: AuditLog;
+  private readonly tools: CoordinatorToolRuntime;
   private readonly env: NodeJS.ProcessEnv;
   private readonly providerSelector: CoordinatorProviderSelector;
   private readonly providerTimeoutMs: number;
@@ -617,6 +620,13 @@ export class CoordinatorChatService {
     this.clients = deps.clients ?? new ClientRegistry(workspaceRoot);
     this.memory = deps.memory ?? new CoordinatorGlobalMemoryService(workspaceRoot);
     this.audit = deps.audit ?? new AuditLog(workspacePaths(workspaceRoot).auditLog);
+    this.tools =
+      deps.tools ??
+      new CoordinatorToolRuntime(workspaceRoot, {
+        config: this.config,
+        audit: this.audit,
+        intake: this.intake,
+      });
     this.env = deps.env ?? process.env;
     this.providerSelector = deps.providerSelector ?? selectCoordinatorProvider;
     this.providerTimeoutMs = deps.providerTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
@@ -693,23 +703,11 @@ export class CoordinatorChatService {
     tool: CoordinatorImplementedToolAction;
     target?: string;
   }): Promise<void> {
-    await this.audit.append({
-      actor: "supreme_coordinator",
-      action: "coordinator.tool.executed",
-      capability: `coordinator_tool.${input.tool}`,
-      ...(input.target ? { target: input.target } : {}),
-      result: "ok",
-    });
+    await this.tools.recordToolExecution(input);
   }
 
   private async recordRejectedToolPlan(reason: string): Promise<void> {
-    await this.audit.append({
-      actor: "supreme_coordinator",
-      action: "coordinator.tool.rejected",
-      capability: "coordinator_tool.invalid_plan",
-      target: reason,
-      result: "ok",
-    });
+    await this.tools.recordRejectedToolPlan(reason);
   }
 
   async *stream(input: CoordinatorChatInput): AsyncGenerator<CoordinatorChatStreamEvent> {
@@ -1081,14 +1079,14 @@ export class CoordinatorChatService {
     if (hasIntakeIntent(message, attachments)) {
       const provider =
         plannedIntakeProvider ?? providerMeta("unavailable", undefined, undefined, "intake_route");
-      const result = await this.intake.process({
+      const execution = await this.tools.executeCreateIntake({
         message,
         source: input.source ?? "coordinator_chat",
-        ...(plannedIntakePlan?.clientName ? { clientName: plannedIntakePlan.clientName } : {}),
-        ...(plannedIntakePlan?.industry ? { industry: plannedIntakePlan.industry } : {}),
+        plan: plannedIntakePlan,
+        toolSource: plannedIntakeProvider ? "provider_plan" : "safety_fallback",
         attachments,
       });
-      await this.recordToolExecution({ tool: "create_intake", target: result.run.id });
+      const result = execution.result;
       const { ownerMessage, coordinatorMessage } = requireMessagePair(
         await this.messages.appendMany([
           {
@@ -1105,13 +1103,7 @@ export class CoordinatorChatService {
               mode: "intake",
               memory,
               provider,
-              tool: {
-                name: "create_intake",
-                source: plannedIntakeProvider ? "provider_plan" : "safety_fallback",
-                ...(plannedIntakePlan?.confidence !== undefined
-                  ? { confidence: plannedIntakePlan.confidence }
-                  : {}),
-              },
+              tool: execution.tool,
             },
           },
         ]),

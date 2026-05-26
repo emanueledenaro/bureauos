@@ -166,6 +166,7 @@ describe("API server", () => {
 
     const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(audit).toContain("coordinator.intake.completed");
+    expect(audit).toContain("coordinator_tool.create_intake");
   });
 
   it("moves resolved approvals into history for the ElectronJS approvals page", async () => {
@@ -790,6 +791,7 @@ describe("API server", () => {
       text: string;
       attachments?: Array<{ name: string; type: string; size: number }>;
       result?: { project: { slug: string } };
+      meta?: Record<string, unknown>;
     }>;
     expect(messages).toHaveLength(2);
     expect(messages[0]).toMatchObject({
@@ -800,10 +802,22 @@ describe("API server", () => {
     expect(messages[1]).toMatchObject({
       role: "coordinator",
       result: { project: { slug: "pizzeria-aurora-booking-website" } },
+      meta: {
+        mode: "intake",
+        provider: {
+          status: "unavailable",
+          reason: "api_explicit_create_intake_tool",
+        },
+        tool: {
+          name: "create_intake",
+          source: "api_endpoint",
+        },
+      },
     });
 
     const rawHistory = await readFile(workspacePaths(dir).coordinatorMessages, "utf8");
     expect(rawHistory).toContain("pizzeria-aurora-booking-website");
+    expect(rawHistory).toContain("api_endpoint");
   });
 
   it("answers client registry coordinator chat messages without creating an intake", async () => {

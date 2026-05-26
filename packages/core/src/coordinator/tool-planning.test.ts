@@ -26,7 +26,7 @@ describe("coordinator tool planning contract", () => {
         }),
         expect.objectContaining({
           id: "api.post_coordinator_intake",
-          classification: "legacy",
+          classification: "agentic_tool_path",
           tool: "create_intake",
         }),
         expect.objectContaining({
