@@ -3,7 +3,7 @@ import { newId, slugify } from "../ids.js";
 import { workspacePaths } from "../paths.js";
 import { ensureDir, fileExists, listDirs, readDoc, writeDoc, type FrontMatter } from "./base.js";
 
-export type ClientStatus = "lead" | "active" | "paused" | "churned";
+export type ClientStatus = "lead" | "active" | "paused" | "churned" | "archived";
 
 export interface ClientRecord extends FrontMatter {
   id: string;
@@ -23,6 +23,10 @@ export interface CreateClientInput {
   status?: ClientStatus;
   industry?: string;
   notes?: string;
+}
+
+export interface ListClientsOptions {
+  includeArchived?: boolean;
 }
 
 const CLIENT_FILES = [
@@ -92,13 +96,14 @@ export class ClientRegistry {
     return doc.front;
   }
 
-  async list(): Promise<ClientRecord[]> {
+  async list(options: ListClientsOptions = {}): Promise<ClientRecord[]> {
     const dirs = await listDirs(this.paths().clientsDir);
     const out: ClientRecord[] = [];
     for (const d of dirs) {
       const path = join(d, "CLIENT.md");
       if (!(await fileExists(path))) continue;
       const doc = await readDoc<ClientRecord>(path);
+      if (!options.includeArchived && doc.front.status === "archived") continue;
       out.push(doc.front);
     }
     return out;
