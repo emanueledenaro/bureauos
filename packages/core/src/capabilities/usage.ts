@@ -19,6 +19,7 @@ export interface CapabilityUseInput {
   linkedIssueNumbers?: readonly number[];
   testEvidence?: readonly string[];
   approvalIds?: readonly string[];
+  changedFiles?: readonly string[];
 }
 
 export interface CapabilityUseResult {
@@ -104,12 +105,35 @@ function missingEvidenceGates(args: {
   policy: PolicyDecision;
   linkedIssues: readonly number[];
   tests: readonly string[];
+  changedFiles?: readonly string[];
+  changedFileLimit: number;
 }): string[] {
   const gates = new Set<string>(args.policy.required_gates);
   const missing: string[] = [];
   if (gates.has("tests_required") && args.tests.length === 0) missing.push("tests_required");
   if (gates.has("linked_issue") && args.linkedIssues.length === 0) missing.push("linked_issue");
+  if (args.changedFiles !== undefined && args.changedFiles.length > args.changedFileLimit) {
+    missing.push("changed_file_limit");
+  }
   return missing;
+}
+
+function blockedReasonFor(args: {
+  capability: CapabilityUseDecision;
+  policy: PolicyDecision;
+  missingGates: readonly string[];
+  changedFileCount: number;
+  changedFileLimit: number;
+}): string {
+  if (!args.capability.allowed) return args.capability.reason;
+  if (!args.policy.allowed) return args.policy.reason;
+  if (args.missingGates.includes("changed_file_limit")) {
+    return `changed file count ${args.changedFileCount} exceeds limit ${args.changedFileLimit}`;
+  }
+  if (args.missingGates.length) {
+    return `missing required capability gate(s): ${args.missingGates.join(", ")}`;
+  }
+  return "";
 }
 
 function auditBody(args: {
@@ -119,11 +143,14 @@ function auditBody(args: {
   policy: PolicyDecision;
   status: "allowed" | "blocked";
   missingGates: readonly string[];
+  changedFileCount: number;
+  changedFileLimit: number;
   approval?: ApprovalRecord;
 }): string {
   const linkedIssues = args.input.linkedIssueNumbers ?? [];
   const testEvidence = args.input.testEvidence ?? [];
   const approvalIds = args.input.approvalIds ?? [];
+  const changedFiles = args.input.changedFiles;
   return `# Capability Use Audit
 
 ## Request
@@ -156,6 +183,8 @@ function auditBody(args: {
 - Linked issues: ${linkedIssues.length ? linkedIssues.map((issue) => `#${issue}`).join(", ") : "(none)"}
 - Test evidence: ${testEvidence.length ? testEvidence.join("; ") : "(none)"}
 - Approval evidence: ${approvalIds.length ? approvalIds.join(", ") : "(none)"}
+- Changed files: ${changedFiles ? `${args.changedFileCount} / ${args.changedFileLimit}` : "(not reported)"}
+- Changed file list: ${changedFiles?.length ? changedFiles.join(", ") : "(none)"}
 - Missing gates: ${args.missingGates.length ? args.missingGates.join(", ") : "(none)"}
 
 ## Execution Boundary
@@ -170,11 +199,13 @@ export class CapabilityUseService {
   private readonly approvals: ApprovalRegistry;
   private readonly policy: PolicyEngine;
   private readonly audit: AuditLog;
+  private readonly config: BureauConfig;
 
   constructor(
     private readonly workspaceRoot: string,
     deps: CapabilityUseDeps,
   ) {
+    this.config = deps.config;
     this.registry = deps.registry ?? CapabilityRegistry.fromConfig(capabilityConfig(deps.config));
     this.artifacts = deps.artifacts ?? new ArtifactStore(workspaceRoot);
     this.approvals = deps.approvals ?? new ApprovalRegistry(workspaceRoot);
@@ -186,6 +217,9 @@ export class CapabilityUseService {
     const target = input.target?.trim() || `${input.capabilityId}.${input.action}`;
     const linkedIssues = input.linkedIssueNumbers ?? [];
     const tests = input.testEvidence ?? [];
+    const changedFiles = input.changedFiles;
+    const changedFileLimit = this.config.limits.max_files_changed_without_human_review;
+    const changedFileCount = changedFiles?.length ?? 0;
     const capability = this.registry.check({
       capability_id: input.capabilityId,
       agent: input.agent,
@@ -200,15 +234,15 @@ export class CapabilityUseService {
       riskClass: capability.risk_class,
     });
     const missingGates = capability.allowed
-      ? missingEvidenceGates({ policy, linkedIssues, tests })
+      ? missingEvidenceGates({ policy, linkedIssues, tests, changedFiles, changedFileLimit })
       : [];
-    const blockedReason = !capability.allowed
-      ? capability.reason
-      : !policy.allowed
-        ? policy.reason
-        : missingGates.length
-          ? `missing required capability gate(s): ${missingGates.join(", ")}`
-          : "";
+    const blockedReason = blockedReasonFor({
+      capability,
+      policy,
+      missingGates,
+      changedFileCount,
+      changedFileLimit,
+    });
     const approval =
       blockedReason && (policy.outcome === "require_approval" || missingGates.length > 0)
         ? await this.findOrRequestApproval({
@@ -237,9 +271,24 @@ export class CapabilityUseService {
         missing_gates: missingGates,
         linked_issues: linkedIssues.map(String),
         test_evidence: [...tests],
+        changed_file_count: changedFileCount,
+        changed_file_limit: changedFileLimit,
+        changed_file_limit_exceeded:
+          changedFiles !== undefined && changedFileCount > changedFileLimit,
+        changed_files: changedFiles ? [...changedFiles] : [],
         approval_id: approval?.id ?? policy.approval_id ?? "",
       },
-      body: auditBody({ input, target, capability, policy, status, missingGates, approval }),
+      body: auditBody({
+        input,
+        target,
+        capability,
+        policy,
+        status,
+        missingGates,
+        changedFileCount,
+        changedFileLimit,
+        approval,
+      }),
     });
 
     await this.audit.append({

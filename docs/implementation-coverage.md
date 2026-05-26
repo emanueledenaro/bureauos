@@ -81,7 +81,7 @@ Every major capability described in the docs must become one of:
 | Growth agents | template agents with provider-backed drafting and deterministic local template when selected route is unavailable | partial |
 | Compliance agent | concrete compliance agent with provider-backed drafting and deterministic local template when selected route is unavailable | partial |
 | Agent provider routing | `ProviderRouter`, `configureAgentProviderRouting`, dispatcher model capability, per-model capability metadata, budget-tier filtering, and no API fallback from `openai-codex` OAuth | implemented |
-| Codex runtime capability | capability registry boundary, `CapabilityUseService`, `capabilities check`, `/capabilities/check`, gate/audit artifacts before runtime execution | partial |
+| Codex runtime capability | capability registry boundary, `CapabilityUseService`, `capabilities check`, `/capabilities/check`, gate/audit artifacts before runtime execution, changed-file limit evidence for runtime-reported diffs | partial |
 | MCP capability bus | `CapabilityRegistry`, config parsing, `/capabilities`, `/capabilities/check`, `bureau capabilities list/check`, Electron Agents capability matrix, `capability-audit` artifacts | partial |
 
 ## Growth and Revenue

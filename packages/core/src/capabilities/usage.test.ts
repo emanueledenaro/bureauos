@@ -137,6 +137,59 @@ describe("CapabilityUseService", () => {
     expect(allowed.missing_gates).toEqual([]);
   });
 
+  it("records changed-file counts in capability audit artifacts", async () => {
+    const result = await new CapabilityUseService(dir, {
+      config: defaultConfig("agency"),
+    }).check({
+      agent: "development",
+      capabilityId: "codex",
+      action: "edit_code",
+      target: "github.com/acme/web",
+      linkedIssueNumbers: [42],
+      testEvidence: ["pnpm test passed"],
+      changedFiles: ["packages/core/src/a.ts", "packages/core/src/b.ts"],
+    });
+
+    expect(result.status).toBe("allowed");
+    expect(result.missing_gates).toEqual([]);
+
+    const written = await new ArtifactStore(dir).read(result.artifact.id);
+    expect(written?.record.changed_file_count).toBe(2);
+    expect(written?.record.changed_file_limit).toBe(8);
+    expect(written?.record.changed_file_limit_exceeded).toBe(false);
+    expect(written?.body).toContain("Changed files: 2 / 8");
+    expect(written?.body).toContain("packages/core/src/a.ts");
+  });
+
+  it("blocks Codex code edits when changed files exceed the configured limit", async () => {
+    const config = defaultConfig("agency");
+    config.limits.max_files_changed_without_human_review = 2;
+
+    const result = await new CapabilityUseService(dir, { config }).check({
+      agent: "development",
+      capabilityId: "codex",
+      action: "edit_code",
+      target: "github.com/acme/web",
+      linkedIssueNumbers: [42],
+      testEvidence: ["pnpm test passed"],
+      changedFiles: ["packages/core/src/a.ts", "packages/core/src/b.ts", "packages/core/src/c.ts"],
+    });
+
+    expect(result.status).toBe("blocked");
+    expect(result.missing_gates).toEqual(["changed_file_limit"]);
+    expect(result.policy.reason).toBe("changed file count 3 exceeds limit 2");
+    expect(result.approval?.action).toBe("push_commits");
+
+    const written = await new ArtifactStore(dir).read(result.artifact.id);
+    expect(written?.record.changed_file_count).toBe(3);
+    expect(written?.record.changed_file_limit).toBe(2);
+    expect(written?.record.changed_file_limit_exceeded).toBe(true);
+    expect(written?.body).toContain("Missing gates: changed_file_limit");
+
+    const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(audit).toContain("capability.use.blocked");
+  });
+
   it("requests policy approval when the mapped policy action is disabled", async () => {
     const config = defaultConfig("agency");
     config.autonomy.open_pull_requests = false;
