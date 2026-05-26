@@ -42,20 +42,20 @@ export function PortfolioView({ state }: { state: DashboardState }) {
 
       <Tabs defaultValue="map">
         <div className="border-b border-border/60 px-5">
-          <TabsList className="border-b-0">
-            <TabsTrigger value="map">
+          <TabsList className="h-auto max-w-full flex-wrap items-start border-b-0 py-1 sm:h-9 sm:flex-nowrap sm:items-center sm:py-0">
+            <TabsTrigger value="map" className="h-8 px-2.5 sm:h-9 sm:px-3">
               <LayoutGrid className="mr-1.5 h-3 w-3" />
               Portfolio Map
             </TabsTrigger>
-            <TabsTrigger value="workload">
+            <TabsTrigger value="workload" className="h-8 px-2.5 sm:h-9 sm:px-3">
               <ListChecks className="mr-1.5 h-3 w-3" />
               Workload
             </TabsTrigger>
-            <TabsTrigger value="gantt">
+            <TabsTrigger value="gantt" className="h-8 px-2.5 sm:h-9 sm:px-3">
               <Workflow className="mr-1.5 h-3 w-3" />
               Gantt
             </TabsTrigger>
-            <TabsTrigger value="kanban">
+            <TabsTrigger value="kanban" className="h-8 px-2.5 sm:h-9 sm:px-3">
               <KanbanSquare className="mr-1.5 h-3 w-3" />
               Kanban
             </TabsTrigger>

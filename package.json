@@ -18,6 +18,7 @@
     "lint": "eslint .",
     "format": "prettier --check .",
     "format:write": "prettier --write .",
+    "e2e:interface": "pnpm --filter @bureauos/core build && playwright test",
     "private-context:check": "bash scripts/check-private-context.sh",
     "qa:coordinator": "pnpm --filter @bureauos/core build && node scripts/qa-coordinator-prompt-matrix.mjs",
     "security:scan": "pnpm audit --audit-level high",
@@ -25,6 +26,7 @@
     "clean": "pnpm -r exec rm -rf dist node_modules .turbo"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@types/node": "^20.12.0",
     "eslint": "^9.13.0",
     "eslint-config-prettier": "^9.1.0",

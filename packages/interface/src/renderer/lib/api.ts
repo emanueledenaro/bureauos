@@ -9,7 +9,21 @@ declare global {
 
 let cachedBase: string | undefined;
 
+function browserConfiguredBase(): string | undefined {
+  if (typeof window === "undefined") return import.meta.env.VITE_BUREAUOS_API_BASE;
+  const urlBase = new URLSearchParams(window.location.search).get("apiBase")?.trim();
+  if (urlBase) return urlBase.replace(/\/+$/, "");
+  const storedBase = window.localStorage.getItem("bureauos.apiBase")?.trim();
+  if (storedBase) return storedBase.replace(/\/+$/, "");
+  return import.meta.env.VITE_BUREAUOS_API_BASE?.trim().replace(/\/+$/, "");
+}
+
 async function getBase(): Promise<string> {
+  const configuredBase = browserConfiguredBase();
+  if (configuredBase) {
+    cachedBase = configuredBase;
+    return configuredBase;
+  }
   if (cachedBase) return cachedBase;
   if (typeof window !== "undefined" && window.bureau) {
     cachedBase = await window.bureau.apiUrl();
