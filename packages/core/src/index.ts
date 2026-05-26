@@ -300,9 +300,23 @@ export type {
 } from "./capabilities/usage.js";
 
 // Linear work scope ingestion
+export { LinearIssueActionService } from "./linear/issue-actions.js";
 export { LinearIssueIngestionService } from "./linear/issue-ingestion.js";
 export { LinearIssueReaderService } from "./linear/issue-reader.js";
 export { linearIssueToRunScope } from "./linear/work-scope.js";
+export type {
+  LinearIssueActionAdapter,
+  LinearIssueActionBaseInput,
+  LinearIssueActionDeps,
+  LinearIssueActionExternalResult,
+  LinearIssueActionResult,
+  LinearIssueCommentAdapterInput,
+  LinearIssueCommentInput,
+  LinearIssueStateAdapterInput,
+  LinearIssueStateInput,
+  LinearIssueUpdateAdapterInput,
+  LinearIssueUpdateInput,
+} from "./linear/issue-actions.js";
 export type {
   LinearIssueIngestionDeps,
   LinearIssueIngestionInput,

@@ -55,6 +55,7 @@ export type ArtifactType =
   | "github-issue-publish-report"
   | "github-pr-publish-report"
   | "github-signal-report"
+  | "linear-issue-action-report"
   | "operational-signal-report"
   | "client-profile"
   | "owner-attachment";
