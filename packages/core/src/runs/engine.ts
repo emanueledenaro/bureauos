@@ -82,10 +82,30 @@ export interface StartRunInput {
   clientId?: string;
 }
 
+export type RunDispatchTerminalStatus = "completed" | "blocked" | "needs_human" | "failed";
+
+export interface RunDispatchInput {
+  workspaceRoot: string;
+  run: RunRecord;
+  startInput: StartRunInput;
+}
+
+export interface RunDispatchResult {
+  status: RunDispatchTerminalStatus;
+  artifactIds?: readonly string[];
+  decisions?: readonly string[];
+  metadata?: FrontMatter;
+  blockers?: readonly string[];
+  error?: string;
+}
+
+export type RunDispatcher = (input: RunDispatchInput) => Promise<RunDispatchResult>;
+
 export interface RunEngineDeps {
   audit: AuditLog;
   artifacts: ArtifactStore;
   policy: PolicyEngine;
+  dispatcher?: RunDispatcher;
 }
 
 export class RunEngine {
@@ -103,11 +123,11 @@ export class RunEngine {
   }
 
   /**
-   * Start and execute a run with the stub dispatch.
+   * Start and execute a run.
    *
-   * The stub dispatch writes a `run-report` artifact for the run, transitions
-   * the run through the lifecycle states, and records every transition in the
-   * audit log. No model calls are made.
+   * When a dispatcher dependency is supplied, it owns the real execution path.
+   * Without a dispatcher, the engine keeps the safe stub path for local dev and
+   * tests.
    */
   async start(input: StartRunInput): Promise<RunRecord> {
     const id = newId("run");
@@ -168,39 +188,130 @@ export class RunEngine {
       record = await this.transition(record, next);
     }
 
-    // Stub dispatch: write a run-report artifact summarizing the intent.
+    if (this.deps.dispatcher) return this.executeDispatch(record, input);
+    return this.executeStubDispatch(record, input);
+  }
+
+  private async executeStubDispatch(record: RunRecord, input: StartRunInput): Promise<RunRecord> {
     const artifact = await this.deps.artifacts.write({
       type: "run-report",
       createdBy: record.created_by,
-      runId: id,
+      runId: record.id,
       ...(input.projectId !== undefined ? { projectId: input.projectId } : {}),
       ...(input.clientId !== undefined ? { clientId: input.clientId } : {}),
-      body: `# Run Report\n\n- Run: ${id}\n- Type: ${input.type}\n- Trigger: ${input.triggerType} (${input.triggerSource})\n- Scope: ${input.scope}\n\n## Status\n\nStub dispatch completed. No model calls were made. Phase 8 will wire the real development runtime.\n`,
+      body: `# Run Report\n\n- Run: ${record.id}\n- Type: ${input.type}\n- Trigger: ${input.triggerType} (${input.triggerSource})\n- Scope: ${input.scope}\n\n## Status\n\nStub dispatch completed. No model calls were made. Phase 8 wires the real development runtime through an injected dispatcher.\n`,
     });
     record.artifacts = [...record.artifacts, artifact.id];
+    record.decisions = [...record.decisions, "stub_dispatch"];
     await this.persist(
       record,
-      `# Run ${id}\n\nScope: ${input.scope}\n\nArtifacts: ${record.artifacts.join(", ")}\n`,
+      this.runBody(record, {
+        dispatchStatus: "completed",
+        summary: "Stub dispatch completed. No external model or runtime calls were made.",
+      }),
     );
     await this.deps.audit.append({
       actor: record.created_by,
       action: "run.artifact_written",
-      target: id,
+      target: record.id,
       artifact_id: artifact.id,
       result: "ok",
     });
 
+    await this.deps.audit.append({
+      actor: record.created_by,
+      action: "run.dispatch_stub_completed",
+      target: record.id,
+      result: "ok",
+    });
+
+    return this.completeRun(record);
+  }
+
+  private async executeDispatch(record: RunRecord, input: StartRunInput): Promise<RunRecord> {
+    try {
+      const result = await this.deps.dispatcher!({
+        workspaceRoot: this.workspaceRoot,
+        run: record,
+        startInput: input,
+      });
+      return this.applyDispatchResult(record, result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return this.applyDispatchResult(record, {
+        status: "failed",
+        error: message,
+        metadata: { dispatch_error: message },
+      });
+    }
+  }
+
+  private async applyDispatchResult(
+    record: RunRecord,
+    result: RunDispatchResult,
+  ): Promise<RunRecord> {
+    const artifactIds = Array.from(new Set([...record.artifacts, ...(result.artifactIds ?? [])]));
+    const decisions = Array.from(new Set([...record.decisions, ...(result.decisions ?? [])]));
+    record = {
+      ...record,
+      ...(result.metadata ?? {}),
+      artifacts: artifactIds,
+      decisions,
+      dispatch_status: result.status,
+      ...(result.blockers?.length ? { dispatch_blockers: [...result.blockers] } : {}),
+      ...(result.error ? { dispatch_error: result.error } : {}),
+      updated: new Date().toISOString(),
+    };
+
+    await this.persist(
+      record,
+      this.runBody(record, {
+        dispatchStatus: result.status,
+        blockers: result.blockers ?? [],
+        error: result.error,
+      }),
+    );
+
+    await this.deps.audit.append({
+      actor: record.created_by,
+      action: `run.dispatch_${result.status}`,
+      target: record.id,
+      result: result.status === "failed" ? "error" : "ok",
+      ...(result.error ? { error: result.error } : {}),
+    });
+
+    if (result.status !== "completed") {
+      record = { ...record, status: result.status, updated: new Date().toISOString() };
+      await this.persist(
+        record,
+        this.runBody(record, {
+          dispatchStatus: result.status,
+          blockers: result.blockers ?? [],
+          error: result.error,
+        }),
+      );
+      await this.deps.audit.append({
+        actor: record.created_by,
+        action: `run.${result.status}`,
+        target: record.id,
+        result: result.status === "failed" ? "error" : "ok",
+        ...(result.error ? { error: result.error } : {}),
+      });
+      return record;
+    }
+
+    return this.completeRun(record);
+  }
+
+  private async completeRun(record: RunRecord): Promise<RunRecord> {
     record = await this.transition(record, "verifying");
     record = await this.transition(record, "completed");
     record.completed = new Date().toISOString();
-    await this.persist(
-      record,
-      `# Run ${id}\n\nScope: ${input.scope}\n\nArtifacts: ${record.artifacts.join(", ")}\nCompleted: ${record.completed}\n`,
-    );
+    await this.persist(record, this.runBody(record));
     await this.deps.audit.append({
       actor: record.created_by,
       action: "run.completed",
-      target: id,
+      target: record.id,
       result: "ok",
     });
 
@@ -283,6 +394,27 @@ export class RunEngine {
 
   private async persist(record: RunRecord, body: string): Promise<void> {
     await writeDoc(this.file(record.id), record, body);
+  }
+
+  private runBody(
+    record: RunRecord,
+    details: {
+      dispatchStatus?: string;
+      summary?: string;
+      blockers?: readonly string[];
+      error?: string;
+    } = {},
+  ): string {
+    return `# Run ${record.id}
+
+Scope: ${record.scope}
+Status: ${record.status}
+Dispatch: ${details.dispatchStatus ?? String(record["dispatch_status"] ?? "(none)")}
+${details.summary ? `\n${details.summary}\n` : ""}
+Artifacts: ${record.artifacts.join(", ") || "(none)"}
+Decisions: ${record.decisions.join(", ") || "(none)"}
+${details.blockers?.length ? `Blockers: ${details.blockers.join(", ")}\n` : ""}${details.error ? `Error: ${details.error}\n` : ""}Completed: ${record.completed || "(not completed)"}
+`;
   }
 
   private actionForRunType(type: RunType): string {

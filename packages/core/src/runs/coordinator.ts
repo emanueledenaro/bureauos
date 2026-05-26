@@ -9,7 +9,7 @@ import { workspacePaths } from "../paths.js";
 import { ensureDir, writeDoc, type FrontMatter } from "../registries/base.js";
 import { join } from "node:path";
 import { newId } from "../ids.js";
-import type { RunRecord, RunType } from "./engine.js";
+import type { RunDispatcher, RunRecord, RunType } from "./engine.js";
 import type { ProviderRouter } from "@bureauos/providers";
 import {
   MEMORY_BOUNDARY_CAPABILITY,
@@ -189,4 +189,28 @@ ${input.briefing ?? "(none supplied)"}
   }
 
   return { runId: input.run.id, steps, briefingArtifactId: briefingId };
+}
+
+export function createCoordinatorRunDispatcher(deps: CoordinatorDeps): RunDispatcher {
+  return async ({ workspaceRoot, run, startInput }) => {
+    const output = await dispatchRun(deps, {
+      workspaceRoot,
+      run,
+      scope: startInput.scope,
+      briefing: startInput.scope,
+    });
+    const stepArtifactIds = output.steps.flatMap((step) => step.artifactIds);
+    const pipeline = output.steps.map((step) => step.role);
+
+    return {
+      status: "completed",
+      artifactIds: [output.briefingArtifactId, ...stepArtifactIds],
+      decisions: output.steps.map((step) => `${step.role}: ${step.notes}`),
+      metadata: {
+        dispatch_mode: "coordinator",
+        dispatch_briefing_artifact_id: output.briefingArtifactId,
+        dispatch_pipeline: pipeline,
+      },
+    };
+  };
 }

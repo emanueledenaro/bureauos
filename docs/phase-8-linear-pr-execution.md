@@ -10,8 +10,8 @@ This is a delivery-control slice. It must prove policy, audit, branch, test, and
 
 BureauOS already has several required foundations:
 
-- `RunEngine` creates run records, writes artifacts, and applies policy, but its start path still needs a real dispatch hook.
-- `dispatchRun()` can run specialist agents and attach model/provider context, but is not yet the default development execution path.
+- `RunEngine` creates run records, writes artifacts, applies policy, and can execute an injected dispatcher while preserving an explicit stub mode.
+- `dispatchRun()` can run specialist agents and attach model/provider context; `bureau run new` uses the coordinator dispatcher by default and keeps the local stub path behind `--stub`.
 - `DevelopmentAgent` can produce planning artifacts; real code execution remains Phase 8 work.
 - `CodexRuntimeAdapter` is still conservative and must not perform unbounded edits.
 - `CapabilityUseService` gates capability use and includes Linear policy mappings.

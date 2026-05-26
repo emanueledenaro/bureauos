@@ -210,6 +210,55 @@ describe("bureau cli", () => {
     expect(audit).toContain("autonomy.retry.started");
   });
 
+  it("dispatches new runs through the coordinator by default", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+
+    const code = await main([
+      "node",
+      "bureau",
+      "run",
+      "new",
+      "--type",
+      "planning",
+      "--scope",
+      "Plan delivery priorities",
+    ]);
+
+    expect(code).toBe(0);
+    const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
+    expect(audit).toContain("coordinator.briefing_written");
+    expect(audit).toContain("coordinator.step_completed");
+    expect(audit).toContain("run.dispatch_completed");
+
+    const runsDir = join(dir, ".bureauos", "memory", "runs");
+    const runFile = (await readdir(runsDir)).find((file) => file.endsWith(".md"));
+    expect(runFile).toBeDefined();
+    const runDoc = await readFile(join(runsDir, runFile!), "utf8");
+    expect(runDoc).toContain("dispatch_mode: coordinator");
+    expect(runDoc).toContain('dispatch_pipeline: ["project_manager", "product"]');
+  });
+
+  it("keeps the run new stub path explicit with --stub", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+
+    const code = await main([
+      "node",
+      "bureau",
+      "run",
+      "new",
+      "--type",
+      "planning",
+      "--scope",
+      "Plan delivery priorities",
+      "--stub",
+    ]);
+
+    expect(code).toBe(0);
+    const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
+    expect(audit).toContain("run.dispatch_stub_completed");
+    expect(audit).not.toContain("coordinator.briefing_written");
+  });
+
   it("prints client intelligence from real registries", async () => {
     await main(["node", "bureau", "init", "--name", "BOS"]);
     await main([

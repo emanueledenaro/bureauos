@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -43,6 +43,87 @@ describe("RunEngine", () => {
     const arts = await artifacts.list({ run_id: run.id });
     expect(arts.length).toBe(1);
     expect(arts[0]?.type).toBe("run-report");
+  });
+
+  it("uses an injected dispatcher when one is supplied", async () => {
+    const config = defaultConfig("freelancer");
+    const approvals = new ApprovalRegistry(dir);
+    const policy = new PolicyEngine(config, approvals);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const engine = new RunEngine(dir, {
+      audit,
+      artifacts,
+      policy,
+      dispatcher: async ({ run }) => {
+        const artifact = await artifacts.write({
+          type: "run-report",
+          createdBy: run.created_by,
+          runId: run.id,
+          body: "# Dispatched\n\nReal dispatcher path used.",
+        });
+        return {
+          status: "completed",
+          artifactIds: [artifact.id],
+          decisions: ["dispatcher-used"],
+          metadata: { dispatch_mode: "test" },
+        };
+      },
+    });
+
+    const run = await engine.start({
+      type: "planning",
+      triggerType: "owner_request",
+      triggerSource: "test",
+      scope: "test scope",
+    });
+
+    expect(run.status).toBe("completed");
+    expect(run.artifacts.length).toBe(1);
+    expect(run.decisions).toContain("dispatcher-used");
+    expect(run.dispatch_mode).toBe("test");
+
+    const runFile = await readFile(join(workspacePaths(dir).runsDir, `${run.id}.md`), "utf8");
+    expect(runFile).toContain("Dispatch: completed");
+    expect(runFile).not.toContain("Stub dispatch completed");
+    const log = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(log).toContain("run.dispatch_completed");
+    expect(log).not.toContain("run.dispatch_stub_completed");
+  });
+
+  it("persists blocked dispatcher results with blocker evidence", async () => {
+    const config = defaultConfig("freelancer");
+    const approvals = new ApprovalRegistry(dir);
+    const policy = new PolicyEngine(config, approvals);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const engine = new RunEngine(dir, {
+      audit,
+      artifacts,
+      policy,
+      dispatcher: async () => ({
+        status: "blocked",
+        blockers: ["missing acceptance criteria"],
+        metadata: { dispatch_mode: "test" },
+      }),
+    });
+
+    const run = await engine.start({
+      type: "planning",
+      triggerType: "owner_request",
+      triggerSource: "test",
+      scope: "test scope",
+    });
+
+    expect(run.status).toBe("blocked");
+    expect(run.dispatch_blockers).toEqual(["missing acceptance criteria"]);
+    expect(run.completed).toBe("");
+
+    const runFile = await readFile(join(workspacePaths(dir).runsDir, `${run.id}.md`), "utf8");
+    expect(runFile).toContain("Blockers: missing acceptance criteria");
+    const log = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(log).toContain("run.dispatch_blocked");
+    expect(log).toContain("run.blocked");
   });
 
   it("blocks a run when policy disallows the underlying action", async () => {

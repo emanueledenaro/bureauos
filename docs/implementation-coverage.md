@@ -31,7 +31,7 @@ Every major capability described in the docs must become one of:
 | Client account intelligence | `ClientIntelligenceService`, value score/classification, `/clients/intelligence`, `bureau client intelligence`, ElectronJS Clients page | implemented |
 | Project memory | `ProjectRegistry`, per-project memory files | implemented |
 | Opportunity pipeline | `OpportunityRegistry`, `RevenuePipelineService`, revenue pulse, `revenue-pipeline-report` | partial |
-| Run lifecycle | `RunEngine` | partial |
+| Run lifecycle | `RunEngine`, injected coordinator dispatcher, `bureau run new --stub` | partial |
 | Artifact store | `ArtifactStore` | partial |
 | Audit log | `AuditLog`, `/audit`, SSE events | implemented |
 | Approval gates | `ApprovalRegistry`, `PolicyEngine`, ElectronJS approvals | partial |

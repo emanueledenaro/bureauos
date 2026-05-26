@@ -37,6 +37,7 @@ import {
   VERSION,
   appendDailyNote,
   appendDecision,
+  createCoordinatorRunDispatcher,
   defaultConfig,
   initWorkspace,
   loadConfig,
@@ -97,7 +98,7 @@ Registries:
   growth review [--recent-days n]           Generate growth review artifact
 
 Runs and audit:
-  run new --type <t> --scope <s> [--client slug] [--project slug]
+  run new --type <t> --scope <s> [--client slug] [--project slug] [--stub]
   run list
   autonomy memory-scan                      Start due follow-up runs from durable memory
   autonomy retry-scan [--max-attempts n]    Retry failed/blocked runs within policy limits
@@ -817,6 +818,7 @@ const handleRunNew: Handler = async (args) => {
     client: { type: "string", alias: "c" },
     project: { type: "string", alias: "p" },
     source: { type: "string" },
+    stub: { type: "boolean" },
   });
   if (typeof flags === "string") return err(`run new: ${flags}`);
   if (typeof flags.type !== "string") return err("run new: --type is required");
@@ -826,7 +828,16 @@ const handleRunNew: Handler = async (args) => {
   const audit = new AuditLog(workspacePaths(process.cwd()).auditLog);
   const policy = new PolicyEngine(config, approvals);
   const artifacts = new ArtifactStore(process.cwd());
-  const engine = new RunEngine(process.cwd(), { audit, artifacts, policy });
+  const dispatcher =
+    flags.stub === true
+      ? undefined
+      : createCoordinatorRunDispatcher({ audit, artifacts, policy, config });
+  const engine = new RunEngine(process.cwd(), {
+    audit,
+    artifacts,
+    policy,
+    ...(dispatcher ? { dispatcher } : {}),
+  });
   let clientId: string | undefined;
   let projectId: string | undefined;
   if (typeof flags.client === "string") {
