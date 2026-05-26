@@ -216,4 +216,42 @@ describe("CoordinatorChatService", () => {
     expect(visible.toLowerCase()).not.toContain("i need to");
     expect(visible.toLowerCase()).not.toContain("current owner message");
   });
+
+  it("falls back when provider generation hangs", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    const fakeProvider: ProviderAdapter = {
+      id: "fake-provider",
+      type: "custom",
+      name: "Fake Provider",
+      async listModels() {
+        return ["fake-model"];
+      },
+      async validateCredentials() {
+        return { ok: true };
+      },
+      async generateText() {
+        return new Promise<never>(() => {
+          // Simulates a provider request that never settles.
+        });
+      },
+      async *stream() {
+        yield "unused";
+      },
+    };
+    const service = new CoordinatorChatService(dir, {
+      config: defaultConfig("freelancer"),
+      providerTimeoutMs: 5,
+      providerSelector: async () => ({ provider: fakeProvider, model: "fake-model" }),
+    });
+
+    const result = await service.process({
+      source: "test",
+      message: "controlla provider e memoria",
+    });
+
+    expect(result.provider.status).toBe("failed");
+    expect(result.provider.reason).toContain("timed out");
+    expect(result.coordinatorMessage.text).toContain("memoria locale");
+    expect(result.coordinatorMessage.text.toLowerCase()).not.toContain("coordinator working");
+  });
 });

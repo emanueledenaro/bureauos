@@ -17,6 +17,13 @@ messages. Keep public claims conservative and aligned with
 - Phase 8 PR execution path with fake-runtime E2E coverage.
 - Daemon lifecycle supervisor with CLI/API start, stop, status, lock, and
   startup diagnostics coverage.
+- Codex-style Coordinator chat rendering for paragraphs, lists, inline code,
+  and fenced code blocks.
+
+### Fixed
+
+- Coordinator provider calls now time out into a local-memory fallback instead
+  of leaving the Operating Room chat stuck in a sending state.
 
 ### Security
 

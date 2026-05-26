@@ -1,6 +1,7 @@
 import { FileText } from "lucide-react";
 import { Avatar, AvatarFallback } from "../ui/avatar";
 import { ResultCard } from "./ResultCard";
+import { MessageContent } from "./MessageContent";
 import { cn } from "../../lib/utils";
 import { formatBytes, formatTime } from "../../lib/format";
 import type { CoordinatorMessageRecord } from "../../lib/api";
@@ -42,7 +43,11 @@ export function MessageBubble({ message }: { message: CoordinatorMessageRecord }
               : "rounded-tl-sm border border-border bg-surface-raised text-foreground",
           )}
         >
-          <div className="whitespace-pre-wrap break-words">{message.text}</div>
+          {isOwner ? (
+            <div className="whitespace-pre-wrap break-words">{message.text}</div>
+          ) : (
+            <MessageContent text={message.text} />
+          )}
           {message.attachments?.length ? (
             <div
               className={cn(

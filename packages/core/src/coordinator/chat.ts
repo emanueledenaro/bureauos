@@ -53,6 +53,7 @@ export interface CoordinatorChatDeps {
   memory?: CoordinatorGlobalMemoryService;
   env?: NodeJS.ProcessEnv;
   providerSelector?: CoordinatorProviderSelector;
+  providerTimeoutMs?: number;
 }
 
 export interface CoordinatorProviderSelection {
@@ -65,6 +66,8 @@ export type CoordinatorProviderSelector = (
   config: BureauConfig,
   env: NodeJS.ProcessEnv,
 ) => Promise<CoordinatorProviderSelection | undefined>;
+
+const DEFAULT_PROVIDER_TIMEOUT_MS = 12_000;
 
 function messageAttachments(
   attachments: readonly CoordinatorAttachmentInput[],
@@ -352,6 +355,21 @@ async function selectCoordinatorProvider(
   };
 }
 
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  if (timeoutMs <= 0) return promise;
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error(label)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 function providerMeta(
   status: CoordinatorChatProviderMeta["status"],
   selection?: { provider: ProviderAdapter; model: string },
@@ -385,6 +403,7 @@ export class CoordinatorChatService {
   private readonly memory: CoordinatorGlobalMemoryService;
   private readonly env: NodeJS.ProcessEnv;
   private readonly providerSelector: CoordinatorProviderSelector;
+  private readonly providerTimeoutMs: number;
 
   constructor(
     private readonly workspaceRoot: string,
@@ -397,6 +416,7 @@ export class CoordinatorChatService {
     this.memory = deps.memory ?? new CoordinatorGlobalMemoryService(workspaceRoot);
     this.env = deps.env ?? process.env;
     this.providerSelector = deps.providerSelector ?? selectCoordinatorProvider;
+    this.providerTimeoutMs = deps.providerTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
   }
 
   async process(input: CoordinatorChatInput): Promise<CoordinatorChatResult> {
@@ -481,13 +501,17 @@ export class CoordinatorChatService {
     const selection = await this.providerSelector(this.workspaceRoot, this.config, this.env);
     if (selection) {
       try {
-        const generated = await selection.provider.generateText({
-          model: selection.model,
-          system: systemPrompt(this.config),
-          prompt: userPrompt(message, packet, recent),
-          temperature: 0.2,
-          maxTokens: 1800,
-        });
+        const generated = await withTimeout(
+          selection.provider.generateText({
+            model: selection.model,
+            system: systemPrompt(this.config),
+            prompt: userPrompt(message, packet, recent),
+            temperature: 0.2,
+            maxTokens: 1800,
+          }),
+          this.providerTimeoutMs,
+          `provider generation timed out after ${this.providerTimeoutMs}ms`,
+        );
         answer = sanitizeCoordinatorAnswer(generated.text);
         provider = providerMeta("used", selection, generated);
       } catch (error) {
