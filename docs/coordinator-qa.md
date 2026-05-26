@@ -9,6 +9,11 @@ the product requirement: validate visible Coordinator behavior through the local
 API and renderer, then capture browser/Playwright screenshots of the same
 Coordinator panel.
 
+If Computer Use fails with `cgWindowNotFound` or times out across multiple apps
+in the same desktop session, treat it as an environment/tooling limitation, not
+as Coordinator behavior evidence. Record the failing app names and exact errors,
+then use the fallback below.
+
 ## Prompt Matrix
 
 Run the deterministic prompt matrix against a temporary BureauOS workspace:
@@ -44,7 +49,7 @@ node packages/cli/dist/bin/bureau.js serve --port 3737
 1. Start or reuse the interface dev server:
 
 ```bash
-pnpm --filter @bureauos/interface dev
+BUREAUOS_WORKSPACE=$PWD pnpm --filter @bureauos/interface dev
 ```
 
 1. Open `http://localhost:5173`, navigate to Coordinator, run the same prompt
