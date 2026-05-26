@@ -4,6 +4,7 @@ import {
   assembleContextPacket,
   type ContextPacket,
   type MemoryHit,
+  type SemanticMemoryHit,
   type SearchOptions,
 } from "@bureauos/memory";
 import { AuditLog, type AuditEvent } from "../audit/log.js";
@@ -21,6 +22,7 @@ export interface CoordinatorGlobalMemoryHit {
 export interface CoordinatorGlobalMemoryPacket {
   rootMemory: string;
   topHits: CoordinatorGlobalMemoryHit[];
+  semanticHits: CoordinatorGlobalMemoryHit[];
   generatedAt: string;
   audit: AuditEvent;
 }
@@ -53,6 +55,17 @@ function sanitizeHit(memoryRoot: string, hit: MemoryHit): CoordinatorGlobalMemor
   };
 }
 
+function sanitizeSemanticHit(
+  memoryRoot: string,
+  hit: SemanticMemoryHit,
+): CoordinatorGlobalMemoryHit {
+  return {
+    path: memoryRelativePath(memoryRoot, hit.path),
+    snippet: hit.snippet,
+    score: hit.score,
+  };
+}
+
 function sanitizePacket(
   memoryRoot: string,
   packet: ContextPacket,
@@ -60,6 +73,7 @@ function sanitizePacket(
   return {
     rootMemory: packet.rootMemory,
     topHits: packet.topHits.map((hit) => sanitizeHit(memoryRoot, hit)),
+    semanticHits: packet.semanticHits.map((hit) => sanitizeSemanticHit(memoryRoot, hit)),
     generatedAt: packet.generatedAt,
   };
 }

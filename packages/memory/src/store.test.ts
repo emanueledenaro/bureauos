@@ -8,6 +8,7 @@ import {
   ScopedMemoryStore,
   assembleContextPacket,
 } from "./store.js";
+import { NoopSemanticMemoryIndex, type SemanticMemoryIndex } from "./semantic.js";
 
 describe("LocalMemoryStore", () => {
   let dir: string;
@@ -46,6 +47,47 @@ describe("LocalMemoryStore", () => {
     const packet = await assembleContextPacket(s, "software");
     expect(packet.rootMemory).toContain("Map of memory");
     expect(packet.topHits.length).toBeGreaterThan(0);
+    expect(packet.semanticHits).toEqual([]);
+  });
+
+  it("uses a safe no-op semantic index by default", async () => {
+    await writeFile(join(dir, "ROOT.md"), "# Root\nMap of memory.\n", "utf8");
+    const s = new LocalMemoryStore(dir);
+    const packet = await assembleContextPacket(s, "anything", {
+      semanticIndex: new NoopSemanticMemoryIndex(),
+    });
+
+    expect(packet.semanticHits).toEqual([]);
+  });
+
+  it("can include semantic hits from a configured index contract", async () => {
+    await writeFile(join(dir, "ROOT.md"), "# Root\nMap of memory.\n", "utf8");
+    const semanticIndex: SemanticMemoryIndex = {
+      kind: "test",
+      enabled: true,
+      async search(query, options) {
+        return [
+          {
+            path: "semantic://client-context",
+            snippet: `${query}:${options?.limit}`,
+            score: 0.92,
+          },
+        ];
+      },
+    };
+    const s = new LocalMemoryStore(dir);
+    const packet = await assembleContextPacket(s, "amodeo project status", {
+      semanticIndex,
+      semanticLimit: 3,
+    });
+
+    expect(packet.semanticHits).toEqual([
+      {
+        path: "semantic://client-context",
+        snippet: "amodeo project status:3",
+        score: 0.92,
+      },
+    ]);
   });
 
   it("refuses path traversal outside the memory root", async () => {

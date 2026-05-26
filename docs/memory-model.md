@@ -393,6 +393,23 @@ Memory search should combine:
 - direct file retrieval for cited memory ranges
 - temporal ranking so recent operational state is not buried
 
+Runtime contract:
+
+- Markdown memory remains the source of truth.
+- Keyword search is available locally by default.
+- Semantic search is accessed through a `SemanticMemoryIndex` contract.
+- The default semantic backend is a safe no-op: no network calls, no provider calls, no matches.
+- Future embedding backends must implement the same contract and stay behind explicit config.
+
+```yaml
+memory:
+  semantic_index:
+    enabled: false
+    provider: "none"
+    index_path: ".bureauos/memory/indexes/semantic"
+    min_score: 0.72
+```
+
 The coordinator should be able to ask:
 
 - what do I know about this project?

@@ -92,7 +92,7 @@ export interface SettingsSummary {
   };
   autonomy: Record<string, boolean | number>;
   growth_autonomy: Record<string, boolean>;
-  memory: Record<string, boolean>;
+  memory: Record<string, boolean | Record<string, string | boolean | number>>;
   limits: Record<string, number | boolean>;
   github: Record<string, boolean>;
   triggers: {

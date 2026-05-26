@@ -25,6 +25,12 @@ describe("loadConfig", () => {
     expect(config.autonomy.merge_pull_requests).toBe(false);
     expect(config.autonomy.level).toBe(2);
     expect(config.growth_autonomy.publish_public_content).toBe(false);
+    expect(config.memory.semantic_index).toEqual({
+      enabled: false,
+      provider: "none",
+      index_path: ".bureauos/memory/indexes/semantic",
+      min_score: 0.72,
+    });
     expect(config.provider).toEqual({});
     expect(config.disabled_providers).toEqual([]);
     expect(config.capabilities).toEqual({});
@@ -65,6 +71,31 @@ describe("loadConfig", () => {
     expect(config.autonomy.create_issues).toBe(true);
     expect(config.autonomy.observe_signals).toBe(false);
     expect(config.autonomy.create_branches).toBe(false);
+  });
+
+  it("parses semantic memory index configuration without requiring a provider", async () => {
+    const path = join(dir, "bureauos.yaml");
+    await writeFile(
+      path,
+      [
+        "memory:",
+        "  semantic_index:",
+        "    enabled: true",
+        "    provider: custom",
+        "    index_path: .bureauos/memory/indexes/custom-semantic",
+        "    min_score: 0.81",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const config = await loadConfig(path);
+
+    expect(config.memory.semantic_index).toEqual({
+      enabled: true,
+      provider: "custom",
+      index_path: ".bureauos/memory/indexes/custom-semantic",
+      min_score: 0.81,
+    });
   });
 
   it("throws ConfigError when the file does not exist", async () => {

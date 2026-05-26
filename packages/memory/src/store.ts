@@ -1,5 +1,10 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { relative, resolve, sep } from "node:path";
+import {
+  noopSemanticMemoryIndex,
+  type SemanticMemoryHit,
+  type SemanticMemoryIndex,
+} from "./semantic.js";
 
 /**
  * Minimal markdown-backed memory store.
@@ -19,6 +24,12 @@ export interface MemoryHit {
 export interface SearchOptions {
   limit?: number;
   includeBody?: boolean;
+}
+
+export interface ContextAssemblyOptions extends SearchOptions {
+  semanticIndex?: SemanticMemoryIndex;
+  semanticLimit?: number;
+  semanticMinScore?: number;
 }
 
 export type MemoryAccessKind = "file" | "directory";
@@ -245,6 +256,7 @@ export class ScopedMemoryStore extends LocalMemoryStore {
 export interface ContextPacket {
   rootMemory: string;
   topHits: MemoryHit[];
+  semanticHits: SemanticMemoryHit[];
   generatedAt: string;
 }
 
@@ -256,13 +268,21 @@ export interface ContextPacket {
 export async function assembleContextPacket(
   store: LocalMemoryStore,
   query: string,
-  options: SearchOptions = {},
+  options: ContextAssemblyOptions = {},
 ): Promise<ContextPacket> {
   const root = await store.read("ROOT.md").catch(() => "");
   const topHits = query ? await store.search(query, options) : [];
+  const semanticIndex = options.semanticIndex ?? noopSemanticMemoryIndex;
+  const semanticHits = query
+    ? await semanticIndex.search(query, {
+        limit: options.semanticLimit ?? options.limit,
+        minScore: options.semanticMinScore,
+      })
+    : [];
   return {
     rootMemory: root,
     topHits,
+    semanticHits,
     generatedAt: new Date().toISOString(),
   };
 }

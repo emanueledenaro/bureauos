@@ -301,6 +301,11 @@ memory:
   retain_raw_history: ${m.retain_raw_history}
   promote_daily_notes_to_durable_memory: ${m.promote_daily_notes_to_durable_memory}
   root_memory_always_loaded: ${m.root_memory_always_loaded}
+  semantic_index:
+    enabled: ${m.semantic_index.enabled}
+    provider: "${m.semantic_index.provider}"
+    index_path: "${m.semantic_index.index_path}"
+    min_score: ${m.semantic_index.min_score}
 `;
 }
 

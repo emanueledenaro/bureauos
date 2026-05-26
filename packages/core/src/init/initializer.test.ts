@@ -78,6 +78,8 @@ describe("initWorkspace", () => {
     const yaml = await readFile(result.configFile, "utf8");
     expect(yaml).toContain('preset: "agency"');
     expect(yaml).toContain("level: 2");
+    expect(yaml).toContain("semantic_index:");
+    expect(yaml).toContain('provider: "none"');
     const parsed = await loadConfig(result.configFile);
     expect(parsed.provider).toEqual({});
     expect(parsed.disabled_providers).toEqual([]);

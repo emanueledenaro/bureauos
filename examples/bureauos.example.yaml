@@ -325,6 +325,11 @@ memory:
   retain_raw_history: true
   promote_daily_notes_to_durable_memory: true
   root_memory_always_loaded: true
+  semantic_index:
+    enabled: false
+    provider: "none"
+    index_path: ".bureauos/memory/indexes/semantic"
+    min_score: 0.72
   growth_memory:
     brand: ".bureauos/memory/BRAND.md"
     offers: ".bureauos/memory/OFFERS.md"

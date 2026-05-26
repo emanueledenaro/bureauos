@@ -432,8 +432,10 @@ export function SettingsView({
               />
               <Row
                 label="Memory global access"
-                value={settings.memory.coordinator_has_global_access ? "on" : "off"}
-                tone={settings.memory.coordinator_has_global_access ? "success" : "neutral"}
+                value={settings.memory.coordinator_has_global_access === true ? "on" : "off"}
+                tone={
+                  settings.memory.coordinator_has_global_access === true ? "success" : "neutral"
+                }
               />
             </div>
           </SettingsCard>
