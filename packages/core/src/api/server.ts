@@ -23,6 +23,7 @@ import type { CoordinatorAttachmentInput } from "../coordinator/intake.js";
 import { CoordinatorChatService } from "../coordinator/chat.js";
 import { CoordinatorMessageStore } from "../coordinator/messages.js";
 import { CoordinatorToolRuntime } from "../coordinator/tool-runtime.js";
+import { MemoryBrowserService } from "../memory/browser.js";
 import { CoordinatorGlobalMemoryService } from "../memory/global.js";
 import { appendDailyNote, type DailyNoteSection } from "../memory/daily.js";
 import { recordDecision } from "../memory/decisions.js";
@@ -739,6 +740,21 @@ const ROUTES: Record<string, RouteHandler> = {
         query,
         limit,
         source: "api",
+      }),
+    );
+  },
+
+  "GET /memory/browser": async ({ res, options, url }) => {
+    const requestedLimit = Number(url.searchParams.get("limit") ?? "80");
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 200)
+      : 80;
+    ok(
+      res,
+      await new MemoryBrowserService(options.workspaceRoot, options.config).browse({
+        query: url.searchParams.get("query") ?? "",
+        path: url.searchParams.get("path") ?? undefined,
+        limit,
       }),
     );
   },

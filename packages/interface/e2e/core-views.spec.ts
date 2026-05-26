@@ -90,6 +90,33 @@ for (const kind of ["empty", "seeded"] as const) {
   });
 }
 
+test.describe("Operating Room memory browser", () => {
+  let workspace: InterfaceWorkspace;
+
+  test.beforeAll(async () => {
+    workspace = await createInterfaceWorkspace("seeded");
+  });
+
+  test.afterAll(async () => {
+    await workspace.close();
+  });
+
+  test("renders searchable memory entries and selected entry detail", async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openWorkspace(page, workspace);
+    await openDesktopView(page, "Memory");
+
+    await expect(page.locator("main")).toContainText("Local Memory Browser");
+    await expect(page.locator("main")).toContainText("Entry Detail");
+    await expect(page.locator("main")).toContainText("clients/acme-labs/CLIENT.md");
+    await page.getByRole("button", { name: /clients\/acme-labs\/CLIENT\.md/i }).click();
+    await expect(page.locator("main")).toContainText("Seed client for Operating Room");
+    await attachScreenshot(page, testInfo, "seeded-memory-browser-detail");
+  });
+});
+
 async function openWorkspace(page: Page, workspace: InterfaceWorkspace): Promise<void> {
   await page.goto(`/?apiBase=${encodeURIComponent(workspace.url)}`);
   await expect(page).toHaveTitle(/BureauOS - Operating Room/);

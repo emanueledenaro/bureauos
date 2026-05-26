@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Database, FileText, Loader2, Search } from "lucide-react";
+import { Database, FileText, FolderOpen, Loader2, Search } from "lucide-react";
 import { SectionShell } from "../components/dashboard/SectionShell";
 import { MetricTile } from "../components/dashboard/MetricTile";
 import { StatusPill } from "../components/dashboard/StatusPill";
@@ -9,7 +9,12 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { sortNewest } from "../lib/builders";
 import { formatLabel, timeAgo } from "../lib/format";
-import { Api, type CoordinatorGlobalMemoryPacket } from "../lib/api";
+import {
+  Api,
+  type CoordinatorGlobalMemoryPacket,
+  type MemoryBrowserEntry,
+  type MemoryBrowserResult,
+} from "../lib/api";
 import type { DashboardState } from "../lib/types";
 
 const DEFAULT_MEMORY_QUERY = "company clients projects revenue growth";
@@ -17,8 +22,10 @@ const DEFAULT_MEMORY_QUERY = "company clients projects revenue growth";
 export function MemoryView({ state }: { state: DashboardState }) {
   const [query, setQuery] = useState(DEFAULT_MEMORY_QUERY);
   const [packet, setPacket] = useState<CoordinatorGlobalMemoryPacket | undefined>();
+  const [browser, setBrowser] = useState<MemoryBrowserResult | undefined>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const [selectedPath, setSelectedPath] = useState<string | undefined>();
 
   const search = async (nextQuery = query): Promise<void> => {
     const normalized = nextQuery.trim();
@@ -26,8 +33,13 @@ export function MemoryView({ state }: { state: DashboardState }) {
     setLoading(true);
     setError(undefined);
     try {
-      const result = await Api.coordinatorMemory(normalized, 12);
-      setPacket(result);
+      const [packetResult, browserResult] = await Promise.all([
+        Api.coordinatorMemory(normalized, 12),
+        Api.memoryBrowser({ query: normalized, limit: 80 }),
+      ]);
+      setPacket(packetResult);
+      setBrowser(browserResult);
+      setSelectedPath(browserResult.selected?.path);
       setQuery(normalized);
     } catch (e) {
       setError((e as Error).message);
@@ -39,9 +51,12 @@ export function MemoryView({ state }: { state: DashboardState }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Api.coordinatorMemory(DEFAULT_MEMORY_QUERY, 12)
-      .then((result) => {
-        if (!cancelled) setPacket(result);
+    Promise.all([Api.coordinatorMemory(DEFAULT_MEMORY_QUERY, 12), Api.memoryBrowser({ limit: 80 })])
+      .then(([packetResult, browserResult]) => {
+        if (cancelled) return;
+        setPacket(packetResult);
+        setBrowser(browserResult);
+        setSelectedPath(browserResult.selected?.path);
       })
       .catch((e) => {
         if (!cancelled) setError((e as Error).message);
@@ -54,6 +69,21 @@ export function MemoryView({ state }: { state: DashboardState }) {
     };
   }, []);
 
+  const selectEntry = async (entry: MemoryBrowserEntry): Promise<void> => {
+    setSelectedPath(entry.path);
+    try {
+      const result = await Api.memoryBrowser({
+        query: browser?.query || undefined,
+        path: entry.path,
+        limit: 80,
+      });
+      setBrowser(result);
+      setSelectedPath(result.selected?.path ?? entry.path);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
   const rootPreview = packet?.rootMemory
     .split("\n")
     .filter((line) => line.trim())
@@ -65,7 +95,7 @@ export function MemoryView({ state }: { state: DashboardState }) {
       title="Memory"
       description="The durable company memory written by the kernel."
       action={
-        <div className="flex flex-1 max-w-md items-center gap-2">
+        <div className="flex w-full min-w-0 max-w-md flex-1 items-center gap-2">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -115,6 +145,107 @@ export function MemoryView({ state }: { state: DashboardState }) {
           icon={Database}
         />
       </KpiBar>
+
+      <div className="mt-5 grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(300px,0.95fr)]">
+        <div className="min-w-0 overflow-hidden rounded-lg border border-border/70 bg-surface-subtle/60 p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-[12px] font-semibold text-foreground">Local Memory Browser</div>
+              <div className="mt-1 text-[10px] text-muted-foreground">
+                {browser
+                  ? `${browser.entries.length} entries · semantic ${
+                      browser.semantic_index.enabled
+                        ? `${browser.semantic_index.provider} · ${browser.semantic_hits.length} hits`
+                        : "off"
+                    }`
+                  : "Loading memory entries"}
+              </div>
+            </div>
+            <StatusPill value="Redacted" tone="success" />
+          </div>
+
+          {browser ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {browser.categories.map((category) => (
+                <span
+                  key={category.id}
+                  className="rounded-md border border-border/60 bg-surface-raised px-2 py-1 text-[10px] text-muted-foreground"
+                >
+                  {category.label}: {category.count}
+                </span>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="mt-4 space-y-2">
+            {browser?.entries.map((entry) => (
+              <button
+                key={entry.path}
+                type="button"
+                onClick={() => void selectEntry(entry)}
+                className={`min-w-0 w-full rounded-md border p-3 text-left transition ${
+                  selectedPath === entry.path
+                    ? "border-primary/70 bg-primary/10"
+                    : "border-border/60 bg-surface-raised hover:border-border"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <FolderOpen className="h-3 w-3 shrink-0 text-muted-foreground" />
+                    <span className="truncate font-mono text-[10px] font-semibold text-foreground">
+                      {entry.path}
+                    </span>
+                  </div>
+                  <span className="shrink-0 rounded bg-surface-subtle px-1.5 py-0.5 text-[9px] uppercase text-muted-foreground">
+                    {entry.category}
+                  </span>
+                </div>
+                <div className="mt-2 text-[11px] font-semibold text-foreground">{entry.title}</div>
+                <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-muted-foreground">
+                  {entry.preview}
+                </p>
+              </button>
+            ))}
+            {browser && browser.entries.length === 0 ? (
+              <EmptyState
+                title="No memory entries"
+                description="No client, project, daily, or decision memory matched the current search."
+              />
+            ) : null}
+          </div>
+        </div>
+
+        <div className="min-w-0 overflow-hidden rounded-lg border border-border/70 bg-surface-subtle/60 p-4">
+          <div className="text-[12px] font-semibold text-foreground">Entry Detail</div>
+          <div className="mt-1 text-[10px] text-muted-foreground">
+            {browser?.selected
+              ? `${browser.selected.category} · ${browser.selected.path}`
+              : "Select a memory entry"}
+          </div>
+          {browser?.selected ? (
+            <>
+              <div className="mt-3 rounded-md border border-border/60 bg-surface-raised p-3">
+                <div className="text-[12px] font-semibold text-foreground">
+                  {browser.selected.title}
+                </div>
+                <div className="mt-1 font-mono text-[10px] text-muted-foreground">
+                  {browser.selected.path}
+                </div>
+              </div>
+              <pre className="mt-3 max-h-[420px] overflow-auto whitespace-pre-wrap rounded-md border border-border/60 bg-background/80 p-3 font-mono text-[10px] leading-relaxed text-foreground/80">
+                {browser.selected.body}
+              </pre>
+            </>
+          ) : (
+            <div className="mt-3 rounded-md border border-dashed border-border/60 p-4">
+              <div className="text-[12px] font-semibold text-foreground">No entry selected</div>
+              <div className="mt-1 text-[10px] text-muted-foreground">
+                Client, project, daily, and decision memory details appear here.
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
       <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="rounded-lg border border-border/70 bg-surface-subtle/60 p-4">

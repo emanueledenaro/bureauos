@@ -413,6 +413,7 @@ export interface CoordinatorChatResult {
   memory: {
     generatedAt: string;
     hits: Array<{ path: string; snippet: string; score: number }>;
+    semanticHits?: Array<{ path: string; snippet: string; score: number }>;
   };
 }
 export type CoordinatorChatStreamEvent =
@@ -428,7 +429,34 @@ export interface CoordinatorGlobalMemoryPacket {
   rootMemory: string;
   generatedAt: string;
   topHits: Array<{ path: string; snippet: string; score: number }>;
+  semanticHits?: Array<{ path: string; snippet: string; score: number }>;
   audit: AuditEvent;
+}
+export type MemoryBrowserCategory = "client" | "project" | "daily" | "decision";
+export interface MemoryBrowserEntry {
+  path: string;
+  category: MemoryBrowserCategory;
+  title: string;
+  preview: string;
+  score?: number;
+  updated?: string;
+}
+export interface MemoryBrowserDetail extends MemoryBrowserEntry {
+  body: string;
+}
+export interface MemoryBrowserResult {
+  generated_at: string;
+  query: string;
+  semantic_index: {
+    enabled: boolean;
+    provider: "none" | "custom";
+    index_path: string;
+    min_score: number;
+  };
+  semantic_hits: Array<{ path: string; snippet: string; score: number }>;
+  categories: Array<{ id: MemoryBrowserCategory; label: string; count: number }>;
+  entries: MemoryBrowserEntry[];
+  selected?: MemoryBrowserDetail;
 }
 export interface BusinessReportResult {
   generated_at: string;
@@ -806,6 +834,13 @@ export const Api = {
     api<CoordinatorGlobalMemoryPacket>(
       `/coordinator/memory?query=${encodeURIComponent(query)}&limit=${limit}`,
     ),
+  memoryBrowser: (input: { query?: string; path?: string; limit?: number } = {}) => {
+    const params = new URLSearchParams();
+    if (input.query) params.set("query", input.query);
+    if (input.path) params.set("path", input.path);
+    params.set("limit", String(input.limit ?? 80));
+    return api<MemoryBrowserResult>(`/memory/browser?${params.toString()}`);
+  },
   audit: (n = 50) => api<AuditEvent[]>(`/audit?n=${n}`),
   coordinatorIntake: (input: {
     message: string;

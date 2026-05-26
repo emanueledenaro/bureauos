@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createHmac } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -1082,6 +1082,82 @@ describe("API server", () => {
 
     const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(audit).toContain("memory.global.search");
+  });
+
+  it("browses client, project, daily, and decision memory with redacted detail bodies", async () => {
+    const paths = workspacePaths(dir);
+    await mkdir(join(paths.clientsDir, "acme-labs"), { recursive: true });
+    await mkdir(join(paths.projectsDir, "acme-site"), { recursive: true });
+    await writeFile(
+      join(paths.clientsDir, "acme-labs", "CLIENT.md"),
+      [
+        "---",
+        "id: client_acme",
+        "slug: acme-labs",
+        "---",
+        "# Acme Labs",
+        "",
+        "api_key: sk-testsecret123456",
+        "Active client for a website refresh.",
+      ].join("\n"),
+      "utf8",
+    );
+    await writeFile(
+      join(paths.projectsDir, "acme-site", "PROJECT.md"),
+      "# Acme Site\n\nProject context for Acme Labs.\n",
+      "utf8",
+    );
+    await writeFile(
+      join(paths.dailyDir, "2026-05-26.md"),
+      "# Daily Note\n\nAcme Labs status reviewed.\n",
+      "utf8",
+    );
+    await writeFile(
+      paths.decisionsLog,
+      "# Decisions\n\nAcme Labs proposal remains draft-only.\n",
+      "utf8",
+    );
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const listResponse = await fetch(`${server.url}/memory/browser`);
+    expect(listResponse.status).toBe(200);
+    const listBody = (await listResponse.json()) as {
+      categories: Array<{ id: string; count: number }>;
+      entries: Array<{ path: string; category: string; preview: string }>;
+    };
+
+    expect(listBody.categories.find((category) => category.id === "client")?.count).toBeGreaterThan(
+      0,
+    );
+    expect(
+      listBody.categories.find((category) => category.id === "project")?.count,
+    ).toBeGreaterThan(0);
+    expect(listBody.categories.find((category) => category.id === "daily")?.count).toBeGreaterThan(
+      0,
+    );
+    expect(
+      listBody.categories.find((category) => category.id === "decision")?.count,
+    ).toBeGreaterThan(0);
+
+    const searchResponse = await fetch(`${server.url}/memory/browser?query=Acme`);
+    expect(searchResponse.status).toBe(200);
+    const searchBody = (await searchResponse.json()) as {
+      entries: Array<{ path: string; category: string; score?: number }>;
+    };
+    expect(searchBody.entries.some((entry) => entry.path === "clients/acme-labs/CLIENT.md")).toBe(
+      true,
+    );
+    expect(searchBody.entries.some((entry) => entry.path === "projects/acme-site/PROJECT.md")).toBe(
+      true,
+    );
+
+    const detailResponse = await fetch(
+      `${server.url}/memory/browser?path=${encodeURIComponent("clients/acme-labs/CLIENT.md")}`,
+    );
+    expect(detailResponse.status).toBe(200);
+    const detailBody = (await detailResponse.json()) as { selected?: { body: string } };
+    expect(detailBody.selected?.body).toContain("[redacted]");
+    expect(detailBody.selected?.body).not.toContain("sk-testsecret123456");
   });
 
   it("routes opportunity-like coordinator chat messages into intake", async () => {
