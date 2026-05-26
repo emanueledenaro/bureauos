@@ -29,6 +29,7 @@ export interface LinearIssueIngestionDeps {
 }
 
 function artifactBody(scope: LinearIssueRunScope): string {
+  const plan = scope.intakePlan;
   return `# Linear Issue Scope
 
 ## Source
@@ -49,6 +50,35 @@ function artifactBody(scope: LinearIssueRunScope): string {
 ## Acceptance Criteria
 
 ${scope.acceptanceCriteria.length ? scope.acceptanceCriteria.map((item) => `- ${item}`).join("\n") : "- (none)"}
+
+## Product Planning
+
+- Risk: ${plan.riskLevel}
+- Criteria extracted: ${plan.productAcceptanceCriteria.length}
+
+${
+  plan.productClarificationRequests.length
+    ? plan.productClarificationRequests.map((item) => `- Clarification: ${item}`).join("\n")
+    : "- Product has enough acceptance criteria to continue planning."
+}
+
+## Project Manager Task Plan
+
+${plan.projectManagerTaskPlan.map((item, index) => `${index + 1}. ${item}`).join("\n")}
+
+## Dependencies
+
+${plan.dependencies.map((item) => `- ${item}`).join("\n")}
+
+## Agent Assignments
+
+${plan.agentAssignments
+  .map((assignment) => `- ${assignment.agent}: ${assignment.status} - ${assignment.responsibility}`)
+  .join("\n")}
+
+## Risk Reasons
+
+${plan.riskReasons.map((item) => `- ${item}`).join("\n")}
 
 ## Blockers
 
@@ -96,6 +126,11 @@ export class LinearIssueIngestionService {
         linear_identifier: input.issue.identifier,
         linear_url: input.issue.url,
         readiness: scope.readiness,
+        intake_risk_level: scope.intakePlan.riskLevel,
+        intake_agent_assignments: scope.intakePlan.agentAssignments.map(
+          (assignment) => `${assignment.agent}:${assignment.status}`,
+        ),
+        intake_dependencies: scope.intakePlan.dependencies,
       },
       body: artifactBody(scope),
     });

@@ -59,6 +59,11 @@ describe("LinearIssueIngestionService", () => {
     expect(written?.body).toContain("SER-62");
     expect(written?.body).toContain("Development Agent calls Codex runtime");
     expect(written?.body).toContain("Readiness: ready");
+    expect(written?.body).toContain("## Product Planning");
+    expect(written?.body).toContain("## Project Manager Task Plan");
+    expect(written?.body).toContain("development: ready");
+    expect(written?.record.intake_risk_level).toBe("low");
+    expect(written?.record.intake_agent_assignments).toContain("development:ready");
   });
 
   it("writes a clarification artifact instead of allowing ambiguous work", async () => {
@@ -85,6 +90,41 @@ describe("LinearIssueIngestionService", () => {
     const written = await new ArtifactStore(dir).read(result.artifact!.id);
     expect(written?.body).toContain("Readiness: needs_clarification");
     expect(written?.body).toContain("missing acceptance criteria");
+    expect(written?.body).toContain("Clarification: Provide concrete acceptance criteria");
+    expect(written?.body).toContain("development: blocked");
+  });
+
+  it("writes an oversized planning blocker before development execution", async () => {
+    const config = defaultConfig("agency");
+    const criteria = Array.from(
+      { length: 11 },
+      (_, index) => `- Criterion ${index + 1} must be verified independently.`,
+    ).join("\n");
+    const result = await new LinearIssueIngestionService(dir, {
+      config,
+      capabilities: new CapabilityUseService(dir, { config }),
+    }).ingest({
+      issue: {
+        identifier: "SER-202",
+        title: "Build all dashboards at once",
+        description: `Acceptance criteria:\n${criteria}`,
+        url: "https://linear.app/serium/issue/SER-202/build-all-dashboards-at-once",
+        labels: ["Feature"],
+        projectId: "bureauos-project",
+        teamKey: "SER",
+      },
+    });
+
+    expect(result.status).toBe("needs_clarification");
+    expect(result.scope?.blockers).toContain("oversized issue scope: 11 acceptance criteria");
+    expect(result.scope?.intakePlan.riskLevel).toBe("high");
+
+    const written = await new ArtifactStore(dir).read(result.artifact!.id);
+    expect(written?.body).toContain("oversized issue scope: 11 acceptance criteria");
+    expect(written?.body).toContain("Split the issue into smaller tickets");
+    expect(written?.body).toContain(
+      "Coordinator waits for clarified scope before development execution",
+    );
   });
 
   it("blocks before scope mapping when Linear reads are disallowed by policy", async () => {
