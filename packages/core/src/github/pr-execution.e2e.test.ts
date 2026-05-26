@@ -96,7 +96,10 @@ class FakeCodexRuntime implements RuntimeAdapter {
     return {
       ok: true,
       artifacts: ["runtime-diff-artifact"],
-      evidence: "fake runtime edited the Phase 8 target and ran tests",
+      evidence: [
+        "PASS: fake runtime edited the Phase 8 target and ran tests.",
+        "PASS: development artifacts include diff and test evidence.",
+      ].join("\n"),
       changedFiles: ["packages/core/src/github/phase8-target.ts"],
       commands: ["pnpm --filter @bureauos/core test -- phase8"],
       exitCode: 0,
@@ -232,7 +235,14 @@ describe("Phase 8 PR execution E2E", () => {
             workspaceRoot,
             run,
             scope: startInput.scope,
-            briefing: "Linear SER-36 acceptance criteria require fake runtime, tests, and PR.",
+            briefing: [
+              "Linear SER-36 acceptance criteria:",
+              "- fake runtime edited the Phase 8 target and ran tests.",
+              "- development artifacts include diff and test evidence.",
+              "",
+              "PASS: fake runtime edited the Phase 8 target and ran tests.",
+              "PASS: development artifacts include diff and test evidence.",
+            ].join("\n"),
           },
         );
         const agentArtifactIds = dispatch.steps.flatMap((step) => step.artifactIds);
@@ -341,6 +351,10 @@ describe("Phase 8 PR execution E2E", () => {
     expect(github.pullRequests[0]?.input.body).toContain("[SER-36]");
     expect(github.pullRequests[0]?.input.body).toContain("GitHub: #36");
     expect(github.pullRequests[0]?.input.body).toContain("fake runtime edited the Phase 8 target");
+    expect(github.pullRequests[0]?.input.body).toContain("Agent evidence:");
+    expect(github.pullRequests[0]?.input.body).toContain("QA:");
+    expect(github.pullRequests[0]?.input.body).toContain("Security:");
+    expect(github.pullRequests[0]?.input.body).toContain("Reviewer:");
     expect(commandRunner.commands[0]?.commandLine).toBe(
       "pnpm --filter @bureauos/core test -- phase8",
     );
@@ -350,6 +364,9 @@ describe("Phase 8 PR execution E2E", () => {
     expect(artifactTypes.has("technical-plan")).toBe(true);
     expect(artifactTypes.has("run-report")).toBe(true);
     expect(artifactTypes.has("test-evidence-report")).toBe(true);
+    expect(artifactTypes.has("test-plan")).toBe(true);
+    expect(artifactTypes.has("security-review")).toBe(true);
+    expect(artifactTypes.has("pr-review")).toBe(true);
     expect(artifactTypes.has("github-pr-publish-report")).toBe(true);
 
     const diffReport = runArtifacts.find(

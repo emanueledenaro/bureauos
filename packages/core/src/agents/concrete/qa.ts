@@ -187,9 +187,9 @@ export function analyzeQaVerification(
   const artifactCriteria = sourceArtifacts.flatMap((artifact) =>
     extractAcceptanceCriteria(artifact.body),
   );
-  const criteria = Array.from(
-    new Set([...scopeCriteria, ...briefingCriteria, ...artifactCriteria]),
-  );
+  const directCriteria = Array.from(new Set([...scopeCriteria, ...briefingCriteria]));
+  const criteria =
+    directCriteria.length > 0 ? directCriteria : Array.from(new Set(artifactCriteria));
 
   const signals = [
     ...collectEvidenceSignals("briefing", input.context.briefing ?? ""),

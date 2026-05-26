@@ -61,6 +61,18 @@ export interface GitHubPullRequestPublishResult {
   report?: ArtifactRecord;
 }
 
+interface LoadedEvidenceArtifact {
+  id: string;
+  record: ArtifactRecord;
+  body: string;
+}
+
+interface AgentEvidenceGate {
+  missing: string[];
+  blockers: string[];
+  summaries: string[];
+}
+
 export interface GitHubPullRequestPublishDeps {
   config: BureauConfig;
   githubClient: GitHubPullRequestPublishClient;
@@ -96,6 +108,109 @@ function formatGitHubIssues(issues: readonly number[]): string {
   return issues.length ? issues.map((issue) => `#${issue}`).join(", ") : "(none)";
 }
 
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function numberValue(value: unknown): number {
+  return typeof value === "number" ? value : 0;
+}
+
+function stringArrayValue(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function isAgentEvidence(artifact: LoadedEvidenceArtifact): boolean {
+  return ["test-plan", "security-review", "pr-review"].includes(artifact.record.type);
+}
+
+function agentEvidenceSummaries(artifacts: readonly LoadedEvidenceArtifact[]): string[] {
+  return artifacts.filter(isAgentEvidence).map((artifact) => {
+    if (artifact.record.type === "test-plan") {
+      return `QA: ${artifact.id} (${stringValue(artifact.record.qa_readiness) || "unknown"})`;
+    }
+    if (artifact.record.type === "security-review") {
+      return `Security: ${artifact.id} (${stringValue(artifact.record.risk_level) || "unknown"} risk)`;
+    }
+    return `Reviewer: ${artifact.id} (${stringValue(artifact.record.recommendation) || "unknown"})`;
+  });
+}
+
+const SENSITIVE_PR_EVIDENCE =
+  /\b(auth|oauth|session|jwt|permission|rbac|acl|secret|credential|token|api[-_]?key|payment|billing|stripe|checkout|invoice|subscription|production|deploy|migration|database)\b/i;
+
+function artifactText(artifact: LoadedEvidenceArtifact): string {
+  const metadata = [
+    stringArrayValue(artifact.record.changed_files).join("\n"),
+    stringArrayValue(artifact.record.reviewed_files).join("\n"),
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return `${metadata}\n${artifact.body}`;
+}
+
+function requiresSecurityReview(artifacts: readonly LoadedEvidenceArtifact[]): boolean {
+  return artifacts.some(
+    (artifact) => !isAgentEvidence(artifact) && SENSITIVE_PR_EVIDENCE.test(artifactText(artifact)),
+  );
+}
+
+function createdBy(artifact: LoadedEvidenceArtifact, expected: string): boolean {
+  return artifact.record.created_by === expected;
+}
+
+function validateAgentEvidence(
+  runId: string | undefined,
+  artifacts: readonly LoadedEvidenceArtifact[],
+): AgentEvidenceGate {
+  if (!runId) return { missing: [], blockers: [], summaries: agentEvidenceSummaries(artifacts) };
+
+  const runArtifacts = artifacts.filter(
+    (artifact) => !artifact.record.run_id || artifact.record.run_id === runId,
+  );
+  const qa = runArtifacts.find(
+    (artifact) => artifact.record.type === "test-plan" && createdBy(artifact, "qa"),
+  );
+  const reviewer = runArtifacts.find(
+    (artifact) => artifact.record.type === "pr-review" && createdBy(artifact, "reviewer"),
+  );
+  const security = runArtifacts.find(
+    (artifact) => artifact.record.type === "security-review" && createdBy(artifact, "security"),
+  );
+  const missing: string[] = [];
+  const blockers: string[] = [];
+
+  if (!qa) {
+    missing.push("qa_verification_artifact");
+  } else if (
+    stringValue(qa.record.qa_readiness) !== "ready_for_review" ||
+    numberValue(qa.record.acceptance_fail_count) > 0 ||
+    numberValue(qa.record.acceptance_unknown_count) > 0
+  ) {
+    blockers.push("qa_verification_blocked");
+  }
+
+  if (!reviewer) {
+    missing.push("reviewer_artifact");
+  } else if (stringValue(reviewer.record.recommendation) !== "approve_with_residual_risk") {
+    blockers.push("reviewer_changes_requested");
+  }
+
+  if (requiresSecurityReview(runArtifacts) && !security) {
+    missing.push("security_review_artifact");
+  } else if (security && numberValue(security.record.unresolved_high_risk_count) > 0) {
+    blockers.push("security_review_blocked");
+  }
+
+  return {
+    missing,
+    blockers,
+    summaries: agentEvidenceSummaries(runArtifacts),
+  };
+}
+
 function defaultBody(args: {
   body?: string;
   template?: string;
@@ -106,6 +221,7 @@ function defaultBody(args: {
   testEvidence: readonly string[];
   runId?: string;
   evidenceArtifactIds: readonly string[];
+  agentEvidence: readonly string[];
 }): string {
   const explicit = args.body?.trim();
   if (explicit) return explicit;
@@ -121,6 +237,9 @@ function defaultBody(args: {
     : "No test evidence supplied.";
   const artifactEvidence = args.evidenceArtifactIds.length
     ? args.evidenceArtifactIds.map((id) => `- ${id}`).join("\n")
+    : "- (none)";
+  const agentEvidence = args.agentEvidence.length
+    ? args.agentEvidence.map((item) => `- ${item}`).join("\n")
     : "- (none)";
 
   if (args.template?.includes("## Summary")) {
@@ -148,6 +267,10 @@ ${verification}
 Evidence artifacts:
 
 ${artifactEvidence}
+
+Agent evidence:
+
+${agentEvidence}
 
 ## Risk
 
@@ -190,6 +313,10 @@ Evidence artifacts:
 
 ${artifactEvidence}
 
+Agent evidence:
+
+${agentEvidence}
+
 ## Risk
 
 - Risk level: medium
@@ -215,6 +342,7 @@ function reportBody(args: {
   testEvidence: readonly string[];
   runId?: string;
   evidenceArtifactIds: readonly string[];
+  agentEvidence: readonly string[];
   policy: PolicyDecision;
 }): string {
   return `# GitHub Pull Request Publish Report
@@ -229,6 +357,7 @@ function reportBody(args: {
 - GitHub issues: ${formatGitHubIssues(args.linkedIssues)}
 - BureauOS run: ${args.runId ?? "(none)"}
 - Evidence artifacts: ${args.evidenceArtifactIds.length ? args.evidenceArtifactIds.join(", ") : "(none)"}
+- Agent evidence: ${args.agentEvidence.length ? args.agentEvidence.join("; ") : "(none)"}
 
 ## Created Pull Request
 
@@ -258,6 +387,19 @@ async function readPullRequestTemplate(workspaceRoot: string): Promise<string | 
   } catch {
     return undefined;
   }
+}
+
+async function loadEvidenceArtifacts(
+  store: ArtifactStore,
+  ids: readonly string[],
+): Promise<LoadedEvidenceArtifact[]> {
+  const loaded: LoadedEvidenceArtifact[] = [];
+  for (const id of ids) {
+    const artifact = await store.read(id);
+    if (!artifact) continue;
+    loaded.push({ id, record: artifact.record, body: artifact.body });
+  }
+  return loaded;
 }
 
 export class GitHubPullRequestPublishService {
@@ -291,6 +433,8 @@ export class GitHubPullRequestPublishService {
     const linkedIssues = input.linkedIssueNumbers ?? [];
     const testEvidence = input.testEvidence ?? [];
     const evidenceArtifactIds = input.evidenceArtifactIds ?? [];
+    const evidenceArtifacts = await loadEvidenceArtifacts(this.artifacts, evidenceArtifactIds);
+    const agentEvidence = validateAgentEvidence(input.runId, evidenceArtifacts);
     const template = await readPullRequestTemplate(this.workspaceRoot);
 
     const decision = await this.policy.evaluate({
@@ -332,6 +476,7 @@ export class GitHubPullRequestPublishService {
     if (decision.required_gates.includes("tests_required") && testEvidence.length === 0) {
       missingGates.push("tests_required");
     }
+    missingGates.push(...agentEvidence.missing, ...agentEvidence.blockers);
     if (missingGates.length > 0) {
       const approval = await this.findOrRequestApproval({
         project,
@@ -378,6 +523,7 @@ export class GitHubPullRequestPublishService {
           testEvidence,
           runId: input.runId,
           evidenceArtifactIds,
+          agentEvidence: agentEvidence.summaries,
         }),
         head: input.head,
         base: input.base ?? "main",
@@ -415,6 +561,7 @@ export class GitHubPullRequestPublishService {
         testEvidence,
         runId: input.runId,
         evidenceArtifactIds,
+        agentEvidence: agentEvidence.summaries,
         policy: decision,
       }),
     });

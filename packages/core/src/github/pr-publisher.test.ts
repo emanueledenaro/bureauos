@@ -66,9 +66,48 @@ describe("GitHubPullRequestPublishService", () => {
     return intake.project;
   }
 
+  async function writeReadyAgentEvidence(runId: string) {
+    const artifacts = new ArtifactStore(dir);
+    const qa = await artifacts.write({
+      type: "test-plan",
+      createdBy: "qa",
+      runId,
+      metadata: {
+        qa_readiness: "ready_for_review",
+        acceptance_pass_count: 2,
+        acceptance_fail_count: 0,
+        acceptance_unknown_count: 0,
+      },
+      body: "# QA Verification Report\n\nReady-for-review is allowed by QA evidence.",
+    });
+    const reviewer = await artifacts.write({
+      type: "pr-review",
+      createdBy: "reviewer",
+      runId,
+      metadata: {
+        recommendation: "approve_with_residual_risk",
+        finding_count: 0,
+      },
+      body: "# PR Review\n\nNo structured findings.",
+    });
+    const security = await artifacts.write({
+      type: "security-review",
+      createdBy: "security",
+      runId,
+      metadata: {
+        risk_level: "low",
+        finding_count: 0,
+        unresolved_high_risk_count: 0,
+      },
+      body: "# Security Review\n\nNo structured security findings.",
+    });
+    return { qa, reviewer, security };
+  }
+
   it("creates a GitHub pull request only when policy gates have evidence", async () => {
     const project = await prepareProject();
     const githubClient = new RecordingGitHubPrClient();
+    const agentEvidence = await writeReadyAgentEvidence("run_pr_1");
 
     const result = await new GitHubPullRequestPublishService(dir, {
       config: defaultConfig("agency"),
@@ -87,7 +126,11 @@ describe("GitHubPullRequestPublishService", () => {
       linkedIssueNumbers: [12],
       testEvidence: ["npm test -- booking passed"],
       runId: "run_pr_1",
-      evidenceArtifactIds: ["art_plan", "art_tests"],
+      evidenceArtifactIds: [
+        agentEvidence.qa.id,
+        agentEvidence.reviewer.id,
+        agentEvidence.security.id,
+      ],
       draft: false,
     });
 
@@ -106,7 +149,10 @@ describe("GitHubPullRequestPublishService", () => {
     expect(githubClient.created[0]?.input.body).toContain("GitHub: #12");
     expect(githubClient.created[0]?.input.body).toContain("BureauOS run: run_pr_1");
     expect(githubClient.created[0]?.input.body).toContain("npm test -- booking passed");
-    expect(githubClient.created[0]?.input.body).toContain("art_tests");
+    expect(githubClient.created[0]?.input.body).toContain(agentEvidence.qa.id);
+    expect(githubClient.created[0]?.input.body).toContain("QA:");
+    expect(githubClient.created[0]?.input.body).toContain("Reviewer:");
+    expect(githubClient.created[0]?.input.body).toContain("Security:");
     expect(githubClient.created[0]?.input.draft).toBe(true);
 
     const updatedProject = await new ProjectRegistry(dir).get(project.slug);
@@ -118,11 +164,71 @@ describe("GitHubPullRequestPublishService", () => {
     expect(written?.body).toContain("GitHub Pull Request Publish Report");
     expect(written?.body).toContain("SER-29");
     expect(written?.body).toContain("run_pr_1");
-    expect(written?.body).toContain("art_plan");
+    expect(written?.body).toContain(agentEvidence.security.id);
     expect(written?.body).toContain("Merge pull request");
 
     const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(audit).toContain("github.pr_publish.created");
+  });
+
+  it("blocks run-backed PR creation when agent verification artifacts are missing", async () => {
+    const project = await prepareProject();
+    const githubClient = new RecordingGitHubPrClient();
+
+    const result = await new GitHubPullRequestPublishService(dir, {
+      config: defaultConfig("agency"),
+      githubClient,
+    }).publish({
+      projectSlug: project.slug,
+      owner: "emanueledenaro",
+      repo: "pizzeria-aurora",
+      title: "Implement booking website",
+      head: "feature/booking-website",
+      linkedIssueNumbers: [12],
+      testEvidence: ["npm test passed"],
+      runId: "run_missing_agent_evidence",
+      evidenceArtifactIds: [],
+    });
+
+    expect(result.status).toBe("blocked");
+    expect(githubClient.created).toHaveLength(0);
+    expect(result.policy.reason).toContain("qa_verification_artifact");
+    expect(result.policy.reason).toContain("reviewer_artifact");
+  });
+
+  it("requires security review before PR promotion for sensitive evidence", async () => {
+    const project = await prepareProject();
+    const githubClient = new RecordingGitHubPrClient();
+    const artifacts = new ArtifactStore(dir);
+    const qaAndReviewer = await writeReadyAgentEvidence("run_sensitive_pr");
+    const diff = await artifacts.write({
+      type: "run-report",
+      createdBy: "development",
+      runId: "run_sensitive_pr",
+      metadata: {
+        changed_files: ["packages/core/src/auth/oauth-callback.ts"],
+      },
+      body: "# Development Runtime Execution\n\nChanged files: packages/core/src/auth/oauth-callback.ts",
+    });
+
+    const result = await new GitHubPullRequestPublishService(dir, {
+      config: defaultConfig("agency"),
+      githubClient,
+    }).publish({
+      projectSlug: project.slug,
+      owner: "emanueledenaro",
+      repo: "pizzeria-aurora",
+      title: "Implement auth callback",
+      head: "feature/auth-callback",
+      linkedIssueNumbers: [12],
+      testEvidence: ["npm test passed"],
+      runId: "run_sensitive_pr",
+      evidenceArtifactIds: [qaAndReviewer.qa.id, qaAndReviewer.reviewer.id, diff.id],
+    });
+
+    expect(result.status).toBe("blocked");
+    expect(githubClient.created).toHaveLength(0);
+    expect(result.policy.reason).toContain("security_review_artifact");
   });
 
   it("requests approval instead of opening a PR when required gates are missing", async () => {
