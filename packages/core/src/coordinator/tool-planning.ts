@@ -49,7 +49,7 @@ export const COORDINATOR_TOOL_DEFINITIONS: readonly CoordinatorToolDefinition[] 
     name: "create_intake",
     status: "implemented",
     mutates: true,
-    description: "Create the client, project, opportunity, artifacts, and approval gates.",
+    description: "Create the client, project, opportunity, and internal artifacts.",
   },
   {
     name: "list_clients",

@@ -22,7 +22,7 @@ describe("CoordinatorIntakeService", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  it("turns a raw owner message into company memory, project work, artifacts, and approvals", async () => {
+  it("turns a raw owner message into company memory, project work, and internal artifacts", async () => {
     const service = new CoordinatorIntakeService(dir, { config: defaultConfig("agency") });
 
     const result = await service.process({
@@ -58,9 +58,10 @@ describe("CoordinatorIntakeService", () => {
     expect(result.run.artifacts).toEqual(expect.arrayContaining(result.artifacts.map((a) => a.id)));
 
     const approvals = await new ApprovalRegistry(dir).listPending();
-    expect(approvals.map((approval) => approval.action)).toEqual(
-      expect.arrayContaining(["send_final_proposals", "accept_projects", "publish_public_content"]),
-    );
+    expect(result.approvals).toEqual([]);
+    expect(approvals).toEqual([]);
+    expect(result.summary).not.toContain("approval");
+    expect(result.summary).not.toContain("approvazione");
 
     const artifacts = await new ArtifactStore(dir).list({ run_id: result.run.id });
     expect(artifacts.length).toBeGreaterThanOrEqual(10);
@@ -101,9 +102,30 @@ describe("CoordinatorIntakeService", () => {
     expect(result.client.name).toBe("Pizzeria Amodeo");
     expect(result.project.name).toBe("Pizzeria Amodeo Website");
     expect(result.opportunity.title).toBe("Website for Pizzeria Amodeo");
-    expect(result.summary).toContain("Prepared intake for existing client Pizzeria Amodeo");
+    expect(result.summary).toContain("Ho preso in carico Pizzeria Amodeo");
 
     const listed = await clients.list();
     expect(listed.map((client) => client.name)).toEqual(["Pizzeria Amodeo"]);
+    await expect(new ApprovalRegistry(dir).listPending()).resolves.toEqual([]);
+  });
+
+  it("extracts inline client names from project-scope owner intake", async () => {
+    const service = new CoordinatorIntakeService(dir, { config: defaultConfig("agency") });
+
+    const result = await service.process({
+      message: "Cliente Test SER126 vuole un sito interno HTML e CSS per una landing di prova.",
+      source: "owner_chat",
+    });
+
+    expect(result.client.name).toBe("Test SER126");
+    expect(result.project.name).toBe("Test SER126 Website");
+    expect(result.opportunity.title).toBe("Website for Test SER126");
+    expect(result.summary).toContain("Ho aperto il lavoro per Test SER126");
+    expect(result.summary).not.toContain("New Client Lead");
+    expect(result.approvals).toEqual([]);
+
+    const listed = await new ClientRegistry(dir).list();
+    expect(listed.map((client) => client.name)).toEqual(["Test SER126"]);
+    await expect(new ApprovalRegistry(dir).listPending()).resolves.toEqual([]);
   });
 });

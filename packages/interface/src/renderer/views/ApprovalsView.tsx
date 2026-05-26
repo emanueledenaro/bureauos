@@ -305,7 +305,7 @@ export function ApprovalsView({
           ))
         ) : (
           <div className="rounded-md border border-border/70 bg-surface-subtle/30 px-4 py-6 text-center text-[12px] text-muted-foreground">
-            No pending approval gates.
+            No serious owner decisions pending.
           </div>
         )}
       </div>

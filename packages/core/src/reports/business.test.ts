@@ -36,13 +36,13 @@ describe("BusinessReportService", () => {
     expect(report.metrics.projects_total).toBe(1);
     expect(report.metrics.opportunities_total).toBe(1);
     expect(report.metrics.pipeline_value).toBe(4_500);
-    expect(report.metrics.approvals_pending).toBeGreaterThanOrEqual(3);
+    expect(report.metrics.approvals_pending).toBe(0);
     expect(report.portfolio).toHaveLength(1);
     expect(report.portfolio[0]).toMatchObject({
       project_name: "Pizzeria Aurora Booking Website",
       client_name: "Pizzeria Aurora",
       manager_agent_id: "project_manager",
-      risk: "approval",
+      risk: "watch",
     });
     expect(report.executive_report.type).toBe("executive-report");
     expect(report.cross_project_report.type).toBe("cross-project-executive-report");

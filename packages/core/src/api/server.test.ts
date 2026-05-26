@@ -162,7 +162,8 @@ describe("API server", () => {
     };
     expect(result.client.slug).toBe("pizzeria-aurora");
     expect(result.project.slug).toBe("pizzeria-aurora-booking-website");
-    expect(result.approvals.length).toBeGreaterThanOrEqual(3);
+    expect(result.approvals).toEqual([]);
+    await expect(new ApprovalRegistry(dir).listPending()).resolves.toEqual([]);
 
     const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(audit).toContain("coordinator.intake.completed");
@@ -172,22 +173,18 @@ describe("API server", () => {
   it("moves resolved approvals into history for the ElectronJS approvals page", async () => {
     server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
 
-    const intake = await fetch(`${server.url}/coordinator/intake`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        clientName: "Pizzeria Aurora",
-        message: "Ho parlato con una pizzeria: vuole sito con prenotazioni.",
-      }),
+    const first = await new ApprovalRegistry(dir).request({
+      action: "send_final_proposals",
+      actor: "supreme_coordinator",
+      target: "opp_aurora",
+      scope: "Send final proposal for Pizzeria Aurora",
+      riskLevel: "high",
     });
-    const created = (await intake.json()) as { approvals: Array<{ id: string }> };
-    const first = created.approvals[0];
-    expect(first?.id).toBeTruthy();
 
     const resolved = await fetch(`${server.url}/approvals/resolve`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ id: first?.id, status: "approved", reason: "Scope approved" }),
+      body: JSON.stringify({ id: first.id, status: "approved", reason: "Scope approved" }),
     });
     expect(resolved.status).toBe(200);
 
@@ -202,7 +199,7 @@ describe("API server", () => {
     expect(body).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: first?.id,
+          id: first.id,
           status: "approved",
           reason: "Scope approved",
           resolved_by: "owner",
@@ -213,7 +210,7 @@ describe("API server", () => {
     const pending = (await (await fetch(`${server.url}/approvals`)).json()) as Array<{
       id: string;
     }>;
-    expect(pending.map((approval) => approval.id)).not.toContain(first?.id);
+    expect(pending.map((approval) => approval.id)).not.toContain(first.id);
   });
 
   it("requires a decision note before approving high-risk approvals", async () => {

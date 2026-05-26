@@ -105,7 +105,10 @@ function HistoryColumn({ className }: { className?: string }) {
             <span className="text-foreground">⌘ + ↵</span> to send a message.
           </li>
           <li>Attach images, PDF, CSV, JSON, MD up to 10 MB.</li>
-          <li>The coordinator will create approvals before any external action.</li>
+          <li>
+            Approvals appear for money, deletion, legal, production, security, or final external
+            commitments.
+          </li>
         </ul>
       </BaseCard>
     </aside>

@@ -132,7 +132,7 @@ export function AgentsView({ state }: { state: DashboardState }) {
             <span className="truncate text-muted-foreground">
               {capability.required_approvals.length
                 ? capability.required_approvals.join(", ")
-                : "No approval gate"}
+                : "No owner decision"}
             </span>
           </div>
         ))}

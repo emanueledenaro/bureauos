@@ -42,6 +42,27 @@ describe("PolicyEngine", () => {
     expect(d.outcome).toBe("require_approval");
   });
 
+  it("allows routine internal work but gates serious-risk actions", async () => {
+    const engine = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
+
+    await expect(
+      engine.evaluate({ action: "create_internal_reports", actor: "supreme_coordinator" }),
+    ).resolves.toMatchObject({ allowed: true, outcome: "allow" });
+    await expect(
+      engine.evaluate({ action: "draft_proposals", actor: "supreme_coordinator" }),
+    ).resolves.toMatchObject({ allowed: true, outcome: "allow" });
+
+    await expect(
+      engine.evaluate({ action: "send_final_proposals", actor: "supreme_coordinator" }),
+    ).resolves.toMatchObject({ allowed: false, outcome: "require_approval" });
+    await expect(
+      engine.evaluate({ action: "change_billing", actor: "supreme_coordinator" }),
+    ).resolves.toMatchObject({ allowed: false, outcome: "escalate" });
+    await expect(
+      engine.evaluate({ action: "delete_data", actor: "supreme_coordinator" }),
+    ).resolves.toMatchObject({ allowed: false, outcome: "escalate" });
+  });
+
   it("escalates unknown actions for policy definition", async () => {
     const engine = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
     const d = await engine.evaluate({ action: "summon_dragons", actor: "supreme_coordinator" });

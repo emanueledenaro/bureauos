@@ -52,9 +52,8 @@ describe("CoordinatorChatService", () => {
     expect(result.coordinatorMessage.meta?.planningProvider).toMatchObject({
       reason: "no_valid_provider_route",
     });
-    expect(result.coordinatorMessage.text).toBe(
-      "Ho salvato il cliente Pizzeria Amodeo. Non ho creato progetti, opportunità o approvazioni perché mi hai chiesto solo l'anagrafica cliente.",
-    );
+    expect(result.coordinatorMessage.text).toBe("Ho salvato il cliente Pizzeria Amodeo.");
+    expect(result.coordinatorMessage.text).not.toContain("Non ho creato");
 
     const clients = await new ClientRegistry(dir).list();
     expect(clients.map((client) => client.name)).toEqual(["Pizzeria Amodeo"]);
@@ -390,7 +389,8 @@ describe("CoordinatorChatService", () => {
     expect(result.result?.project.name).toBe("Pizzeria Amodeo Booking Website");
     expect(result.result?.opportunity.title).toBe("Booking Website for Pizzeria Amodeo");
     expect(result.result?.artifacts.length).toBeGreaterThan(0);
-    expect(result.result?.approvals.length).toBeGreaterThan(0);
+    expect(result.result?.approvals).toEqual([]);
+    await expect(new ApprovalRegistry(dir).listPending()).resolves.toEqual([]);
     expect(result.coordinatorMessage.meta?.tool).toMatchObject({
       name: "create_intake",
       source: "safety_fallback",

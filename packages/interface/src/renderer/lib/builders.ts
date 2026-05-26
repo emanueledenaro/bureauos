@@ -383,7 +383,7 @@ export function buildGoalItems(state: DashboardState): GoalItem[] {
           ? "Generate the next draft-only growth asset from current positioning."
           : "Complete missing growth memory before campaign work.",
       route: "growth",
-      signals: [`${growthArtifacts} growth artifacts`, `${state.approvals.length} approval gates`],
+      signals: [`${growthArtifacts} growth artifacts`, `${state.approvals.length} owner decisions`],
     },
     {
       id: "autonomy-readiness",

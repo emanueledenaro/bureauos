@@ -376,7 +376,9 @@ const handleIntake: Handler = async (args) => {
   process.stdout.write(`opportunity: ${result.opportunity.id}\n`);
   process.stdout.write(`run:         ${result.run.id}\n`);
   process.stdout.write(`artifacts:   ${result.artifacts.map((a) => a.id).join(", ")}\n`);
-  process.stdout.write(`approvals:   ${result.approvals.map((a) => a.id).join(", ")}\n`);
+  if (result.approvals.length > 0) {
+    process.stdout.write(`approvals:   ${result.approvals.map((a) => a.id).join(", ")}\n`);
+  }
   return 0;
 };
 

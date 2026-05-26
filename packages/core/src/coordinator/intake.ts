@@ -9,11 +9,7 @@ import { appendDailyNote } from "../memory/daily.js";
 import { appendDecision } from "../memory/decisions.js";
 import { workspacePaths } from "../paths.js";
 import { PolicyEngine } from "../policy/engine.js";
-import {
-  ApprovalRegistry,
-  type ApprovalRecord,
-  type ApprovalRiskLevel,
-} from "../registries/approval.js";
+import { ApprovalRegistry, type ApprovalRecord } from "../registries/approval.js";
 import { ClientRegistry, type ClientRecord } from "../registries/client.js";
 import { OpportunityRegistry, type OpportunityRecord } from "../registries/opportunity.js";
 import { ProjectRegistry, type ProjectRecord } from "../registries/project.js";
@@ -93,6 +89,9 @@ function titleCase(input: string): string {
     .trim()
     .split(/\s+/)
     .map((part) => {
+      if (/[0-9]/.test(part) || (part === part.toUpperCase() && /[A-ZÀ-Ý]/.test(part))) {
+        return part;
+      }
       const [first = "", ...rest] = part;
       return `${first.toUpperCase()}${rest.join("").toLowerCase()}`;
     })
@@ -111,8 +110,8 @@ function cleanBusinessName(input: string): string {
     /\s+(?:puoi|potresti|riesci)\b[\s\S]*$/i,
     /\s+(?:salvalo|salvala|salvali|salvale|salvare|registralo|registrala|registrare|memorizzalo|memorizzala|memorizzare|aggiungilo|aggiungila|aggiungere)\b[\s\S]*$/i,
     /\s+(?:come|da)\s+(?:cliente|client|lead)\b[\s\S]*$/i,
-    /\s+(?:vuole|vogliono|ha|hanno|chiede|chiedono|mi\s+ha|mi\s+hanno)\b[\s\S]*$/i,
-    /\s+(?:che|e)\s+(?:vuole|vogliono|ha|hanno|chiede|chiedono|mi\s+ha|mi\s+hanno)\b[\s\S]*$/i,
+    /\s+(?:vuole|vorrebbe|vogliono|vorrebbero|serve|servono|ha|hanno|chiede|chiedono|richiede|richiedono|mi\s+ha|mi\s+hanno)\b[\s\S]*$/i,
+    /\s+(?:che|e)\s+(?:vuole|vorrebbe|vogliono|vorrebbero|serve|servono|ha|hanno|chiede|chiedono|richiede|richiedono|mi\s+ha|mi\s+hanno)\b[\s\S]*$/i,
   ];
   for (const pattern of stopPatterns) {
     cleaned = cleaned.replace(pattern, "").trim();
@@ -183,6 +182,8 @@ function extractNamedBusiness(message: string): string | undefined {
     /\b(?:salva|salvare|salvami|registra|registrare|aggiungi|aggiungere|memorizza|memorizzare)\s+(?:il\s+|la\s+|lo\s+|un\s+|una\s+)?(?:cliente|client|azienda|business|brand)?\s*["']?([A-Za-z0-9À-ÿ&'. -]{2,60})["']?/i,
     /\b(?:ho parlato con|parlato con|cliente incontrato)\s+(?:la\s+|il\s+|lo\s+|l')?([A-ZÀ-Ý][A-Za-z0-9À-ÿ&'. -]{2,60}?)(?=[:;,]|\s+(?:vuole|vogliono|mi|ha|hanno|chiede|chiedono)\b|$)/,
     /\b(?:cliente|client|azienda|business|brand|ristorante|pizzeria|salone|studio)\s+(?:si chiama|chiamata|chiamato|called|named)\s+["']?([A-Za-z0-9À-ÿ&'. -]{2,60})["']?/i,
+    /\b(?:[Cc]liente|[Cc]lient|[Aa]zienda|[Bb]usiness|[Bb]rand)\s+(?!(?:vuole|vorrebbe|vogliono|vorrebbero|serve|servono|ha|hanno|chiede|chiedono|richiede|richiedono)\b)([A-ZÀ-Ý][A-Za-z0-9À-ÿ&'. -]{1,60}?)(?=[:;,]|\s+(?:vuole|vorrebbe|vogliono|vorrebbero|mi|ha|hanno|chiede|chiedono|richiede|richiedono|serve|servono)\b|$)/,
+    /\b((?:pizzeria|ristorante|salone|studio)\s+(?!(?:vuole|vorrebbe|vogliono|vorrebbero|serve|servono|ha|hanno|chiede|chiedono|richiede|richiedono)\b)[A-Za-z0-9À-ÿ&'. -]{2,60}?)(?=[:;,]|\s+(?:vuole|vorrebbe|vogliono|vorrebbero|mi|ha|hanno|chiede|chiedono|richiede|richiedono|serve|servono)\b|$)/i,
     /\b(?:cliente|client|azienda|business|brand|ristorante|pizzeria|salone|studio)\s+["']([A-Za-z0-9À-ÿ&'. -]{2,60})["']/i,
     /\b(?:per|for)\s+["']([A-Za-z0-9À-ÿ&'. -]{2,60})["']/i,
   ];
@@ -612,54 +613,6 @@ Generate similar qualified leads for software projects once the owner approves o
   ];
 }
 
-function approvalRequests(args: {
-  classification: IntakeClassification;
-  project: ProjectRecord;
-  opportunity: OpportunityRecord;
-}): Array<{
-  action: string;
-  target: string;
-  scope: string;
-  riskLevel: ApprovalRiskLevel;
-  body: string;
-}> {
-  const { classification, project, opportunity } = args;
-  return [
-    {
-      action: "send_final_proposals",
-      target: opportunity.id,
-      scope: `Send final proposal for ${opportunity.title}`,
-      riskLevel: "high",
-      body: "The coordinator can draft the proposal, but final send requires owner approval.",
-    },
-    {
-      action: "accept_projects",
-      target: project.id,
-      scope: `Accept client scope for ${project.name}`,
-      riskLevel: classification.risk_level === "high" ? "high" : "medium",
-      body: "Project acceptance commits delivery capacity and must be approved by the owner.",
-    },
-    {
-      action: "publish_public_content",
-      target: project.id,
-      scope: `Publish public content about ${project.name}`,
-      riskLevel: "high",
-      body: "Publishing public proof requires client permission and owner approval.",
-    },
-    ...(classification.requested_growth
-      ? [
-          {
-            action: "launch_ad_campaigns",
-            target: project.id,
-            scope: `Launch ads for ${project.name}`,
-            riskLevel: "high" as const,
-            body: "Paid advertising requires owner approval for campaign, claims, and budget.",
-          },
-        ]
-      : []),
-  ];
-}
-
 export class CoordinatorIntakeService {
   private readonly config: BureauConfig;
   private readonly clients: ClientRegistry;
@@ -766,20 +719,6 @@ export class CoordinatorIntakeService {
     );
 
     const approvals: ApprovalRecord[] = [];
-    for (const request of approvalRequests({ classification, project, opportunity })) {
-      approvals.push(
-        await this.approvals.request({
-          action: request.action,
-          actor: "supreme_coordinator",
-          target: request.target,
-          scope: request.scope,
-          runId: run.id,
-          riskLevel: request.riskLevel,
-          oneOff: true,
-          body: request.body,
-        }),
-      );
-    }
 
     const paths = workspacePaths(this.workspaceRoot);
     const now = new Date().toISOString();
@@ -833,12 +772,14 @@ export class CoordinatorIntakeService {
     });
 
     return {
-      summary: `${clientBeforeIntake ? "Prepared intake for existing client" : "Created client"} ${client.name}, project ${project.name}, opportunity ${opportunity.title}, ${artifacts.length} artifacts, and ${approvals.length} approval gates.`,
+      summary: `${
+        clientBeforeIntake ? "Ho preso in carico" : "Ho aperto il lavoro per"
+      } ${client.name}: progetto ${project.name}, opportunità ${opportunity.title}, ${artifacts.length} artifact interni pronti.`,
       next_actions: [
-        "Review pending approvals before any external commitment.",
-        "Use generated proposal and pricing briefs as draft-only assets.",
-        "Provision the repository only after owner approval or project policy.",
-        "Continue delivery through project manager and specialist agents.",
+        "Avvio la delivery interna con project manager e agenti specialisti.",
+        "Uso proposta, pricing e contenuti come bozze operative finché non serve un invio esterno.",
+        "Ti porto in approvazione solo soldi, cancellazioni, legale, produzione, segreti o impegni finali verso cliente/pubblico.",
+        "Tengo stato, artifact e decisioni tracciati nel kernel.",
       ],
       classification,
       client,
@@ -880,14 +821,14 @@ export class CoordinatorIntakeService {
     });
 
     const summary = existed
-      ? `Il cliente ${client.name} era già salvato. Ho aggiornato solo l'anagrafica, senza creare progetti, opportunità o approvazioni.`
-      : `Ho salvato il cliente ${client.name}. Non ho creato progetti, opportunità o approvazioni perché mi hai chiesto solo l'anagrafica cliente.`;
+      ? `Cliente ${client.name} già presente. Anagrafica aggiornata.`
+      : `Ho salvato il cliente ${client.name}.`;
 
     return {
       summary,
       next_actions: [
-        "Aggiungi uno scope operativo solo quando vuoi aprire progetto o opportunità.",
-        "Mantieni separata l'anagrafica cliente dalla delivery finché non esiste una richiesta concreta.",
+        "Quando mi dai uno scope operativo, apro progetto/opportunità e preparo i materiali interni.",
+        "Tengo l'anagrafica separata dalla delivery finché non c'è una richiesta concreta.",
       ],
       client,
       created: !existed,
@@ -938,7 +879,7 @@ export class CoordinatorIntakeService {
 
 ## Coordinator Usage
 
-Treat this file as owner-provided client/project context. It can inform product scope, design direction, compliance review, pricing, proposal drafts, and delivery planning. External use still requires the normal approval gates.
+Treat this file as owner-provided client/project context. It can inform product scope, design direction, compliance review, pricing, proposal drafts, and delivery planning. External use still requires owner approval when policy classifies the action as serious risk.
 `;
 
     return this.artifacts.write({
