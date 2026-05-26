@@ -18,6 +18,7 @@
     "lint": "eslint .",
     "format": "prettier --check .",
     "format:write": "prettier --write .",
+    "private-context:check": "bash scripts/check-private-context.sh",
     "clean": "pnpm -r exec rm -rf dist node_modules .turbo"
   },
   "devDependencies": {
