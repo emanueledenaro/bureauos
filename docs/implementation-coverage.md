@@ -129,6 +129,7 @@ Every major capability described in the docs must become one of:
 | GitHub issue draft generation | `github draft-issues`, `/github/issue-drafts`, Electron project cards | implemented |
 | GitHub issue creation from drafts | `github create-issues`, `/github/create-issues`, Electron project cards | implemented |
 | GitHub PR creation | `GitHubPullRequestPublishService`, `github create-pr`, `/github/create-pr`, `github-pr-publish-report`, policy gates for linked issue and test evidence | partial |
+| Development branch creation | `DevelopmentBranchService`, deterministic `bureauos/...` branch naming, policy-gated `create_branches`, conflict fallback/blocking, and audit events | partial |
 | Linear work-item MCP | `linear` capability registry boundary and `CapabilityUseService` policy mappings for read/create/comment/update issue actions; runtime MCP calls are provided by the host assistant/client | partial |
 | Linear issue ingestion | `LinearIssueIngestionService`, `linearIssueToRunScope`, `project-dispatch-packet` artifacts, and Linear read capability checks | implemented |
 | OpenAI Codex OAuth provider | separate `openai-codex` provider, browser PKCE OAuth, ChatGPT Codex backend `generateText`/SSE `stream`, persisted token refresh, Codex-compatible `instructions`/`store=false` request body, no API fallback | implemented |

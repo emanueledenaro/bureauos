@@ -301,6 +301,20 @@ export type {
 } from "./linear/issue-ingestion.js";
 export type { LinearIssueRunScope, LinearIssueScopeInput } from "./linear/work-scope.js";
 
+// Development execution helpers
+export {
+  DevelopmentBranchService,
+  branchNameForDevelopmentRun,
+} from "./execution/development-branch.js";
+export type {
+  DevelopmentBranchClient,
+  DevelopmentBranchCreateRequest,
+  DevelopmentBranchInput,
+  DevelopmentBranchResult,
+  DevelopmentBranchSafety,
+  DevelopmentBranchServiceDeps,
+} from "./execution/development-branch.js";
+
 // Provider auth
 export {
   authorizeOpenAICodexOAuth,
