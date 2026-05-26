@@ -85,6 +85,31 @@ export interface WorkstreamDeliverySignal {
   pullRequests: WorkstreamPullRequestLink[];
 }
 
+export type LinkedWorkState = "linked" | "missing" | "stale";
+
+export interface LinkedWorkItem {
+  id: string;
+  runId: string;
+  runType: string;
+  runScope: string;
+  runStatus: string;
+  runTone: Tone;
+  issueLabel: string;
+  issueUrl?: string;
+  issueState: LinkedWorkState;
+  issueDetail: string;
+  pullRequests: WorkstreamPullRequestLink[];
+  prState: LinkedWorkState;
+  prDetail: string;
+  repository: string;
+  branch: string;
+  commit: string;
+  checks: number;
+  failingChecks: number;
+  staleCount: number;
+  created?: string;
+}
+
 export interface PortfolioLane {
   key: string;
   label: string;

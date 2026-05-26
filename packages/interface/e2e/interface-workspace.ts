@@ -118,6 +118,74 @@ async function seedWorkspace(
     clientId: client.id,
     projectId: project.id,
   });
+  const linkedRun = await runs.start({
+    type: "feature",
+    triggerType: "external_signal",
+    triggerSource: "linear://issue/SER-89",
+    sourceWorkItem: {
+      type: "linear_issue",
+      identifier: "SER-89",
+      url: "https://linear.app/serium/issue/SER-89/build-linear-and-github-linked-work-dashboard",
+    },
+    scope: "Build linked work dashboard.",
+    clientId: client.id,
+    projectId: project.id,
+  });
+  const linkedSignal = await artifacts.write({
+    type: "github-signal-report",
+    createdBy: "github",
+    runId: linkedRun.id,
+    clientId: client.id,
+    projectId: project.id,
+    metadata: {
+      repository: "acme-labs/website",
+      pull_request_refs: ["#42 open Build linked work dashboard"],
+      pull_request_urls: ["https://github.com/acme-labs/website/pull/42"],
+      pull_requests_count: 1,
+      checks_count: 4,
+      failing_checks_count: 0,
+      stale_issues_count: 0,
+      stale_pull_requests_count: 0,
+      branch_name: "codex/ser-89-linked-work-dashboard",
+      head_sha: "abc123def4567890",
+    },
+    body: "# GitHub Signal\n\nLinked work dashboard PR signal.",
+  });
+  await runs.attachArtifacts(linkedRun.id, [linkedSignal.id]);
+  const staleRun = await runs.start({
+    type: "bug",
+    triggerType: "external_signal",
+    triggerSource: "linear://issue/SER-90",
+    sourceWorkItem: {
+      type: "linear_issue",
+      identifier: "SER-90",
+      url: "https://linear.app/serium/issue/SER-90/add-local-notifications-for-approval-required-work",
+    },
+    scope: "Triage stale GitHub work.",
+    clientId: client.id,
+    projectId: project.id,
+  });
+  const staleSignal = await artifacts.write({
+    type: "github-signal-report",
+    createdBy: "github",
+    runId: staleRun.id,
+    clientId: client.id,
+    projectId: project.id,
+    metadata: {
+      repository: "acme-labs/website",
+      pull_request_refs: ["#7 open Fix stale notification branch"],
+      pull_request_urls: ["https://github.com/acme-labs/website/pull/7"],
+      pull_requests_count: 1,
+      checks_count: 2,
+      failing_checks_count: 1,
+      stale_issues_count: 1,
+      stale_pull_requests_count: 1,
+      branch_name: "codex/ser-90-local-alerts",
+      head_sha: "def456abc1237890",
+    },
+    body: "# GitHub Signal\n\nStale work signal.",
+  });
+  await runs.attachArtifacts(staleRun.id, [staleSignal.id]);
   await capabilities.check({
     agent: "development",
     capabilityId: "codex",

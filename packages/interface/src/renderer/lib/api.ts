@@ -294,6 +294,14 @@ export interface RunRecord {
   source_work_item_url?: string;
   linear_identifier?: string;
   linear_url?: string;
+  branch_name?: string;
+  git_branch?: string;
+  commit_sha?: string;
+  head_sha?: string;
+  pull_request_url?: string;
+  github_pr_url?: string;
+  pr_url?: string;
+  pull_request_urls?: string[];
 }
 export interface AuditEvent {
   timestamp: string;
@@ -359,12 +367,18 @@ export interface ArtifactRecord {
   github_action?: string;
   pull_request_refs?: string[];
   pull_request_urls?: string[];
+  pull_request_check_summary?: string[];
   issues_count?: number;
   pull_requests_count?: number;
   checks_count?: number;
   failing_checks_count?: number;
+  failing_check_refs?: string[];
   stale_issues_count?: number;
   stale_pull_requests_count?: number;
+  branch_name?: string;
+  git_branch?: string;
+  commit_sha?: string;
+  head_sha?: string;
   generated_at?: string;
   memory_ready?: boolean;
   missing_sections?: string[];

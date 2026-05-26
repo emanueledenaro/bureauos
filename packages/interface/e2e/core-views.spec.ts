@@ -181,6 +181,36 @@ test.describe("Operating Room agent layer detail", () => {
   });
 });
 
+test.describe("Operating Room linked work dashboard", () => {
+  let workspace: InterfaceWorkspace;
+
+  test.beforeAll(async () => {
+    workspace = await createInterfaceWorkspace("seeded");
+  });
+
+  test.afterAll(async () => {
+    await workspace.close();
+  });
+
+  test("renders Linear run PR and stale GitHub signal links without merge or deploy actions", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openWorkspace(page, workspace);
+    await openDesktopView(page, "Delivery");
+
+    const main = page.locator("main");
+    await expect(main).toContainText("Linked Work Dashboard");
+    await expect(main).toContainText("SER-89");
+    await expect(main).toContainText("#42");
+    await expect(main).toContainText("codex/ser-89-linked-work-dashboard");
+    await expect(main).toContainText("SER-90");
+    await expect(main).toContainText("Stale 2");
+    await expect(main).not.toContainText(/\bMerge\b|\bDeploy\b/);
+    await expectNoHorizontalOverflow(page);
+  });
+});
+
 async function openWorkspace(page: Page, workspace: InterfaceWorkspace): Promise<void> {
   await page.goto(`/?apiBase=${encodeURIComponent(workspace.url)}`);
   await expect(page).toHaveTitle(/BureauOS - Operating Room/);
