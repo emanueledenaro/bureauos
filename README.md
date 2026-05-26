@@ -31,6 +31,9 @@ node /path/to/bureauos/packages/cli/dist/bin/bureau.js status
 node /path/to/bureauos/packages/cli/dist/bin/bureau.js audit tail -n 10
 ```
 
+For a guided safe local demo, see
+[`docs/getting-started.md`](./docs/getting-started.md).
+
 ### Owner Interface (ElectronJS)
 
 ```bash
