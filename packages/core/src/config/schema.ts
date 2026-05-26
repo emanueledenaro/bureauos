@@ -74,12 +74,35 @@ const OrganizationConfig = z.object({
   name: z.string().min(1).default("Untitled BureauOS Workspace"),
 });
 
+const AutoDetectConfig = z
+  .object({
+    git: z.boolean().default(true),
+    github_remote: z.boolean().default(true),
+    package_manager: z.boolean().default(true),
+    test_commands: z.boolean().default(true),
+    codex_capabilities: z.boolean().default(true),
+    mcp_connectors: z.boolean().default(true),
+  })
+  .default({});
+
 const SetupConfig = z
   .object({
     preset: Preset.default("freelancer"),
     mode: AutonomyMode.default("safe_draft"),
     generated_by: z.string().default("bureau init"),
     advanced_config_required: z.boolean().default(false),
+    auto_detect: AutoDetectConfig,
+  })
+  .default({});
+
+const InterfaceNotificationsConfig = z
+  .object({
+    approval_needed: z.boolean().default(true),
+    high_risk_blocker: z.boolean().default(true),
+    client_issue: z.boolean().default(true),
+    revenue_opportunity: z.boolean().default(true),
+    daily_report: z.boolean().default(true),
+    low_value_activity: z.boolean().default(false),
   })
   .default({});
 
@@ -88,6 +111,8 @@ const InterfaceConfig = z
     enabled: z.boolean().default(true),
     mode: z.enum(["local_dashboard", "headless"]).default("local_dashboard"),
     mobile_first: z.boolean().default(true),
+    default_views: z.array(z.string()).default([]),
+    notifications: InterfaceNotificationsConfig,
   })
   .default({});
 
@@ -107,6 +132,17 @@ const SupremeCoordinatorConfig = z
     model: z.string().default("gpt-5.5"),
     user_facing: z.boolean().default(true),
     always_on: z.boolean().default(true),
+    memory: z
+      .object({
+        scope: z.enum(["global", "workspace"]).default("global"),
+        root: z.string().default(".bureauos/memory/ROOT.md"),
+        company: z.string().default(".bureauos/memory/COMPANY.md"),
+        daily_notes: z.string().default(".bureauos/memory/memory"),
+        decisions: z.string().default(".bureauos/memory/DECISIONS.md"),
+        archive: z.string().default(".bureauos/memory/archive"),
+        search_index: z.string().default(".bureauos/memory/indexes/memory.sqlite"),
+      })
+      .default({}),
     required_model_capabilities: z.array(z.string()).default([]),
     max_budget_tier: ProviderBudgetTier.optional(),
     prefer_low_cost: z.boolean().default(false),
@@ -172,6 +208,30 @@ const MemoryConfig = z
     retain_raw_history: z.boolean().default(true),
     promote_daily_notes_to_durable_memory: z.boolean().default(true),
     root_memory_always_loaded: z.boolean().default(true),
+    growth_memory: z
+      .object({
+        brand: z.string().default(".bureauos/memory/BRAND.md"),
+        offers: z.string().default(".bureauos/memory/OFFERS.md"),
+        channels: z.string().default(".bureauos/memory/CHANNELS.md"),
+        leads: z.string().default(".bureauos/memory/LEADS.md"),
+        campaigns: z.string().default(".bureauos/memory/CAMPAIGNS.md"),
+        conversion_notes: z.string().default(".bureauos/memory/CONVERSION_NOTES.md"),
+        pricing: z.string().default(".bureauos/memory/PRICING.md"),
+        proposals: z.string().default(".bureauos/memory/PROPOSALS.md"),
+      })
+      .default({}),
+    client_intelligence: z
+      .object({
+        clients_root: z.string().default(".bureauos/memory/clients"),
+        profile: z.string().default("CLIENT.md"),
+        revenue: z.string().default("REVENUE.md"),
+        relationship: z.string().default("RELATIONSHIP.md"),
+        permissions: z.string().default("PERMISSIONS.md"),
+        communication: z.string().default("COMMUNICATION.md"),
+        opportunities: z.string().default("OPPORTUNITIES.md"),
+        projects: z.string().default("PROJECTS.md"),
+      })
+      .default({}),
   })
   .default({});
 
@@ -198,8 +258,45 @@ const CapabilityConfig = z
     audit_required: z.boolean().default(true),
     status: CapabilityStatus.default("configured"),
     connector: z.string().optional(),
+    high_risk_actions_require_policy: z.boolean().default(false),
   })
   .passthrough();
+
+const BusinessConfig = z
+  .object({
+    primary_objective: z.string().default("sustainable_owner_profit"),
+    optimize_for: z.array(z.string()).default([]),
+    metrics: z
+      .object({
+        track_pipeline_value: z.boolean().default(true),
+        track_expected_margin: z.boolean().default(true),
+        track_delivery_capacity: z.boolean().default(true),
+        track_payment_status: z.boolean().default(false),
+        track_client_retention_risk: z.boolean().default(true),
+        track_marketing_performance: z.boolean().default(true),
+        track_client_lifetime_value: z.boolean().default(true),
+        track_client_profitability: z.boolean().default(true),
+        track_client_value_score: z.boolean().default(true),
+      })
+      .default({}),
+    policies: z
+      .object({
+        minimum_margin_required: z.boolean().default(true),
+        require_delivery_review_before_proposal: z.boolean().default(true),
+        require_compliance_review_before_external_commitment: z.boolean().default(true),
+        require_owner_approval_for_price_commitment: z.boolean().default(true),
+      })
+      .default({}),
+    require_owner_approval_for: z.array(z.string()).default([]),
+  })
+  .default({});
+
+const OpenSourceConfig = z
+  .object({
+    goal: z.string().default("widely_adopted_owner_operator_agency_os"),
+    optimize_for: z.array(z.string()).default([]),
+  })
+  .default({});
 
 const TriggerConfig = z
   .object({
@@ -231,22 +328,26 @@ const TriggerConfig = z
   })
   .default({});
 
-export const BureauConfigSchema = z.object({
-  organization: OrganizationConfig.default({ name: "Untitled BureauOS Workspace" }),
-  setup: SetupConfig,
-  interface: InterfaceConfig,
-  supreme_coordinator: SupremeCoordinatorConfig,
-  agents: z.record(z.string(), AgentConfig).default({}),
-  autonomy: AutonomyConfig,
-  growth_autonomy: GrowthAutonomyConfig,
-  limits: LimitsConfig,
-  memory: MemoryConfig,
-  github: GitHubConfig,
-  provider: z.record(z.string(), ProviderConfig).default({}),
-  enabled_providers: z.array(z.string()).optional(),
-  disabled_providers: z.array(z.string()).default([]),
-  capabilities: z.record(z.string(), CapabilityConfig).default({}),
-  triggers: TriggerConfig,
-});
+export const BureauConfigSchema = z
+  .object({
+    organization: OrganizationConfig.default({ name: "Untitled BureauOS Workspace" }),
+    setup: SetupConfig,
+    interface: InterfaceConfig,
+    supreme_coordinator: SupremeCoordinatorConfig,
+    agents: z.record(z.string(), AgentConfig).default({}),
+    autonomy: AutonomyConfig,
+    growth_autonomy: GrowthAutonomyConfig,
+    business: BusinessConfig,
+    open_source: OpenSourceConfig,
+    limits: LimitsConfig,
+    memory: MemoryConfig,
+    github: GitHubConfig,
+    provider: z.record(z.string(), ProviderConfig).default({}),
+    enabled_providers: z.array(z.string()).optional(),
+    disabled_providers: z.array(z.string()).default([]),
+    capabilities: z.record(z.string(), CapabilityConfig).default({}),
+    triggers: TriggerConfig,
+  })
+  .strict();
 
 export type BureauConfig = z.infer<typeof BureauConfigSchema>;

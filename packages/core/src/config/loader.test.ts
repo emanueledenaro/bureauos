@@ -1,6 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { defaultConfig, loadConfig, ConfigError } from "./loader.js";
 
@@ -145,6 +146,63 @@ describe("loadConfig", () => {
     expect(config.agents.content?.max_budget_tier).toBe("low");
     expect(config.agents.content?.prefer_low_cost).toBe(true);
     expect(config.agents.content?.required_model_capabilities).toEqual(["chat"]);
+  });
+
+  it("loads the documented example config with typed secondary sections", async () => {
+    const example = fileURLToPath(
+      new URL("../../../../examples/bureauos.example.yaml", import.meta.url),
+    );
+
+    const config = await loadConfig(example);
+
+    expect(config.setup.auto_detect.github_remote).toBe(true);
+    expect(config.interface.default_views).toContain("coordinator_chat");
+    expect(config.interface.notifications.approval_needed).toBe(true);
+    expect(config.supreme_coordinator.memory.search_index).toBe(
+      ".bureauos/memory/indexes/memory.sqlite",
+    );
+    expect(config.triggers.thresholds.blocked_issue_hours).toBe(24);
+    expect(config.growth_autonomy.require_action_sensitive_memory_for_approval).toBe(true);
+    expect(config.business.primary_objective).toBe("sustainable_owner_profit");
+    expect(config.business.metrics.track_client_lifetime_value).toBe(true);
+    expect(config.business.policies.require_compliance_review_before_external_commitment).toBe(
+      true,
+    );
+    expect(config.business.require_owner_approval_for).toContain("production_deploy");
+    expect(config.open_source.optimize_for).toContain("model_agnostic_integrations");
+    expect(config.memory.growth_memory.brand).toBe(".bureauos/memory/BRAND.md");
+    expect(config.memory.client_intelligence.profile).toBe("CLIENT.md");
+    expect(config.capabilities.mcp?.high_risk_actions_require_policy).toBe(true);
+    expect(config.provider.openai?.models["gpt-5.5"]?.budget_tier).toBe("high");
+  });
+
+  it("rejects unknown top-level fields instead of silently dropping them", async () => {
+    const path = join(dir, "bureauos.yaml");
+    await writeFile(
+      path,
+      ["organization:", '  name: "Acme"', "unknown_policy_section:", "  enabled: true"].join("\n"),
+      "utf8",
+    );
+
+    await expect(loadConfig(path)).rejects.toBeInstanceOf(ConfigError);
+  });
+
+  it("rejects malformed secondary config fields", async () => {
+    const path = join(dir, "bureauos.yaml");
+    await writeFile(
+      path,
+      [
+        "business:",
+        "  metrics:",
+        '    track_pipeline_value: "yes"',
+        "triggers:",
+        "  thresholds:",
+        "    stale_pr_hours: 48",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await expect(loadConfig(path)).rejects.toBeInstanceOf(ConfigError);
   });
 });
 
