@@ -19,6 +19,7 @@
     "format": "prettier --check .",
     "format:write": "prettier --write .",
     "private-context:check": "bash scripts/check-private-context.sh",
+    "qa:coordinator": "pnpm --filter @bureauos/core build && node scripts/qa-coordinator-prompt-matrix.mjs",
     "security:scan": "pnpm audit --audit-level high",
     "release:check": "bash scripts/release-check.sh",
     "clean": "pnpm -r exec rm -rf dist node_modules .turbo"
