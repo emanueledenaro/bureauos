@@ -32,6 +32,8 @@ messages. Keep public claims conservative and aligned with
   instead of returning an operating-status policy report.
 - Low-context Coordinator identity prompts such as `ciao chi sei?` now return a
   concise role answer instead of exposing provider or memory fallback mechanics.
+- Client-only Coordinator save requests now persist only the client record and
+  keep trailing Italian request text out of the client name.
 - Coordinator provider calls now time out into a local-memory fallback instead
   of leaving the Operating Room chat stuck in a sending state.
 

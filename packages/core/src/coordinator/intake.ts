@@ -58,6 +58,13 @@ export interface CoordinatorIntakeResult {
   approvals: ApprovalRecord[];
 }
 
+export interface CoordinatorClientSaveResult {
+  summary: string;
+  next_actions: string[];
+  client: ClientRecord;
+  created: boolean;
+}
+
 export interface CoordinatorIntakeDeps {
   config?: BureauConfig;
   clients?: ClientRegistry;
@@ -86,6 +93,28 @@ function titleCase(input: string): string {
       return `${first.toUpperCase()}${rest.join("").toLowerCase()}`;
     })
     .join(" ");
+}
+
+function cleanBusinessName(input: string): string {
+  let cleaned = input
+    .trim()
+    .replace(/^["'“”]+|["'“”]+$/g, "")
+    .replace(/[,.!?;:]+$/g, "")
+    .trim();
+
+  const stopPatterns = [
+    /\s+(?:lo|la|li|le)\s+(?:puoi|potresti|riesci)\b[\s\S]*$/i,
+    /\s+(?:puoi|potresti|riesci)\b[\s\S]*$/i,
+    /\s+(?:salvalo|salvala|salvali|salvale|salvare|registralo|registrala|registrare|memorizzalo|memorizzala|memorizzare|aggiungilo|aggiungila|aggiungere)\b[\s\S]*$/i,
+    /\s+(?:come|da)\s+(?:cliente|client|lead)\b[\s\S]*$/i,
+    /\s+(?:vuole|vogliono|ha|hanno|chiede|chiedono|mi\s+ha|mi\s+hanno)\b[\s\S]*$/i,
+    /\s+(?:che|e)\s+(?:vuole|vogliono|ha|hanno|chiede|chiedono|mi\s+ha|mi\s+hanno)\b[\s\S]*$/i,
+  ];
+  for (const pattern of stopPatterns) {
+    cleaned = cleaned.replace(pattern, "").trim();
+  }
+
+  return cleaned.replace(/[,.!?;:]+$/g, "").trim();
 }
 
 function sanitizeAttachmentName(input: string): string {
@@ -123,6 +152,7 @@ function attachmentSummary(attachments: readonly CoordinatorAttachmentInput[]): 
 
 function extractNamedBusiness(message: string): string | undefined {
   const patterns = [
+    /\b(?:salva|salvare|salvami|registra|registrare|aggiungi|aggiungere|memorizza|memorizzare)\s+(?:il\s+|la\s+|lo\s+|un\s+|una\s+)?(?:cliente|client|azienda|business|brand)?\s*["']?([A-Za-z0-9À-ÿ&'. -]{2,60})["']?/i,
     /\b(?:ho parlato con|parlato con|cliente incontrato)\s+(?:la\s+|il\s+|lo\s+|l')?([A-ZÀ-Ý][A-Za-z0-9À-ÿ&'. -]{2,60}?)(?=[:;,]|\s+(?:vuole|vogliono|mi|ha|hanno|chiede|chiedono)\b|$)/,
     /\b(?:cliente|client|azienda|business|brand|ristorante|pizzeria|salone|studio)\s+(?:si chiama|chiamata|chiamato|called|named)\s+["']?([A-Za-z0-9À-ÿ&'. -]{2,60})["']?/i,
     /\b(?:cliente|client|azienda|business|brand|ristorante|pizzeria|salone|studio)\s+["']([A-Za-z0-9À-ÿ&'. -]{2,60})["']/i,
@@ -130,10 +160,76 @@ function extractNamedBusiness(message: string): string | undefined {
   ];
   for (const pattern of patterns) {
     const match = pattern.exec(message);
-    const raw = match?.[1]?.replace(/[,.!?;:]+$/g, "").trim();
+    const raw = cleanBusinessName(match?.[1] ?? "");
     if (raw) return titleCase(raw);
   }
   return undefined;
+}
+
+function hasProjectScopeIntent(message: string): boolean {
+  return includesAny(message, [
+    "app",
+    "automazione",
+    "automation",
+    "budget",
+    "booking",
+    "campagna",
+    "crm",
+    "deadline",
+    "ecommerce",
+    "e-commerce",
+    "gestionale",
+    "landing",
+    "marketing",
+    "opportunit",
+    "prenot",
+    "preventivo",
+    "progetto",
+    "proposal",
+    "proposta",
+    "pubblicit",
+    "pubblicità",
+    "scope",
+    "shopify",
+    "sito",
+    "social",
+    "software",
+    "svilupp",
+    "website",
+  ]);
+}
+
+export function isClientOnlySaveRequest(input: {
+  message: string;
+  attachments?: readonly CoordinatorAttachmentInput[];
+  clientName?: string;
+}): boolean {
+  if (input.attachments?.length) return false;
+  const lower = input.message.toLowerCase();
+  const clientName = input.clientName ?? extractNamedBusiness(input.message);
+  if (!clientName) return false;
+  if (hasProjectScopeIntent(lower)) return false;
+
+  return includesAny(lower, [
+    "abbiamo un cliente",
+    "aggiungi cliente",
+    "aggiungere cliente",
+    "cliente si chiama",
+    "crea cliente",
+    "creare cliente",
+    "ho un cliente",
+    "memorizza cliente",
+    "memorizzare cliente",
+    "nuovo cliente",
+    "salva ",
+    "registra cliente",
+    "registrare cliente",
+    "salva cliente",
+    "salvare cliente",
+    "salvami ",
+    "lo puoi salvare",
+    "la puoi salvare",
+  ]);
 }
 
 function classify(input: CoordinatorIntakeInput): IntakeClassification {
@@ -704,6 +800,50 @@ export class CoordinatorIntakeService {
       run: updatedRun,
       artifacts,
       approvals,
+    };
+  }
+
+  async saveClientOnly(input: CoordinatorIntakeInput): Promise<CoordinatorClientSaveResult> {
+    const message = input.message.trim();
+    if (!message) throw new Error("coordinator client save requires a message");
+    const clientName = input.clientName ?? extractNamedBusiness(message);
+    if (!clientName) throw new Error("client-only save requires a client name");
+
+    const classification = classify({ ...input, message, clientName });
+    const existed = Boolean(await this.clients.get(slugify(classification.client_name)));
+    const client = await getOrCreateClient(this.clients, { ...input, message }, classification);
+
+    const paths = workspacePaths(this.workspaceRoot);
+    const now = new Date().toISOString();
+    await appendMemory(
+      join(paths.clientsDir, client.slug, "COMMUNICATION.md"),
+      `Client saved ${now}`,
+      `${message}\n\nCoordinator action: saved client identity only. No project, opportunity, artifact, or approval was created from this request.`,
+    );
+    await appendDailyNote(
+      this.workspaceRoot,
+      "Events",
+      `Coordinator saved client ${client.name} without creating project scope.`,
+    );
+    await this.audit.append({
+      actor: "supreme_coordinator",
+      action: existed ? "coordinator.client_updated" : "coordinator.client_saved",
+      target: client.id,
+      result: "ok",
+    });
+
+    const summary = existed
+      ? `Il cliente ${client.name} era già salvato. Ho aggiornato solo l'anagrafica, senza creare progetti, opportunità o approvazioni.`
+      : `Ho salvato il cliente ${client.name}. Non ho creato progetti, opportunità o approvazioni perché mi hai chiesto solo l'anagrafica cliente.`;
+
+    return {
+      summary,
+      next_actions: [
+        "Aggiungi uno scope operativo solo quando vuoi aprire progetto o opportunità.",
+        "Mantieni separata l'anagrafica cliente dalla delivery finché non esiste una richiesta concreta.",
+      ],
+      client,
+      created: !existed,
     };
   }
 

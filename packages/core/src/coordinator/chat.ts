@@ -10,6 +10,7 @@ import { defaultConfig } from "../config/loader.js";
 import { CoordinatorGlobalMemoryService } from "../memory/global.js";
 import {
   CoordinatorIntakeService,
+  isClientOnlySaveRequest,
   type CoordinatorAttachmentInput,
   type CoordinatorIntakeResult,
 } from "./intake.js";
@@ -598,6 +599,47 @@ export class CoordinatorChatService {
     });
     const recent = await this.messages.list(12);
     const memory = memoryMeta(packet);
+
+    if (isClientOnlySaveRequest({ message, attachments })) {
+      const result = await this.intake.saveClientOnly({
+        message,
+        source: input.source ?? "coordinator_chat",
+        attachments,
+      });
+      const provider = providerMeta("unavailable", undefined, undefined, "client_only_save");
+      const { ownerMessage, coordinatorMessage } = requireMessagePair(
+        await this.messages.appendMany([
+          {
+            role: "owner",
+            text: message,
+            attachments: messageAttachments(attachments),
+            meta: { mode: "client_save" },
+          },
+          {
+            role: "coordinator",
+            text: result.summary,
+            meta: {
+              mode: "client_save",
+              provider,
+              memory,
+              client: {
+                id: result.client.id,
+                slug: result.client.slug,
+                name: result.client.name,
+                created: result.created,
+              },
+            },
+          },
+        ]),
+      );
+      return {
+        mode: "answer",
+        ownerMessage,
+        coordinatorMessage,
+        provider,
+        memory,
+      };
+    }
 
     if (hasIntakeIntent(message, attachments)) {
       const result = await this.intake.process({

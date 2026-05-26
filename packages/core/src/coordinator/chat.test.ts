@@ -4,7 +4,11 @@ import { join } from "node:path";
 import type { ProviderAdapter } from "@bureauos/providers";
 import { describe, expect, it } from "vitest";
 import { defaultConfig } from "../config/loader.js";
+import { ApprovalRegistry } from "../registries/approval.js";
 import { ClientRegistry } from "../registries/client.js";
+import { OpportunityRegistry } from "../registries/opportunity.js";
+import { ProjectRegistry } from "../registries/project.js";
+import { ArtifactStore } from "../artifacts/store.js";
 import { CoordinatorChatService, type CoordinatorChatStreamEvent } from "./chat.js";
 import { CoordinatorMessageStore } from "./messages.js";
 
@@ -22,6 +26,68 @@ describe("CoordinatorChatService", () => {
     expect(result.mode).toBe("answer");
     expect(result.result).toBeUndefined();
     await expect(new ClientRegistry(dir).list()).resolves.toEqual([]);
+  });
+
+  it("saves client-only owner requests without inventing project scope", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    const service = new CoordinatorChatService(dir, { config: defaultConfig("freelancer") });
+
+    const result = await service.process({
+      source: "test",
+      message: "abbiamo un cliente si chiama Pizzeria Amodeo lo puoi salvare?",
+    });
+
+    expect(result.mode).toBe("answer");
+    expect(result.result).toBeUndefined();
+    expect(result.provider.reason).toBe("client_only_save");
+    expect(result.coordinatorMessage.text).toBe(
+      "Ho salvato il cliente Pizzeria Amodeo. Non ho creato progetti, opportunità o approvazioni perché mi hai chiesto solo l'anagrafica cliente.",
+    );
+
+    const clients = await new ClientRegistry(dir).list();
+    expect(clients.map((client) => client.name)).toEqual(["Pizzeria Amodeo"]);
+    await expect(new ProjectRegistry(dir).list()).resolves.toEqual([]);
+    await expect(new OpportunityRegistry(dir).list()).resolves.toEqual([]);
+    await expect(new ApprovalRegistry(dir).listPending()).resolves.toEqual([]);
+    await expect(new ArtifactStore(dir).list()).resolves.toEqual([]);
+  });
+
+  it("streams client-only saves as plain confirmations", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    const service = new CoordinatorChatService(dir, { config: defaultConfig("freelancer") });
+
+    const events: CoordinatorChatStreamEvent[] = [];
+    for await (const event of service.stream({
+      source: "test",
+      message: "abbiamo un cliente si chiama Pizzeria Amodeo lo puoi salvare?",
+    })) {
+      events.push(event);
+    }
+
+    const final = events.find((event) => event.type === "final");
+    const text = final?.type === "final" ? final.result.coordinatorMessage.text : "";
+    expect(text).toContain("Ho salvato il cliente Pizzeria Amodeo.");
+    expect(text).not.toContain("project");
+    expect(text).not.toContain("opportunity");
+    expect(text).not.toContain("artifacts");
+    await expect(new ProjectRegistry(dir).list()).resolves.toEqual([]);
+  });
+
+  it("keeps full intake behavior when the owner includes project scope", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    const service = new CoordinatorChatService(dir, { config: defaultConfig("freelancer") });
+
+    const result = await service.process({
+      source: "test",
+      message: "cliente si chiama Pizzeria Amodeo vuole un sito con prenotazioni e una proposta",
+    });
+
+    expect(result.mode).toBe("intake");
+    expect(result.result?.client.name).toBe("Pizzeria Amodeo");
+    expect(result.result?.project.name).toBe("Pizzeria Amodeo Booking Website");
+    expect(result.result?.opportunity.title).toBe("Booking Website for Pizzeria Amodeo");
+    expect(result.result?.artifacts.length).toBeGreaterThan(0);
+    expect(result.result?.approvals.length).toBeGreaterThan(0);
   });
 
   it("does not turn historical pizzeria context into a current request", async () => {
