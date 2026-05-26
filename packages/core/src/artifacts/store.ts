@@ -17,6 +17,7 @@ export type ArtifactType =
   | "bug-report"
   | "technical-plan"
   | "test-plan"
+  | "test-evidence-report"
   | "security-review"
   | "pr-review"
   | "decision-record"

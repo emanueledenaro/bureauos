@@ -314,6 +314,21 @@ export type {
   DevelopmentBranchSafety,
   DevelopmentBranchServiceDeps,
 } from "./execution/development-branch.js";
+export {
+  ProjectTestRunnerService,
+  SubprocessProjectCommandRunner,
+  resolveProjectTestCommand,
+} from "./execution/project-test-runner.js";
+export type {
+  ProjectCommandRunner,
+  ProjectCommandRunnerOptions,
+  ProjectTestCommand,
+  ProjectTestExecution,
+  ProjectTestRunnerDeps,
+  ProjectTestRunnerInput,
+  ProjectTestRunnerResult,
+  ResolvedProjectTestCommand,
+} from "./execution/project-test-runner.js";
 
 // Provider auth
 export {
