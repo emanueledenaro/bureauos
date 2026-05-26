@@ -8,6 +8,7 @@ import type {
 } from "../runtime.js";
 import { AGENT_INDEX } from "../roles.js";
 import { draftAgentArtifact } from "../model-drafting.js";
+import { blockedByInvalidHandoff, validateRequiredHandoff } from "../handoff.js";
 
 const CODEX_RUNTIME_KEYS = ["codex", "codex_runtime"] as const;
 
@@ -24,6 +25,9 @@ export class DevelopmentAgent implements AgentRuntime {
   constructor(private readonly deps: AgentDeps) {}
 
   async execute(input: AgentRunInput): Promise<AgentRunOutput> {
+    const handoff = await validateRequiredHandoff(input, this.deps, this.definition.id);
+    if (!handoff.ok) return blockedByInvalidHandoff(handoff);
+
     const templateBody = `# Technical Plan
 
 ## Mental Model

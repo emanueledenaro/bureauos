@@ -1,6 +1,7 @@
 import type { ArtifactRecord } from "../../artifacts/store.js";
 import type { AgentDeps, AgentRunInput, AgentRunOutput, AgentRuntime } from "../runtime.js";
 import { AGENT_INDEX } from "../roles.js";
+import { blockedByInvalidHandoff, validateRequiredHandoff } from "../handoff.js";
 
 export type SecurityRiskLevel = "low" | "medium" | "high" | "critical";
 export type SecurityFindingStatus = "unresolved" | "mitigated";
@@ -287,6 +288,9 @@ export class SecurityAgent implements AgentRuntime {
   constructor(private readonly deps: AgentDeps) {}
 
   async execute(input: AgentRunInput): Promise<AgentRunOutput> {
+    const handoff = await validateRequiredHandoff(input, this.deps, this.definition.id);
+    if (!handoff.ok) return blockedByInvalidHandoff(handoff);
+
     const sourceArtifacts = await Promise.all(
       (await this.deps.artifacts.list({ run_id: input.context.runId })).map(async (record) => ({
         record,

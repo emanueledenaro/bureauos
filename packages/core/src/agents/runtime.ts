@@ -19,6 +19,7 @@ export interface AgentContext {
   clientId?: string;
   projectId?: string;
   briefing?: string;
+  handoffArtifactId?: string;
 }
 
 export interface AgentRunInput {

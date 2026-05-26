@@ -201,6 +201,18 @@ export {
   SecurityAgent,
   ComplianceAgent,
 } from "./agents/concrete/index.js";
+export {
+  agentHandoffBody,
+  agentHandoffMetadata,
+  blockedByInvalidHandoff,
+  validateAgentHandoff,
+  validateRequiredHandoff,
+} from "./agents/handoff.js";
+export type {
+  AgentHandoffContract,
+  AgentHandoffContractInput,
+  AgentHandoffValidation,
+} from "./agents/handoff.js";
 
 // Reports
 export { BusinessReportService } from "./reports/business.js";

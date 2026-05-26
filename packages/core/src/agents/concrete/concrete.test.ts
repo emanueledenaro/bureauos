@@ -150,6 +150,44 @@ describe("concrete agents", () => {
     expect(written?.body).toContain("Template-only fallback");
   });
 
+  it("blocks concrete agents when the handoff contract targets another agent", async () => {
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const artifacts = new ArtifactStore(dir);
+    const policy = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
+    const handoff = await artifacts.write({
+      type: "agent-handoff",
+      createdBy: "project_manager",
+      runId: "run_wrong_target",
+      metadata: {
+        source_agent_id: "project_manager",
+        target_agent_id: "reviewer",
+        run_id: "run_wrong_target",
+        scope: "QA should not consume this reviewer packet",
+        input_artifact_ids: ["art_packet"],
+        expected_output_types: ["pr-review"],
+        acceptance_checks: ["Reviewer produces a PR review or blocker."],
+      },
+      body: "# Agent Handoff",
+    });
+    const agent = new QaAgent({ artifacts, audit, policy });
+
+    const out = await agent.execute({
+      context: {
+        runId: "run_wrong_target",
+        scope: "Acceptance criteria:\n- handoff target is enforced",
+        handoffArtifactId: handoff.id,
+      },
+      capabilities: new Map(),
+    });
+
+    expect(out.ok).toBe(false);
+    expect(out.decisions).toContain("handoff:invalid");
+    expect(out.blockers).toContain("wrong target_agent_id: expected qa, got reviewer");
+    const validation = await artifacts.read(out.artifactIds[0]!);
+    expect(validation?.record.type).toBe("agent-handoff-validation");
+    expect(validation?.body).toContain("Expected agent: qa");
+  });
+
   it("executes development runtime when codex gates allow", async () => {
     const audit = new AuditLog(workspacePaths(dir).auditLog);
     const artifacts = new ArtifactStore(dir);

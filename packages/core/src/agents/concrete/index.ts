@@ -31,6 +31,18 @@ export { ComplianceAgent } from "./compliance.js";
 export { ReviewerAgent, analyzeReviewInput } from "./reviewer.js";
 export type { ReviewAnalysis, ReviewFinding, ReviewFindingSeverity } from "./reviewer.js";
 export { templateAgents } from "./generic.js";
+export {
+  agentHandoffBody,
+  agentHandoffMetadata,
+  blockedByInvalidHandoff,
+  validateAgentHandoff,
+  validateRequiredHandoff,
+} from "../handoff.js";
+export type {
+  AgentHandoffContract,
+  AgentHandoffContractInput,
+  AgentHandoffValidation,
+} from "../handoff.js";
 
 /**
  * Build an AgentRegistry pre-populated with concrete role stubs.

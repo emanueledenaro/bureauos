@@ -173,6 +173,9 @@ ${input.briefing ?? "(none supplied)"}
         workspaceRoot: input.workspaceRoot,
         runId: input.run.id,
         scope: input.scope,
+        ...(input.contextArtifactIdsByRole?.[role]?.[0]
+          ? { handoffArtifactId: input.contextArtifactIdsByRole[role][0] }
+          : {}),
         ...(input.run.project_id ? { projectId: input.run.project_id } : {}),
         ...(input.run.client_id ? { clientId: input.run.client_id } : {}),
         ...(input.briefing ? { briefing: input.briefing } : {}),

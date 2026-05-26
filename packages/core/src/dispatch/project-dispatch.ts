@@ -22,6 +22,7 @@ import {
 import { dispatchRun, pipelineForRunType, type DispatchOutput } from "../runs/coordinator.js";
 import { RunEngine, type RunRecord, type RunType } from "../runs/engine.js";
 import { AGENT_INDEX, type AgentDefinition } from "../agents/roles.js";
+import { agentHandoffBody, agentHandoffMetadata } from "../agents/handoff.js";
 
 export interface ProjectDispatchInput {
   projectSlug: string;
@@ -80,6 +81,36 @@ function approvalList(items: readonly ApprovalRecord[]): string {
 function roleLine(roleId: string): string {
   const role = AGENT_INDEX.get(roleId);
   return role ? `${role.role} (${role.id})` : roleId;
+}
+
+function expectedArtifactTypes(roleId: string): string[] {
+  switch (roleId) {
+    case "project_manager":
+      return ["run-report"];
+    case "product":
+      return ["feature-spec"];
+    case "ux":
+      return ["design-spec"];
+    case "development":
+      return ["technical-plan"];
+    case "qa":
+      return ["test-plan"];
+    case "security":
+      return ["security-review"];
+    case "reviewer":
+      return ["pr-review"];
+    default:
+      return ["run-report"];
+  }
+}
+
+function handoffAcceptanceChecks(role: AgentDefinition, run: RunRecord): string[] {
+  return [
+    `${role.role} confirms the handoff target matches ${role.id}.`,
+    `${role.role} uses only the dispatch packet, listed inputs, and scoped memory for run ${run.id}.`,
+    `${role.role} produces or explicitly blocks the expected output artifacts.`,
+    "External actions, client contact, publishing, billing, merge, deploy, and destructive work remain policy-gated.",
+  ];
 }
 
 function packetBody(args: {
@@ -158,51 +189,6 @@ Specialist agents may use only the project memory, linked client memory, run con
 - Do not publish public content.
 - Do not change price, budget, production data, secrets, or legal commitments.
 - Escalate blockers, missing assets, unclear scope, or policy conflicts.
-`;
-}
-
-function handoffBody(args: {
-  role: AgentDefinition;
-  project: ProjectRecord;
-  client?: ClientRecord;
-  run: RunRecord;
-  packet: ArtifactRecord;
-  sourceArtifacts: readonly ArtifactRecord[];
-  briefing: string;
-}): string {
-  const { role, project, client, run, packet, sourceArtifacts, briefing } = args;
-  return `# Agent Handoff: ${role.role}
-
-## Assignment
-
-${briefing}
-
-## Scope
-
-- Run: ${run.id}
-- Project: ${project.name} (${project.id})
-- Client: ${client?.name ?? project.client_id}
-- Dispatch packet: ${packet.id}
-
-## Required Outputs
-
-${role.outputs.map((output) => `- ${output}`).join("\n")}
-
-## Responsibilities
-
-${role.responsibilities.map((item) => `- ${item}`).join("\n")}
-
-## Source Artifacts
-
-${artifactList(sourceArtifacts)}
-
-## Must Not
-
-${role.mustNot.map((item) => `- ${item}`).join("\n")}
-
-## Escalation
-
-Escalate to Project Manager when scope, data, repository state, policy, approval, or delivery risk is unclear.
 `;
 }
 
@@ -307,6 +293,21 @@ export class ProjectDispatchService {
     for (const roleId of pipeline) {
       const role = AGENT_INDEX.get(roleId);
       if (!role) continue;
+      const handoffContract = {
+        sourceAgentId: ownership.manager_agent_id,
+        targetAgentId: roleId,
+        runId: run.id,
+        scope,
+        projectId: project.id,
+        ...(client ? { clientId: client.id } : {}),
+        dispatchPacketId: packet.id,
+        inputArtifactIds: [packet.id, ...sourceArtifacts.map((artifact) => artifact.id)],
+        expectedOutputTypes: expectedArtifactTypes(roleId),
+        acceptanceChecks: handoffAcceptanceChecks(role, run),
+        blockers: pendingApprovals.map(
+          (approval) => `${approval.action}: ${approval.id} (${approval.scope})`,
+        ),
+      };
       handoffs.push({
         role: roleId,
         artifact: await this.artifacts.write({
@@ -321,15 +322,12 @@ export class ProjectDispatchService {
             manager_agent_id: ownership.manager_agent_id,
             team_id: ownership.team_id,
             source_artifacts: sourceArtifacts.map((artifact) => artifact.id),
+            ...agentHandoffMetadata(handoffContract),
           },
-          body: handoffBody({
-            role,
-            project,
-            client,
-            run,
-            packet,
+          body: agentHandoffBody({
+            contract: handoffContract,
+            targetRole: role,
             sourceArtifacts,
-            briefing,
           }),
         }),
       });

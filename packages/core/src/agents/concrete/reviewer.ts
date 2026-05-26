@@ -1,5 +1,6 @@
 import type { AgentDeps, AgentRunInput, AgentRunOutput, AgentRuntime } from "../runtime.js";
 import { AGENT_INDEX } from "../roles.js";
+import { blockedByInvalidHandoff, validateRequiredHandoff } from "../handoff.js";
 
 export type ReviewFindingSeverity = "low" | "medium" | "high" | "critical";
 
@@ -143,6 +144,9 @@ export class ReviewerAgent implements AgentRuntime {
   constructor(private readonly deps: AgentDeps) {}
 
   async execute(input: AgentRunInput): Promise<AgentRunOutput> {
+    const handoff = await validateRequiredHandoff(input, this.deps, this.definition.id);
+    if (!handoff.ok) return blockedByInvalidHandoff(handoff);
+
     const analysis = analyzeReviewInput(input);
     const artifact = await this.deps.artifacts.write({
       type: "pr-review",
