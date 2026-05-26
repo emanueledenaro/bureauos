@@ -19,6 +19,29 @@ const AutonomyMode = z.enum([
 ]);
 export type AutonomyMode = z.infer<typeof AutonomyMode>;
 
+const AutonomyLevel = z.union([
+  z.literal(0),
+  z.literal(1),
+  z.literal(2),
+  z.literal(3),
+  z.literal(4),
+  z.literal(5),
+]);
+export type AutonomyLevel = z.infer<typeof AutonomyLevel>;
+
+const AUTONOMY_LEVEL_NAMES: Record<AutonomyLevel, string> = {
+  0: "Read Only",
+  1: "Issue and Comment",
+  2: "Branch and PR",
+  3: "PR Maintenance",
+  4: "Merge",
+  5: "Release and Deploy",
+};
+
+export function autonomyLevelName(level: AutonomyLevel): string {
+  return AUTONOMY_LEVEL_NAMES[level];
+}
+
 const ProviderName = z.enum([
   "openai-codex",
   "openai",
@@ -149,22 +172,104 @@ const SupremeCoordinatorConfig = z
   })
   .default({});
 
-const AutonomyConfig = z
+const AUTONOMY_ACTION_KEYS = [
+  "observe_signals",
+  "start_triage_runs",
+  "create_internal_reports",
+  "create_repositories",
+  "create_issues",
+  "comment_on_issues",
+  "create_branches",
+  "push_commits",
+  "open_pull_requests",
+  "merge_pull_requests",
+  "deploy_production",
+  "contact_clients_directly",
+] as const;
+
+type AutonomyActionKey = (typeof AUTONOMY_ACTION_KEYS)[number];
+
+function autonomyPreset(level: AutonomyLevel): Record<AutonomyActionKey, boolean> {
+  const readOnly: Record<AutonomyActionKey, boolean> = {
+    observe_signals: true,
+    start_triage_runs: false,
+    create_internal_reports: false,
+    create_repositories: false,
+    create_issues: false,
+    comment_on_issues: false,
+    create_branches: false,
+    push_commits: false,
+    open_pull_requests: false,
+    merge_pull_requests: false,
+    deploy_production: false,
+    contact_clients_directly: false,
+  };
+
+  if (level === 0) return readOnly;
+
+  const issueOnly = {
+    ...readOnly,
+    start_triage_runs: true,
+    create_internal_reports: true,
+    create_issues: true,
+    comment_on_issues: true,
+  };
+  if (level === 1) return issueOnly;
+
+  const branchAndPr = {
+    ...issueOnly,
+    create_repositories: true,
+    create_branches: true,
+    push_commits: true,
+    open_pull_requests: true,
+  };
+  if (level === 2 || level === 3) return branchAndPr;
+
+  const merge = {
+    ...branchAndPr,
+    merge_pull_requests: true,
+  };
+  if (level === 4) return merge;
+
+  return {
+    ...merge,
+    deploy_production: true,
+  };
+}
+
+const AutonomyConfigInput = z
   .object({
-    observe_signals: z.boolean().default(true),
-    start_triage_runs: z.boolean().default(true),
-    create_internal_reports: z.boolean().default(true),
-    create_repositories: z.boolean().default(true),
-    create_issues: z.boolean().default(true),
-    comment_on_issues: z.boolean().default(true),
-    create_branches: z.boolean().default(true),
-    push_commits: z.boolean().default(true),
-    open_pull_requests: z.boolean().default(true),
-    merge_pull_requests: z.boolean().default(false),
-    deploy_production: z.boolean().default(false),
-    contact_clients_directly: z.boolean().default(false),
+    level: AutonomyLevel.default(2),
+    observe_signals: z.boolean().optional(),
+    start_triage_runs: z.boolean().optional(),
+    create_internal_reports: z.boolean().optional(),
+    create_repositories: z.boolean().optional(),
+    create_issues: z.boolean().optional(),
+    comment_on_issues: z.boolean().optional(),
+    create_branches: z.boolean().optional(),
+    push_commits: z.boolean().optional(),
+    open_pull_requests: z.boolean().optional(),
+    merge_pull_requests: z.boolean().optional(),
+    deploy_production: z.boolean().optional(),
+    contact_clients_directly: z.boolean().optional(),
   })
   .default({});
+
+const AutonomyConfig = AutonomyConfigInput.transform((input) => {
+  const overrides = Object.fromEntries(
+    AUTONOMY_ACTION_KEYS.map((key) => [key, input[key]] as const).filter(
+      (([, value]) => value !== undefined) as (
+        entry: readonly [AutonomyActionKey, boolean | undefined],
+      ) => entry is readonly [AutonomyActionKey, boolean],
+    ),
+  ) as Partial<Record<AutonomyActionKey, boolean>>;
+
+  return {
+    ...autonomyPreset(input.level),
+    ...overrides,
+    level: input.level,
+  };
+});
 
 const GrowthAutonomyConfig = z
   .object({

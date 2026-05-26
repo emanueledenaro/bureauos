@@ -247,6 +247,7 @@ supreme_coordinator:
   always_on: ${config.supreme_coordinator.always_on}
 
 autonomy:
+  level: ${a.level}
   observe_signals: ${a.observe_signals}
   start_triage_runs: ${a.start_triage_runs}
   create_internal_reports: ${a.create_internal_reports}

@@ -58,6 +58,19 @@ describe("bureau cli", () => {
     expect(await exists(join(dir, ".bureauos", "bureauos.yaml"))).toBe(true);
     const yaml = await readFile(join(dir, ".bureauos", "bureauos.yaml"), "utf8");
     expect(yaml).toContain("Acme");
+    expect(yaml).toContain("level: 2");
+  });
+
+  it("prints the active autonomy level in policy explain", async () => {
+    await main(["node", "bureau", "init"]);
+
+    const result = await captureStdout(() =>
+      main(["node", "bureau", "policy", "explain", "merge_pull_requests"]),
+    );
+
+    expect(result.code).toBe(0);
+    expect(result.output).toContain("Autonomy: Level 2 (Branch and PR)");
+    expect(result.output).toContain("Outcome:  require_approval");
   });
 
   it("refuses to overwrite without --force", async () => {

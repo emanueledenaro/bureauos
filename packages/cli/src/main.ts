@@ -37,6 +37,7 @@ import {
   VERSION,
   appendDailyNote,
   createCoordinatorRunDispatcher,
+  autonomyLevelName,
   defaultConfig,
   initWorkspace,
   loadConfig,
@@ -1341,6 +1342,9 @@ const handlePolicyExplain: Handler = async (args) => {
   });
   process.stdout.write(`Action:   ${decision.action}\n`);
   process.stdout.write(`Actor:    ${decision.actor}\n`);
+  process.stdout.write(
+    `Autonomy: Level ${config.autonomy.level} (${autonomyLevelName(config.autonomy.level)})\n`,
+  );
   process.stdout.write(`Outcome:  ${decision.outcome}\n`);
   process.stdout.write(`Allowed:  ${decision.allowed}\n`);
   process.stdout.write(`Reason:   ${decision.reason}\n`);

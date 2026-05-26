@@ -154,6 +154,7 @@ agents:
     model: gpt-5.5
 
 autonomy:
+  level: 2
   observe_signals: true
   start_triage_runs: true
   create_internal_reports: true

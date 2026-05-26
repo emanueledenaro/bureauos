@@ -1,8 +1,14 @@
 export const VERSION = "0.0.0";
 
 // Config
-export { BureauConfigSchema } from "./config/schema.js";
-export type { BureauConfig, Preset, AutonomyMode, ProviderName } from "./config/schema.js";
+export { BureauConfigSchema, autonomyLevelName } from "./config/schema.js";
+export type {
+  BureauConfig,
+  Preset,
+  AutonomyMode,
+  AutonomyLevel,
+  ProviderName,
+} from "./config/schema.js";
 export { loadConfig, defaultConfig, ConfigError } from "./config/loader.js";
 
 // Paths and IDs

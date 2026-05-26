@@ -1,4 +1,4 @@
-import type { BureauConfig } from "../config/schema.js";
+import { autonomyLevelName, type BureauConfig } from "../config/schema.js";
 import { ApprovalRegistry } from "../registries/approval.js";
 
 export type PolicyOutcome =
@@ -119,13 +119,14 @@ export class PolicyEngine {
     }
 
     if (AUTONOMY_ACTIONS.has(input.action)) {
-      const allowed = (this.config.autonomy as Record<string, boolean>)[input.action] === true;
+      const allowed =
+        (this.config.autonomy as Record<string, boolean | number>)[input.action] === true;
       if (allowed) {
         return {
           ...base,
           outcome: "allow",
           allowed: true,
-          reason: `enabled by autonomy.${input.action}`,
+          reason: `enabled by autonomy.${input.action} at level ${this.config.autonomy.level} (${autonomyLevelName(this.config.autonomy.level)})`,
           required_gates: this.gatesFor(input),
         };
       }

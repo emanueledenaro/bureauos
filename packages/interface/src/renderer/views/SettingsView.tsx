@@ -405,7 +405,7 @@ export function SettingsView({
           <SettingsCard
             icon={Shield}
             label="Autonomy"
-            title={`${enabledCount(settings.autonomy)} / ${Object.keys(settings.autonomy).length} enabled`}
+            title={`Level ${settings.autonomy.level ?? 2} · ${enabledCount(settings.autonomy)} enabled`}
           >
             <ToggleList values={settings.autonomy} limit={8} />
           </SettingsCard>
@@ -550,19 +550,26 @@ function Row({
   );
 }
 
-function ToggleList({ values, limit }: { values: Record<string, boolean>; limit: number }) {
+function ToggleList({
+  values,
+  limit,
+}: {
+  values: Record<string, boolean | number>;
+  limit: number;
+}) {
+  const entries = Object.entries(values).filter(
+    ([key, value]) => key !== "level" && typeof value === "boolean",
+  );
   return (
     <div className="space-y-1 text-[11px]">
-      {Object.entries(values)
-        .slice(0, limit)
-        .map(([key, value]) => (
-          <div key={key} className="flex items-center justify-between gap-2">
-            <span className="truncate text-muted-foreground">{formatLabel(key)}</span>
-            <span className={value ? "text-success" : "text-muted-foreground/60"}>
-              {value ? "on" : "off"}
-            </span>
-          </div>
-        ))}
+      {entries.slice(0, limit).map(([key, value]) => (
+        <div key={key} className="flex items-center justify-between gap-2">
+          <span className="truncate text-muted-foreground">{formatLabel(key)}</span>
+          <span className={value ? "text-success" : "text-muted-foreground/60"}>
+            {value ? "on" : "off"}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }

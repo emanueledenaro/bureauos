@@ -38,8 +38,8 @@ export function sortNewest<T extends { created?: string; updated?: string }>(
   });
 }
 
-export function enabledCount(values: Record<string, boolean>): number {
-  return Object.values(values).filter(Boolean).length;
+export function enabledCount(values: Record<string, boolean | number>): number {
+  return Object.values(values).filter((value) => value === true).length;
 }
 
 export function normalizeRepositoryReference(repository?: string): string {

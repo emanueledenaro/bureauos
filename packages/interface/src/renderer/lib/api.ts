@@ -90,7 +90,7 @@ export interface SettingsSummary {
     user_facing: boolean;
     always_on: boolean;
   };
-  autonomy: Record<string, boolean>;
+  autonomy: Record<string, boolean | number>;
   growth_autonomy: Record<string, boolean>;
   memory: Record<string, boolean>;
   limits: Record<string, number | boolean>;

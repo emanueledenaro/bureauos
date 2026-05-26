@@ -13,9 +13,10 @@ id: org_001
 name: Example Agency
 supreme_coordinator: agent_executive
 policies:
-  autonomy_level: 2
-  merge_pull_requests: false
-  deploy_production: false
+  autonomy:
+    level: 2
+    merge_pull_requests: false
+    deploy_production: false
 clients:
   - client_acme
 projects:

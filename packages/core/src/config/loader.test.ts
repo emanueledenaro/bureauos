@@ -23,6 +23,7 @@ describe("loadConfig", () => {
     expect(config.organization.name).toBe("Acme");
     expect(config.setup.preset).toBe("freelancer");
     expect(config.autonomy.merge_pull_requests).toBe(false);
+    expect(config.autonomy.level).toBe(2);
     expect(config.growth_autonomy.publish_public_content).toBe(false);
     expect(config.provider).toEqual({});
     expect(config.disabled_providers).toEqual([]);
@@ -34,6 +35,36 @@ describe("loadConfig", () => {
     await writeFile(path, `organization:\n  name: "Acme"\nsetup:\n  preset: "startup"\n`, "utf8");
     const config = await loadConfig(path);
     expect(config.setup.preset).toBe("startup");
+  });
+
+  it("maps autonomy levels to per-action switches", async () => {
+    const path = join(dir, "bureauos.yaml");
+    await writeFile(path, `autonomy:\n  level: 0\n`, "utf8");
+
+    const config = await loadConfig(path);
+
+    expect(config.autonomy.level).toBe(0);
+    expect(config.autonomy.observe_signals).toBe(true);
+    expect(config.autonomy.create_issues).toBe(false);
+    expect(config.autonomy.create_branches).toBe(false);
+    expect(config.autonomy.merge_pull_requests).toBe(false);
+    expect(config.autonomy.deploy_production).toBe(false);
+  });
+
+  it("keeps explicit autonomy overrides deterministic on top of a level", async () => {
+    const path = join(dir, "bureauos.yaml");
+    await writeFile(
+      path,
+      ["autonomy:", "  level: 0", "  create_issues: true", "  observe_signals: false"].join("\n"),
+      "utf8",
+    );
+
+    const config = await loadConfig(path);
+
+    expect(config.autonomy.level).toBe(0);
+    expect(config.autonomy.create_issues).toBe(true);
+    expect(config.autonomy.observe_signals).toBe(false);
+    expect(config.autonomy.create_branches).toBe(false);
   });
 
   it("throws ConfigError when the file does not exist", async () => {
