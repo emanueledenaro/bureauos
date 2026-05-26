@@ -311,7 +311,7 @@ function DashboardLayout({
   return (
     <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 p-3 sm:p-4 lg:p-5">
       {mainView}
-      <TimelineView events={state.audit} artifacts={state.artifacts} />
+      <TimelineView events={state.audit} artifacts={state.artifacts} runs={state.runs} />
       <RevenuePulseView
         pulse={state.pulse}
         clients={state.clients}

@@ -249,10 +249,21 @@ export interface RunRecord {
   status: string;
   scope: string;
   created: string;
+  updated?: string;
+  completed?: string;
+  created_by?: string;
   trigger_type?: string;
   trigger_source?: string;
   project_id?: string;
   client_id?: string;
+  artifacts?: string[];
+  decisions?: string[];
+  dispatch_status?: string;
+  blockers?: string[] | string;
+  blocking_reason?: string;
+  dispatch_error?: string;
+  error?: string;
+  next_action?: string;
 }
 export interface AuditEvent {
   timestamp: string;
@@ -286,7 +297,9 @@ export interface ArtifactRecord {
   type: string;
   status: string;
   created?: string;
+  run_id?: string;
   client_id?: string;
+  project_id?: string;
   client_name?: string;
   risk?: string;
   follow_up_due?: boolean;
