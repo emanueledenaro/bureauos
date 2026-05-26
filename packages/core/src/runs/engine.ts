@@ -3,6 +3,7 @@ import { newId } from "../ids.js";
 import { workspacePaths } from "../paths.js";
 import { AuditLog } from "../audit/log.js";
 import { ArtifactStore } from "../artifacts/store.js";
+import { writeRunOutcomeMemory } from "../memory/run-outcomes.js";
 import { PolicyEngine, type PolicyDecision } from "../policy/engine.js";
 import {
   sourceWorkItemFromFrontMatter,
@@ -319,6 +320,7 @@ export class RunEngine {
         result: result.status === "failed" ? "error" : "ok",
         ...(result.error ? { error: result.error } : {}),
       });
+      await writeRunOutcomeMemory(this.workspaceRoot, record, { audit: this.deps.audit });
       return record;
     }
 
@@ -336,6 +338,7 @@ export class RunEngine {
       target: record.id,
       result: "ok",
     });
+    await writeRunOutcomeMemory(this.workspaceRoot, record, { audit: this.deps.audit });
 
     return record;
   }

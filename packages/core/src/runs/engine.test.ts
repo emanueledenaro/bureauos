@@ -9,6 +9,8 @@ import { AuditLog } from "../audit/log.js";
 import { PolicyEngine } from "../policy/engine.js";
 import { initWorkspace } from "../init/initializer.js";
 import { workspacePaths } from "../paths.js";
+import { ClientRegistry } from "../registries/client.js";
+import { ProjectRegistry } from "../registries/project.js";
 import { RunEngine } from "./engine.js";
 
 describe("RunEngine", () => {
@@ -168,6 +170,118 @@ describe("RunEngine", () => {
     const log = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(log).toContain("run.dispatch_blocked");
     expect(log).toContain("run.blocked");
+  });
+
+  it("writes completed run outcomes to scoped project and client memory", async () => {
+    const config = defaultConfig("freelancer");
+    const approvals = new ApprovalRegistry(dir);
+    const policy = new PolicyEngine(config, approvals);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const client = await new ClientRegistry(dir).create({ name: "Alpha Client" });
+    const otherClient = await new ClientRegistry(dir).create({ name: "Beta Client" });
+    const projects = new ProjectRegistry(dir);
+    const project = await projects.create({ name: "Alpha Web", clientId: client.id });
+    const otherProject = await projects.create({ name: "Beta Web", clientId: otherClient.id });
+    const engine = new RunEngine(dir, { audit, artifacts, policy });
+
+    const run = await engine.start({
+      type: "planning",
+      triggerType: "owner_request",
+      triggerSource: "ser-51-test",
+      scope: "Prepare scoped delivery plan",
+      clientId: client.id,
+      projectId: project.id,
+    });
+
+    const paths = workspacePaths(dir);
+    const projectRuns = await readFile(join(paths.projectsDir, project.slug, "RUNS.md"), "utf8");
+    const clientProjects = await readFile(
+      join(paths.clientsDir, client.slug, "PROJECTS.md"),
+      "utf8",
+    );
+    expect(projectRuns).toContain(`Run ${run.id} completed`);
+    expect(projectRuns).toContain("- Status: completed");
+    expect(projectRuns).toContain(run.artifacts[0]!);
+    expect(clientProjects).toContain(`Run ${run.id} completed`);
+    expect(clientProjects).toContain("Prepare scoped delivery plan");
+
+    await expect(
+      readFile(join(paths.projectsDir, otherProject.slug, "RUNS.md"), "utf8"),
+    ).resolves.not.toContain(run.id);
+    await expect(
+      readFile(join(paths.clientsDir, otherClient.slug, "PROJECTS.md"), "utf8"),
+    ).resolves.not.toContain(run.id);
+    const log = await readFile(paths.auditLog, "utf8");
+    expect(log).toContain("memory.run_outcome_written");
+  });
+
+  it("writes blocked and failed run outcomes to scoped risk memory", async () => {
+    const config = defaultConfig("freelancer");
+    const approvals = new ApprovalRegistry(dir);
+    const policy = new PolicyEngine(config, approvals);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const client = await new ClientRegistry(dir).create({ name: "Risk Client" });
+    const project = await new ProjectRegistry(dir).create({
+      name: "Risk Web",
+      clientId: client.id,
+    });
+    const blockedEngine = new RunEngine(dir, {
+      audit,
+      artifacts,
+      policy,
+      dispatcher: async () => ({
+        status: "blocked",
+        blockers: ["owner decision missing"],
+        metadata: { approval_ids: ["approval_123"] },
+      }),
+    });
+
+    const blocked = await blockedEngine.start({
+      type: "planning",
+      triggerType: "owner_request",
+      triggerSource: "ser-51-blocked",
+      scope: "Blocked scope",
+      clientId: client.id,
+      projectId: project.id,
+    });
+    expect(blocked.status).toBe("blocked");
+
+    const failedEngine = new RunEngine(dir, {
+      audit,
+      artifacts,
+      policy,
+      dispatcher: async () => {
+        throw new Error("runtime crashed");
+      },
+    });
+    const failed = await failedEngine.start({
+      type: "planning",
+      triggerType: "owner_request",
+      triggerSource: "ser-51-failed",
+      scope: "Failed scope",
+      clientId: client.id,
+      projectId: project.id,
+    });
+    expect(failed.status).toBe("failed");
+
+    const paths = workspacePaths(dir);
+    const projectRisks = await readFile(join(paths.projectsDir, project.slug, "RISKS.md"), "utf8");
+    const clientRisks = await readFile(join(paths.clientsDir, client.slug, "RISKS.md"), "utf8");
+    expect(projectRisks).toContain(`Run ${blocked.id} blocked`);
+    expect(projectRisks).toContain("owner decision missing");
+    expect(projectRisks).toContain(`Run ${failed.id} failed`);
+    expect(projectRisks).toContain("runtime crashed");
+    expect(clientRisks).toContain(`Run ${blocked.id} blocked`);
+    expect(clientRisks).toContain(`Run ${failed.id} failed`);
+
+    const clientProjects = await readFile(
+      join(paths.clientsDir, client.slug, "PROJECTS.md"),
+      "utf8",
+    );
+    expect(clientProjects).toContain("Approvals: approval_123");
+    expect(clientProjects).toContain("Error: runtime crashed");
   });
 
   it("blocks a run when policy disallows the underlying action", async () => {

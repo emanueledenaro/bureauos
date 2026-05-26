@@ -92,6 +92,8 @@ export { appendDailyNote } from "./memory/daily.js";
 export type { DailyNoteSection } from "./memory/daily.js";
 export { appendDecision, recordDecision } from "./memory/decisions.js";
 export type { DecisionInput, DecisionWriteResult } from "./memory/decisions.js";
+export { writeRunOutcomeMemory } from "./memory/run-outcomes.js";
+export type { RunOutcomeWritebackDeps, RunOutcomeWritebackResult } from "./memory/run-outcomes.js";
 export {
   MEMORY_BOUNDARY_CAPABILITY,
   MEMORY_CAPABILITY,
