@@ -30,6 +30,7 @@ import {
   opportunityTone,
   projectProgress,
   projectTone,
+  runProgress,
   runTone,
   toneBadgeVariant,
   toneProgressClass,
@@ -40,7 +41,7 @@ import { formatLabel, formatMoney, timeAgo } from "../lib/format";
 import type { DashboardState, PortfolioLane } from "../lib/types";
 import type { ApprovalRecord } from "../lib/api";
 
-type PortfolioTab = "map" | "workload" | "gantt" | "kanban";
+type PortfolioTab = "map" | "workload" | "timeline" | "kanban";
 type RecordKind = "project" | "opportunity" | "run";
 
 interface PortfolioRecord {
@@ -71,6 +72,7 @@ interface PortfolioFilters {
 }
 
 const ALL = "all";
+const UNASSIGNED_AGENT = "unassigned";
 const DEFAULT_FILTERS: PortfolioFilters = {
   client: ALL,
   status: ALL,
@@ -79,18 +81,9 @@ const DEFAULT_FILTERS: PortfolioFilters = {
   includeClosed: false,
 };
 
-const ACTIVE_RUN_STATUSES = new Set([
-  "created",
-  "context_loading",
-  "planning",
-  "dispatching",
-  "in_progress",
-  "verifying",
-]);
-
 const RISK_RUN_STATUSES = new Set(["needs_human", "blocked", "failed"]);
 const RISK_OPPORTUNITY_STATUSES = new Set(["stalled"]);
-const GANTT_GRID_TEMPLATE = "minmax(160px, 260px) minmax(0, 1fr)";
+const TIMELINE_GRID_TEMPLATE = "minmax(160px, 260px) minmax(0, 1fr)";
 const CLOSED_PORTFOLIO_STATUSES = new Set([
   "cancelled",
   "canceled",
@@ -166,9 +159,9 @@ export function PortfolioView({ state }: { state: DashboardState }) {
               <ListChecks className="mr-1.5 h-3 w-3" />
               Workload
             </TabsTrigger>
-            <TabsTrigger value="gantt" className="h-8 px-2.5 sm:h-9 sm:px-3">
+            <TabsTrigger value="timeline" className="h-8 px-2.5 sm:h-9 sm:px-3">
               <Workflow className="mr-1.5 h-3 w-3" />
-              Gantt
+              Activity timeline
             </TabsTrigger>
             <TabsTrigger value="kanban" className="h-8 px-2.5 sm:h-9 sm:px-3">
               <KanbanSquare className="mr-1.5 h-3 w-3" />
@@ -205,8 +198,8 @@ export function PortfolioView({ state }: { state: DashboardState }) {
             <WorkloadContent records={filteredRecords} />
           </TabsContent>
 
-          <TabsContent value="gantt" className="m-0">
-            <GanttContent records={filteredRecords} />
+          <TabsContent value="timeline" className="m-0">
+            <ActivityTimelineContent records={filteredRecords} />
           </TabsContent>
 
           <TabsContent value="kanban" className="m-0">
@@ -414,7 +407,7 @@ function PortfolioMapContent({
                   {lane.capacityPercent}%
                 </div>
                 <div className="text-[9px] uppercase tracking-wide text-muted-foreground">
-                  Capacity
+                  Of visible work
                 </div>
               </div>
             </div>
@@ -473,7 +466,7 @@ function WorkloadContent({ records }: { records: PortfolioRecord[] }) {
   );
 }
 
-function GanttContent({ records }: { records: PortfolioRecord[] }) {
+function ActivityTimelineContent({ records }: { records: PortfolioRecord[] }) {
   const dated = records.filter((record) => record.created || record.updated);
   const range = buildTimelineRange(dated);
 
@@ -481,19 +474,22 @@ function GanttContent({ records }: { records: PortfolioRecord[] }) {
     return (
       <EmptyState
         title="No dated portfolio records"
-        description="Created and updated timestamps from projects, opportunities, and runs are needed for timeline layout."
+        description="Created and updated timestamps from projects, opportunities, and runs are needed for the activity timeline."
       />
     );
   }
 
   return (
     <div className="overflow-hidden rounded-lg border border-border/70 bg-card/95">
+      <div className="border-b border-border/60 bg-surface-subtle/35 px-4 py-2 text-[10px] text-muted-foreground">
+        Bars span first-seen to last-activity, not planned duration or effort.
+      </div>
       <div
         className="grid gap-3 border-b border-border/60 bg-surface-subtle/35 px-4 py-3 text-eyebrow"
-        style={{ gridTemplateColumns: GANTT_GRID_TEMPLATE }}
+        style={{ gridTemplateColumns: TIMELINE_GRID_TEMPLATE }}
       >
         <span>Record</span>
-        <span className="min-w-0">Timeline evidence</span>
+        <span className="min-w-0">Activity span</span>
       </div>
       <div className="divide-y divide-border/60">
         {dated.map((record) => {
@@ -507,7 +503,7 @@ function GanttContent({ records }: { records: PortfolioRecord[] }) {
             <div
               key={`${record.kind}:${record.id}`}
               className="grid gap-3 px-4 py-3"
-              style={{ gridTemplateColumns: GANTT_GRID_TEMPLATE }}
+              style={{ gridTemplateColumns: TIMELINE_GRID_TEMPLATE }}
             >
               <div className="min-w-0">
                 <div className="truncate text-[12px] font-semibold text-foreground">
@@ -532,8 +528,8 @@ function GanttContent({ records }: { records: PortfolioRecord[] }) {
                   />
                 </div>
                 <div className="mt-1 flex justify-between gap-2 text-[10px] text-muted-foreground">
-                  <span>{start ? timeAgo(start) : "No start"}</span>
-                  <span>{end ? `Updated ${timeAgo(end)}` : "No update"}</span>
+                  <span>{start ? `First seen ${timeAgo(start)}` : "No start"}</span>
+                  <span>{end ? `Last activity ${timeAgo(end)}` : "No update"}</span>
                 </div>
               </div>
             </div>
@@ -612,9 +608,9 @@ function CapacityAllocation({ segments }: { segments: ReturnType<typeof buildCap
   return (
     <div className="mt-6 flex flex-col gap-3 border-t border-border/60 pt-4 lg:flex-row lg:items-center">
       <div className="w-48 shrink-0">
-        <div className="text-[12px] font-semibold text-foreground">Capacity Allocation</div>
+        <div className="text-[12px] font-semibold text-foreground">Work mix</div>
         <div className="mt-0.5 text-[11px] text-muted-foreground">
-          Live distribution of team capacity.
+          Share of tracked records by area, not team capacity.
         </div>
       </div>
       <div className="flex-1">
@@ -686,7 +682,10 @@ function buildPortfolioRecords(state: DashboardState): PortfolioRecord[] {
       progress: opportunityProgress(opportunity.status),
       clientId: opportunity.client_id,
       clientName: clientName(state.clients, opportunity.client_id),
-      agents: ["sales", "pricing", "project_manager"],
+      // No agent-ownership record exists for opportunities in kernel state, so
+      // we mark them unassigned instead of fabricating sales/pricing/PM
+      // ownership (SER-152). "unassigned" stays filterable and groupable.
+      agents: [UNASSIGNED_AGENT],
       risk:
         RISK_OPPORTUNITY_STATUSES.has(opportunity.status) ||
         hasMatchingApproval(opportunity.title, opportunity.id, state.approvals),
@@ -707,7 +706,7 @@ function buildPortfolioRecords(state: DashboardState): PortfolioRecord[] {
       title: `${formatLabel(run.type)} · ${run.scope}`,
       status: run.status,
       tone: runTone(run.status),
-      progress: ACTIVE_RUN_STATUSES.has(run.status) ? 55 : run.status === "completed" ? 100 : 25,
+      progress: runProgress(run.status),
       clientId: run.client_id,
       clientName: run.client_id ? clientName(state.clients, run.client_id) : "No client",
       projectId: run.project_id,
@@ -788,7 +787,7 @@ function buildWorkloadGroups(records: PortfolioRecord[]): {
 }[] {
   const groups = new Map<string, PortfolioRecord[]>();
   for (const record of records) {
-    const agents = record.agents.length > 0 ? record.agents : ["unassigned"];
+    const agents = record.agents.length > 0 ? record.agents : [UNASSIGNED_AGENT];
     for (const agent of agents) {
       groups.set(agent, [...(groups.get(agent) ?? []), record]);
     }

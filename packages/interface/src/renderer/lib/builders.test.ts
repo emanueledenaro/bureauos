@@ -1,11 +1,23 @@
 import { describe, expect, it } from "vitest";
-import type { ArtifactRecord } from "./api";
+import type { ArtifactRecord, OpportunityRecord } from "./api";
 import {
   buildLinkedWorkItems,
   buildPortfolioLanes,
   normalizeRepositoryReference,
+  pipelineValue,
 } from "./builders";
 import type { DashboardState } from "./types";
+
+function opportunity(overrides: Partial<OpportunityRecord> & { id: string }): OpportunityRecord {
+  return {
+    title: overrides.id,
+    client_id: "client_1",
+    status: "qualified",
+    expected_value: 0,
+    expected_margin: 0,
+    ...overrides,
+  };
+}
 
 const emptyDashboardState: DashboardState = {
   clients: [],
@@ -33,7 +45,91 @@ describe("normalizeRepositoryReference", () => {
   });
 });
 
+describe("pipelineValue", () => {
+  it("prefers the client intelligence total as the single source of truth", () => {
+    const value = pipelineValue({
+      ...emptyDashboardState,
+      clientIntelligence: {
+        generated_at: "2026-05-26T10:00:00.000Z",
+        totals: {
+          clients: 1,
+          pipeline_value: 12000,
+          won_value: 5000,
+          active_projects: 1,
+          blocked_projects: 0,
+          follow_ups_due: 0,
+        },
+        clients: [],
+      },
+      pulse: {
+        organization: "BureauOS",
+        preset: "default",
+        mode: "default",
+        counts: { clients: 1, projects: 1, opportunities: 2, approvals_pending: 0, runs: 0 },
+        revenue: { pipeline_value: 99999, active_opportunities: 2 },
+      },
+      opportunities: [opportunity({ id: "opp_1", status: "qualified", expected_value: 77777 })],
+    });
+    expect(value).toBe(12000);
+  });
+
+  it("falls back to the company pulse when client intelligence is absent", () => {
+    const value = pipelineValue({
+      ...emptyDashboardState,
+      pulse: {
+        organization: "BureauOS",
+        preset: "default",
+        mode: "default",
+        counts: { clients: 1, projects: 1, opportunities: 2, approvals_pending: 0, runs: 0 },
+        revenue: { pipeline_value: 8000, active_opportunities: 2 },
+      },
+      opportunities: [opportunity({ id: "opp_1", status: "qualified", expected_value: 77777 })],
+    });
+    expect(value).toBe(8000);
+  });
+
+  it("sums only open opportunities when no kernel totals exist", () => {
+    const value = pipelineValue({
+      ...emptyDashboardState,
+      opportunities: [
+        opportunity({ id: "opp_open", status: "qualified", expected_value: 4000 }),
+        opportunity({ id: "opp_proposal", status: "proposal_sent", expected_value: 1000 }),
+        opportunity({ id: "opp_won", status: "won", expected_value: 50000 }),
+        opportunity({ id: "opp_lost", status: "lost", expected_value: 30000 }),
+      ],
+    });
+    expect(value).toBe(5000);
+  });
+});
+
 describe("buildPortfolioLanes", () => {
+  it("does not fabricate agent badges for opportunities without ownership", () => {
+    const lanes = buildPortfolioLanes({
+      ...emptyDashboardState,
+      clients: [
+        {
+          id: "client_1",
+          slug: "client",
+          name: "Client",
+          status: "active",
+          industry: "Services",
+        },
+      ],
+      opportunities: [
+        opportunity({
+          id: "opp_1",
+          title: "New retainer",
+          status: "qualified",
+          expected_value: 4000,
+        }),
+      ],
+    });
+
+    const stream = lanes[0]?.streams[0];
+    expect(stream?.title).toBe("New retainer");
+    expect(stream?.badges).toEqual([]);
+  });
+
   it("uses project ownership agents and GitHub signal artifacts for project cards", () => {
     const signal: ArtifactRecord = {
       id: "art_signal",
