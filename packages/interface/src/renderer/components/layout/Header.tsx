@@ -6,31 +6,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "../../lib/utils";
 import { formatDate, formatMoney, formatTime } from "../../lib/format";
 import { buildTodayActions, pipelineValue } from "../../lib/builders";
+import { MODE_LABELS } from "../../lib/modes";
 import { toneIndicatorClass, toneTextClass, type Tone } from "../../lib/tone";
 import type { AdaptiveMode, DashboardState } from "../../lib/types";
 
-const QUICK_MODES: { id: AdaptiveMode; label: string }[] = [
-  { id: "portfolio", label: "Portfolio" },
-  { id: "today", label: "Today" },
-  { id: "goals", label: "Goals" },
-];
-
-const MODE_LABELS: Record<AdaptiveMode, string> = {
-  coordinator: "Coordinator",
-  portfolio: "Portfolio",
-  today: "Today",
-  goals: "Goals",
-  revenue: "Revenue",
-  delivery: "Delivery",
-  growth: "Growth",
-  clients: "Clients",
-  risk: "Risk",
-  approvals: "Approvals",
-  memory: "Memory",
-  agents: "Agents",
-  reports: "Reports",
-  settings: "Settings",
-};
+const QUICK_MODES: AdaptiveMode[] = ["portfolio", "today", "goals"];
 
 export function Header({
   state,
@@ -67,8 +47,10 @@ export function Header({
         ? `${state.approvals.length} approvals`
         : "Clear";
   const pipeline = pipelineValue(state);
-  const autonomyTone: Tone = state.error ? "danger" : state.loading ? "warning" : "success";
-  const autonomyLabel = state.error ? "Offline" : state.loading ? "Connecting" : "Active";
+  // Connection (not autonomy): this reflects API reachability. Renamed from the
+  // misleading "Autonomous" pill in SER-155 so the label matches what it shows.
+  const connectionTone: Tone = state.error ? "danger" : !state.hasLoaded ? "warning" : "success";
+  const connectionLabel = state.error ? "Offline" : !state.hasLoaded ? "Connecting" : "Online";
   const nextAction = buildTodayActions(state)[0];
 
   return (
@@ -95,16 +77,16 @@ export function Header({
           </div>
           <div className="hidden items-center gap-1 text-[11px] text-muted-foreground lg:flex">
             <span aria-hidden>·</span>
-            {QUICK_MODES.map((item, index) => (
-              <div key={item.id} className="flex items-center gap-1">
+            {QUICK_MODES.map((quickMode, index) => (
+              <div key={quickMode} className="flex items-center gap-1">
                 <button
-                  onClick={() => onModeChange(item.id)}
+                  onClick={() => onModeChange(quickMode)}
                   className={cn(
                     "h-7 rounded-md px-2 transition-colors hover:bg-surface-subtle hover:text-foreground focus-ring",
-                    mode === item.id ? "font-medium text-foreground" : "text-muted-foreground",
+                    mode === quickMode ? "font-medium text-foreground" : "text-muted-foreground",
                   )}
                 >
-                  {item.label}
+                  {MODE_LABELS[quickMode]}
                 </button>
                 {index < QUICK_MODES.length - 1 ? (
                   <span className="text-border" aria-hidden>
@@ -116,15 +98,17 @@ export function Header({
           </div>
         </div>
         <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-          {nextAction
-            ? `Next: ${nextAction.title} · ${nextAction.source}`
-            : `${state.pulse?.organization ?? "BureauOS"} · no urgent action`}
+          {!state.hasLoaded
+            ? "Loading company context…"
+            : nextAction
+              ? `Next: ${nextAction.title} · ${nextAction.source}`
+              : `${state.pulse?.organization ?? "BureauOS"} · no urgent action`}
         </div>
       </div>
 
       <div className="flex items-center gap-2">
         <div className="hidden md:flex items-center gap-2">
-          <TopMetric tone={autonomyTone} label="Autonomous" value={autonomyLabel} />
+          <TopMetric tone={connectionTone} label="Connection" value={connectionLabel} />
           <TopMetric tone={riskTone} label="Risk" value={riskLabel} className="hidden lg:flex" />
           <TopMetric
             tone={pipeline > 0 ? "success" : "warning"}

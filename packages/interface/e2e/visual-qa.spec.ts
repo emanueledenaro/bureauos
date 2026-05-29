@@ -13,7 +13,7 @@ const OUTPUT_ROOT =
   );
 
 const VIEWS = [
-  { nav: "Home", expected: "Portfolio Operating Room" },
+  { nav: "Portfolio", expected: "Portfolio Operating Room" },
   { nav: "Coordinator", expected: "Supreme Coordinator" },
   { nav: "Revenue", expected: "Revenue" },
   { nav: "Delivery", expected: "Delivery" },

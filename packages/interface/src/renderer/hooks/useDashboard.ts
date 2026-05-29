@@ -23,6 +23,7 @@ const emptyState: DashboardState = {
   audit: [],
   policyExplain: undefined,
   loading: true,
+  hasLoaded: false,
 };
 
 function auditEventKey(event: AuditEvent): string {
@@ -48,6 +49,141 @@ interface DashboardRefreshOptions {
   includeAudit?: boolean;
 }
 
+/**
+ * The ordered batch of core dashboard requests. The first entry (company pulse)
+ * doubles as the health probe used to decide whether to show a global error.
+ *
+ * Order is load-bearing: `applyCoreResults` destructures the settled results in
+ * exactly this sequence. Deriving `CoreSettledResults` from this factory keeps
+ * the two in lockstep.
+ */
+function coreRequests() {
+  return [
+    Api.pulse(),
+    Api.clients(),
+    Api.clientIntelligence(),
+    Api.projects(),
+    Api.projectOwnership(),
+    Api.opportunities(),
+    Api.growthMemory(),
+    Api.approvals(),
+    Api.approvalsResolved(),
+    Api.notifications(),
+    Api.runs(),
+    Api.agents(),
+    Api.capabilities(),
+    Api.artifacts(),
+    Api.policyExplain(),
+    Api.providers(),
+    Api.settings(),
+    Api.providerConnectors(),
+  ] as const;
+}
+
+/** Maps a tuple of promises to the matching tuple of settled results. */
+type SettledTuple<T extends readonly unknown[]> = {
+  [K in keyof T]: PromiseSettledResult<Awaited<T[K]>>;
+};
+
+type CoreSettledResults = SettledTuple<ReturnType<typeof coreRequests>>;
+
+/**
+ * Reads a settled result, falling back to the last-good value when the request
+ * rejected. Keeping the previous slice avoids blanking the dashboard when a
+ * single endpoint is briefly unavailable.
+ */
+function settledOr<T>(result: PromiseSettledResult<T>, fallback: T): T {
+  return result.status === "fulfilled" ? result.value : fallback;
+}
+
+/**
+ * Builds the next dashboard state from a batch of settled core requests.
+ *
+ * Behaviour (SER-154):
+ * - Each slice keeps its last-good (or empty) value when its request rejects,
+ *   so one failing endpoint never blanks the whole dashboard.
+ * - The global `error` is only set when the health probe (company pulse) fails
+ *   or when every core request fails. Partial failures stay silent and recover
+ *   on the next tick.
+ */
+export function applyCoreResults(
+  current: DashboardState,
+  results: CoreSettledResults,
+  auditResult: PromiseSettledResult<AuditEvent[]> | undefined,
+): DashboardState {
+  const [
+    pulse,
+    clients,
+    clientIntelligence,
+    projects,
+    projectOwnership,
+    opportunities,
+    growthMemory,
+    approvals,
+    resolvedApprovals,
+    notifications,
+    runs,
+    agents,
+    capabilities,
+    artifacts,
+    policyExplain,
+    providers,
+    settings,
+    providerConnectors,
+  ] = results;
+
+  const healthOk = pulse.status === "fulfilled";
+  const allFailed =
+    results.every((result) => result.status === "rejected") &&
+    (auditResult === undefined || auditResult.status === "rejected");
+
+  // Surface an error banner only on a real health failure or a total outage.
+  // A real probe failure carries the rejection message; an all-failed batch
+  // borrows the first available rejection reason for context.
+  let error: string | undefined;
+  if (!healthOk) {
+    error = pulse.reason instanceof Error ? pulse.reason.message : String(pulse.reason);
+  } else if (allFailed) {
+    const firstRejection = results.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    error = firstRejection
+      ? firstRejection.reason instanceof Error
+        ? firstRejection.reason.message
+        : String(firstRejection.reason)
+      : "API server unreachable";
+  }
+
+  const audit = auditResult
+    ? mergeAuditEvents(current.audit, settledOr(auditResult, []))
+    : current.audit;
+
+  return {
+    pulse: settledOr(pulse, current.pulse),
+    clients: settledOr(clients, current.clients),
+    clientIntelligence: settledOr(clientIntelligence, current.clientIntelligence),
+    projects: settledOr(projects, current.projects),
+    projectOwnership: settledOr(projectOwnership, current.projectOwnership),
+    opportunities: settledOr(opportunities, current.opportunities),
+    growthMemory: settledOr(growthMemory, current.growthMemory),
+    approvals: settledOr(approvals, current.approvals),
+    resolvedApprovals: settledOr(resolvedApprovals, current.resolvedApprovals),
+    notifications: settledOr(notifications, current.notifications),
+    runs: settledOr(runs, current.runs),
+    agents: settledOr(agents, current.agents),
+    capabilities: settledOr(capabilities, current.capabilities),
+    artifacts: settledOr(artifacts, current.artifacts),
+    policyExplain: settledOr(policyExplain, current.policyExplain),
+    providers: settledOr(providers, current.providers),
+    settings: settledOr(settings, current.settings),
+    providerConnectors: settledOr(providerConnectors, current.providerConnectors),
+    audit,
+    error,
+    loading: false,
+    hasLoaded: true,
+  };
+}
+
 export function useDashboard(): {
   state: DashboardState;
   refresh: () => Promise<void>;
@@ -57,75 +193,13 @@ export function useDashboard(): {
   const refreshDashboard = async ({
     includeAudit = false,
   }: DashboardRefreshOptions = {}): Promise<void> => {
-    try {
-      const coreRequests = [
-        Api.pulse(),
-        Api.clients(),
-        Api.clientIntelligence(),
-        Api.projects(),
-        Api.projectOwnership(),
-        Api.opportunities(),
-        Api.growthMemory(),
-        Api.approvals(),
-        Api.approvalsResolved(),
-        Api.notifications(),
-        Api.runs(),
-        Api.agents(),
-        Api.capabilities(),
-        Api.artifacts(),
-        Api.policyExplain(),
-        Api.providers(),
-        Api.settings(),
-        Api.providerConnectors(),
-      ] as const;
+    // allSettled (not all): one rejected endpoint must not blank the dashboard.
+    const results: CoreSettledResults = await Promise.allSettled(coreRequests());
+    const auditResult = includeAudit
+      ? await Promise.allSettled([Api.audit(30)]).then((settled) => settled[0])
+      : undefined;
 
-      const [
-        pulse,
-        clients,
-        clientIntelligence,
-        projects,
-        projectOwnership,
-        opportunities,
-        growthMemory,
-        approvals,
-        resolvedApprovals,
-        notifications,
-        runs,
-        agents,
-        capabilities,
-        artifacts,
-        policyExplain,
-        providers,
-        settings,
-        providerConnectors,
-      ] = await Promise.all(coreRequests);
-      const audit = includeAudit ? await Api.audit(30) : undefined;
-
-      setState((current) => ({
-        pulse,
-        clients,
-        clientIntelligence,
-        projects,
-        projectOwnership,
-        opportunities,
-        growthMemory,
-        approvals,
-        resolvedApprovals,
-        notifications,
-        runs,
-        agents,
-        capabilities,
-        artifacts,
-        policyExplain,
-        providers,
-        settings,
-        providerConnectors,
-        audit: audit ? mergeAuditEvents(current.audit, audit) : current.audit,
-        loading: false,
-      }));
-    } catch (e) {
-      setState((current) => ({ ...current, loading: false, error: (e as Error).message }));
-    }
+    setState((current) => applyCoreResults(current, results, auditResult));
   };
 
   const refresh = async (): Promise<void> => refreshDashboard({ includeAudit: true });

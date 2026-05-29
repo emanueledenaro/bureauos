@@ -11,7 +11,7 @@ const FORBIDDEN_RENDERER_PATTERNS = [
 ];
 
 const CORE_VIEWS = [
-  { nav: "Home", expected: "Portfolio Operating Room" },
+  { nav: "Portfolio", expected: "Portfolio Operating Room" },
   { nav: "Coordinator", expected: "Supreme Coordinator" },
   { nav: "Clients", expected: "Clients" },
   { nav: "Delivery", expected: "Delivery" },
@@ -22,7 +22,7 @@ const CORE_VIEWS = [
   { nav: "Growth", expected: "Growth" },
   { nav: "Revenue", expected: "Revenue" },
   { nav: "Agents", expected: "Agents" },
-  { nav: "Inbox", expected: "Today" },
+  { nav: "Today", expected: "Today" },
   { nav: "Goals", expected: "Goals" },
 ] as const;
 
@@ -133,7 +133,7 @@ test.describe("Operating Room portfolio modes", () => {
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openWorkspace(page, workspace);
-    await openDesktopView(page, "Home");
+    await openDesktopView(page, "Portfolio");
 
     const main = page.locator("main");
     await expect(main).toContainText("Active only");
