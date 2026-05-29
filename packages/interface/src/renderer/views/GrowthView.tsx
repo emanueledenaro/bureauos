@@ -264,7 +264,7 @@ export function GrowthView({
         <SectionHeading title="Recent draft assets" meta={`${growthArtifacts.length} total`} />
         <div className="mt-2 grid items-stretch gap-3 md:grid-cols-3">
           {growthArtifacts.slice(0, 6).map((artifact) => (
-            <BaseCard key={artifact.id} variant="interactive" className="h-full gap-2">
+            <BaseCard key={artifact.id} className="h-full gap-2">
               <BaseCardHeader title={formatLabel(artifact.type)} />
               <div className="text-meta truncate font-mono">{artifact.id}</div>
               <div className="text-meta">

@@ -446,6 +446,7 @@ function DashboardLayout({
     onGenerateGrowthContent,
     onGenerateGrowthReview,
     onGenerateRevenuePipeline,
+    onGenerateReport,
     onRefresh,
   });
 
@@ -485,6 +486,7 @@ function renderMainView({
   onGenerateGrowthContent,
   onGenerateGrowthReview,
   onGenerateRevenuePipeline,
+  onGenerateReport,
   onRefresh,
 }: {
   mode: AdaptiveMode;
@@ -508,6 +510,7 @@ function renderMainView({
   onGenerateGrowthContent: () => Promise<GrowthContentPipelineResult>;
   onGenerateGrowthReview: () => Promise<GrowthReviewResult>;
   onGenerateRevenuePipeline: () => Promise<RevenuePipelineResult>;
+  onGenerateReport: () => Promise<BusinessReportResult>;
   onRefresh: () => Promise<void>;
 }) {
   switch (mode) {
@@ -555,7 +558,7 @@ function renderMainView({
     case "agents":
       return <AgentsView state={state} />;
     case "reports":
-      return <ReportsView state={state} />;
+      return <ReportsView state={state} onGenerateReport={onGenerateReport} />;
     case "settings":
       return (
         <SettingsView

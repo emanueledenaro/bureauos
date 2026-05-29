@@ -332,7 +332,7 @@ export function DeliveryView({
 
       <div className="mt-section grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {sortNewest(state.projects).map((project) => (
-          <BaseCard key={project.id} variant="interactive" className="gap-3">
+          <BaseCard key={project.id} className="gap-3">
             <BaseCardHeader
               title={project.name}
               subtitle={clientName(state.clients, project.client_id)}
