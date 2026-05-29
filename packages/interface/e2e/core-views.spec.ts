@@ -278,6 +278,40 @@ test.describe("Operating Room external commitment approvals", () => {
   });
 });
 
+test.describe("Operating Room approval history", () => {
+  let workspace: InterfaceWorkspace;
+
+  test.beforeAll(async () => {
+    workspace = await createInterfaceWorkspace("seeded");
+    await resolvePendingApprovals(workspace);
+  });
+
+  test.afterAll(async () => {
+    await workspace.close();
+  });
+
+  test("opens resolved decision history when no owner gates remain", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openWorkspace(page, workspace);
+    await openDesktopView(page, "Approvals");
+
+    const main = page.locator("main");
+    await expect(main).toContainText("Decision queue clear");
+    await expect(main).toContainText("No pending gates, so the latest resolved decisions are shown first.");
+    await expect(main).toContainText("Send Final Proposals");
+    await expect(main).toContainText("Resolve Retry Blocker");
+    await expect(main).not.toContainText("No approvals in this view");
+    await expectNoHorizontalOverflow(page);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openWorkspace(page, workspace);
+    await openCompactView(page, "Approvals");
+    await expect(main).toContainText("Decision queue clear");
+    await expect(main).toContainText("Send Final Proposals");
+    await expectNoHorizontalOverflow(page);
+  });
+});
+
 test.describe("Operating Room revenue pulse", () => {
   let workspace: InterfaceWorkspace;
 
@@ -380,6 +414,29 @@ async function openWorkspace(page: Page, workspace: InterfaceWorkspace): Promise
   await expect(page).toHaveTitle(/BureauOS - Operating Room/);
   await expect(page.locator("body")).toContainText("Operating Room");
   await expect(page.locator("body")).not.toContainText("API server unreachable");
+}
+
+async function resolvePendingApprovals(workspace: InterfaceWorkspace): Promise<void> {
+  const pendingResponse = await fetch(`${workspace.url}/approvals`);
+  if (!pendingResponse.ok) {
+    throw new Error(`Could not read pending approvals: ${pendingResponse.status}`);
+  }
+  const approvals = (await pendingResponse.json()) as Array<{ id: string }>;
+
+  for (const [index, approval] of approvals.entries()) {
+    const response = await fetch(`${workspace.url}/approvals/resolve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: approval.id,
+        status: index % 2 === 0 ? "approved" : "rejected",
+        reason: `SER-145 history regression ${index + 1}`,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(`Could not resolve approval ${approval.id}: ${response.status}`);
+    }
+  }
 }
 
 async function openDesktopView(page: Page, nav: string): Promise<void> {

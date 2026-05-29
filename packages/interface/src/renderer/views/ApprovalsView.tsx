@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, Check, ShieldCheck, X } from "lucide-react";
 import { SectionShell } from "../components/dashboard/SectionShell";
 import { MetricTile } from "../components/dashboard/MetricTile";
@@ -28,12 +28,58 @@ import { formatLabel, timeAgo } from "../lib/format";
 import type { ApprovalRecord } from "../lib/api";
 import type { DashboardState } from "../lib/types";
 
-const FILTERS: Array<{ id: "pending" | "approved" | "rejected" | "all"; label: string }> = [
+type ApprovalFilter = "pending" | "approved" | "rejected" | "all";
+
+const FILTERS: Array<{ id: ApprovalFilter; label: string }> = [
   { id: "pending", label: "Pending" },
   { id: "approved", label: "Approved" },
   { id: "rejected", label: "Rejected" },
   { id: "all", label: "All" },
 ];
+
+function sortApprovalRows(a: ApprovalRecord, b: ApprovalRecord): number {
+  const statusRank = statusSortRank(a.status) - statusSortRank(b.status);
+  if (statusRank !== 0) return statusRank;
+  return (b.updated ?? b.created ?? "").localeCompare(a.updated ?? a.created ?? "");
+}
+
+function statusSortRank(status: ApprovalRecord["status"]): number {
+  if (status === "pending") return 0;
+  if (status === "approved") return 1;
+  if (status === "rejected") return 2;
+  return 3;
+}
+
+function approvalEmptyState(
+  filter: ApprovalFilter,
+  historyCount: number,
+): { title: string; description: string } {
+  if (filter === "pending") {
+    return {
+      title: "Decision queue clear",
+      description:
+        historyCount > 0
+          ? "Switch to All, Approved, or Rejected to inspect resolved decisions."
+          : "Serious policy gates will appear here before BureauOS performs sensitive actions.",
+    };
+  }
+  if (filter === "approved") {
+    return {
+      title: "No approved decisions yet",
+      description: "Approved policy gates will appear here after the owner allows them.",
+    };
+  }
+  if (filter === "rejected") {
+    return {
+      title: "No rejected decisions yet",
+      description: "Denied policy gates will appear here when the owner blocks sensitive work.",
+    };
+  }
+  return {
+    title: "No approval records yet",
+    description: "Serious policy gates and resolved owner decisions will appear here.",
+  };
+}
 
 export function ApprovalsView({
   state,
@@ -42,7 +88,9 @@ export function ApprovalsView({
   state: DashboardState;
   onResolve: (id: string, status: "approved" | "rejected", reason?: string) => Promise<void>;
 }) {
-  const [filter, setFilter] = useState<"pending" | "approved" | "rejected" | "all">("pending");
+  const recommendedFilter: ApprovalFilter = state.approvals.length > 0 ? "pending" : "all";
+  const [filter, setFilter] = useState<ApprovalFilter>(recommendedFilter);
+  const [manualFilter, setManualFilter] = useState(false);
   const [decision, setDecision] = useState<
     { approval: ApprovalRecord; status: "approved" | "rejected" } | undefined
   >();
@@ -53,11 +101,18 @@ export function ApprovalsView({
   const pendingGroups = groupApprovalsByRunAndRisk(state.approvals, state.runs);
   const visible = allApprovals
     .filter((approval) => filter === "all" || approval.status === filter)
-    .sort((a, b) => (b.updated ?? b.created ?? "").localeCompare(a.updated ?? a.created ?? ""));
+    .sort(sortApprovalRows);
   const approved = state.resolvedApprovals.filter((approval) => approval.status === "approved");
   const rejected = state.resolvedApprovals.filter((approval) => approval.status === "rejected");
+  const historyCount = approved.length + rejected.length;
+  const hasPending = state.approvals.length > 0;
+  const showingHistoryByDefault = !hasPending && filter === "all" && historyCount > 0;
   const decisionRisk = decision ? approvalRiskLevel(decision.approval) : "low";
   const decisionRequiresNote = decision ? approvalRequiresDecisionNote(decision.approval) : false;
+
+  useEffect(() => {
+    if (!manualFilter) setFilter(recommendedFilter);
+  }, [manualFilter, recommendedFilter]);
 
   const openDecision = (approval: ApprovalRecord, status: "approved" | "rejected"): void => {
     setDecision({ approval, status });
@@ -186,7 +241,7 @@ export function ApprovalsView({
         approval.status === "pending" ? (
           decisionButtons(approval)
         ) : (
-          <span className="text-meta truncate text-right">
+          <span className="block max-w-[180px] truncate text-right text-meta">
             {approval.reason || approval.resolved_at || "Resolved"}
           </span>
         ),
@@ -198,7 +253,10 @@ export function ApprovalsView({
       title="Approvals"
       description="Owner decisions, external action gates, and resolved approval history."
     >
-      <KpiBar columns={4}>
+      <KpiBar
+        columns={4}
+        className="grid-flow-row grid-cols-2 auto-cols-auto overflow-visible pb-0 lg:grid-cols-4"
+      >
         <MetricTile
           label="Pending"
           value={String(state.approvals.length)}
@@ -230,12 +288,15 @@ export function ApprovalsView({
       </KpiBar>
 
       <div className="mt-section grid gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h3 className="text-[13px] font-semibold text-foreground">Pending Inbox</h3>
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
+            <h3 className="text-[13px] font-semibold text-foreground">Decision Inbox</h3>
+            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+              Serious owner gates stay here; resolved decisions stay visible in history.
+            </p>
           </div>
-          <span className="text-[11px] text-muted-foreground">
-            {state.approvals.length} pending decisions
+          <span className="text-[11px] text-muted-foreground sm:text-right">
+            {state.approvals.length} pending decision{state.approvals.length === 1 ? "" : "s"}
           </span>
         </div>
         {pendingGroups.length > 0 ? (
@@ -320,27 +381,49 @@ export function ApprovalsView({
             </div>
           ))
         ) : (
-          <div className="rounded-md border border-border/70 bg-surface-subtle/30 px-4 py-6 text-center text-[12px] text-muted-foreground">
-            No serious owner decisions pending.
+          <div className="flex flex-col gap-3 rounded-md border border-success/25 bg-success-subtle/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="text-[12px] font-semibold text-foreground">Decision queue clear</div>
+              <div className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                No serious owner decisions pending. Recent decision history is shown below.
+              </div>
+            </div>
+            <StatusPill value="No gate waiting" tone="success" />
           </div>
         )}
       </div>
 
-      <div className="mt-section inline-flex rounded-lg border border-border bg-surface-subtle p-1">
-        {FILTERS.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setFilter(item.id)}
-            className={cn(
-              "rounded-md px-3 py-1.5 text-body font-medium transition-colors focus-ring",
-              filter === item.id
-                ? "bg-surface-raised text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {item.label}
-          </button>
-        ))}
+      <div className="mt-section flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <h3 className="text-[13px] font-semibold text-foreground">Decision History</h3>
+          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+            {showingHistoryByDefault
+              ? "No pending gates, so the latest resolved decisions are shown first."
+              : "Review pending and resolved policy decisions from the local audit trail."}
+          </p>
+        </div>
+        <div
+          className="inline-flex w-full overflow-x-auto rounded-lg border border-border bg-surface-subtle p-1 sm:w-auto"
+          aria-label="Approval history filter"
+        >
+          {FILTERS.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => {
+                setManualFilter(true);
+                setFilter(item.id);
+              }}
+              className={cn(
+                "min-w-max rounded-md px-3 py-1.5 text-body font-medium transition-colors focus-ring",
+                filter === item.id
+                  ? "bg-surface-raised text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <DataTable
@@ -350,10 +433,7 @@ export function ApprovalsView({
         rowKey={(approval) => approval.id}
         mobileFallback="cards"
         minWidth={920}
-        emptyState={{
-          title: "No approvals in this view",
-          description: "Policy gates appear here before BureauOS performs sensitive actions.",
-        }}
+        emptyState={approvalEmptyState(filter, historyCount)}
       />
 
       <Dialog open={Boolean(decision)} onOpenChange={(open) => !open && closeDecision()}>
