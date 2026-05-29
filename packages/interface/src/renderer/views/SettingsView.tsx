@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Building2, KeyRound, Loader2, Plug, Shield } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Building2, KeyRound, Loader2, Lock, Plug, Shield } from "lucide-react";
 import { SectionShell } from "../components/dashboard/SectionShell";
 import { ResponsiveTable } from "../components/dashboard/ResponsiveTable";
 import { Button } from "../components/ui/button";
@@ -23,6 +23,30 @@ import {
   type ProviderModelList,
   type SettingsSummary,
 } from "../lib/api";
+
+/**
+ * Normalize a pasted OAuth value into something the callback endpoint accepts.
+ *
+ * The owner may paste either a bare authorization code or the full redirect URL
+ * from the browser. When a URL is pasted we extract its `code` query parameter
+ * and keep the `state` in the compact `code#state` form so the server can still
+ * validate it against the pending session. Non-URL input is passed through.
+ */
+function extractOAuthCode(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  try {
+    const url = new URL(trimmed);
+    const code = url.searchParams.get("code");
+    if (code) {
+      const state = url.searchParams.get("state");
+      return state ? `${code}#${state}` : code;
+    }
+  } catch {
+    // Not a URL; treat the value as a raw code or compact code#state token.
+  }
+  return trimmed;
+}
 
 export function SettingsView({
   settings,
@@ -58,6 +82,17 @@ export function SettingsView({
   const [oauthStatus, setOauthStatus] = useState<string | undefined>();
   const [modelList, setModelList] = useState<ProviderModelList | undefined>();
   const [busy, setBusy] = useState(false);
+  const [savingModel, setSavingModel] = useState(false);
+  const [modelStatus, setModelStatus] = useState<string | undefined>();
+  // Tracks whether the owner manually picked a model for the current provider.
+  // While true, async model-list resolution must not clobber their choice.
+  const modelTouched = useRef(false);
+
+  const selectModel = (value: string): void => {
+    modelTouched.current = true;
+    setModelStatus(undefined);
+    setDefaultModel(value);
+  };
 
   const connector = providerConnectors.find((item) => item.id === provider);
   const connectedProvider = providers.find((item) => item.provider === provider);
@@ -93,6 +128,10 @@ export function SettingsView({
 
   useEffect(() => {
     let cancelled = false;
+    // Switching provider (or its connected model) starts a fresh selection, so
+    // forget any prior manual pick before we seed defaults.
+    modelTouched.current = false;
+    setModelStatus(undefined);
     const fallback = connector
       ? {
           provider,
@@ -109,7 +148,9 @@ export function SettingsView({
       .then((models) => {
         if (cancelled) return;
         setModelList(models);
-        setDefaultModel(models.defaultModel || models.models[0]?.id || "");
+        // Never override a model the owner just selected while this resolved.
+        if (modelTouched.current) return;
+        setDefaultModel(connectedProvider?.default_model || models.defaultModel || nextDefault);
       })
       .catch(() => {
         if (cancelled || !fallback) return;
@@ -142,7 +183,7 @@ export function SettingsView({
 
     setOauthStatus("Waiting for browser authorization…");
     const result = await Api.providerOAuthCallback("openai-codex", {
-      method: 0,
+      method: "auto",
       ...(defaultModel.trim() ? { defaultModel: defaultModel.trim() } : {}),
     });
     if (result.status !== "connected") {
@@ -157,11 +198,12 @@ export function SettingsView({
   };
 
   const completeOpenAICodexOAuth = async (): Promise<void> => {
-    if (!oauthCode.trim()) return;
+    const code = extractOAuthCode(oauthCode);
+    if (!code) return;
     setOauthStatus("Completing OpenAI Codex OAuth…");
     const result = await Api.providerOAuthCallback("openai-codex", {
-      method: 0,
-      code: oauthCode.trim(),
+      method: "code",
+      code,
       ...(defaultModel.trim() ? { defaultModel: defaultModel.trim() } : {}),
     });
     if (result.status !== "connected") {
@@ -173,6 +215,31 @@ export function SettingsView({
     setOauthCode("");
     setDefaultModel("");
     await onRefresh();
+  };
+
+  const saveModel = async (): Promise<void> => {
+    if (savingModel || !connectedProvider || connectedProvider.source !== "auth") return;
+    const next = defaultModel.trim();
+    if (!next) {
+      setModelStatus("Pick a model before saving.");
+      return;
+    }
+    setSavingModel(true);
+    setModelStatus("Saving model…");
+    try {
+      await Api.providerSetDefaultModel({
+        provider,
+        id: connectedProvider.id,
+        defaultModel: next,
+      });
+      modelTouched.current = false;
+      setModelStatus(`Default model set to ${next}.`);
+      await onRefresh();
+    } catch (error) {
+      setModelStatus(error instanceof Error ? error.message : "Failed to update model.");
+    } finally {
+      setSavingModel(false);
+    }
   };
 
   const connect = async (): Promise<void> => {
@@ -256,7 +323,7 @@ export function SettingsView({
           <label className="text-[10px] uppercase tracking-wide text-muted-foreground">
             Default model
           </label>
-          <Select value={defaultModel} onValueChange={setDefaultModel}>
+          <Select value={defaultModel} onValueChange={selectModel}>
             <SelectTrigger>
               <SelectValue placeholder="Auto" />
             </SelectTrigger>
@@ -272,9 +339,44 @@ export function SettingsView({
 
         <Button onClick={() => void connect()} disabled={busy} className="md:col-start-4">
           {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plug className="h-3 w-3" />}
-          {mode === "oauth" ? "Connect OAuth" : "Connect"}
+          {mode === "oauth"
+            ? connectedProvider?.source === "auth"
+              ? "Reconnect OAuth"
+              : "Connect OAuth"
+            : connectedProvider?.source === "auth"
+              ? "Reconnect"
+              : "Connect"}
         </Button>
       </div>
+
+      {connectedProvider?.source === "auth" ? (
+        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-border/70 bg-surface-subtle/40 px-4 py-3">
+          <Badge variant="success">Connected</Badge>
+          <span className="text-[11px] text-muted-foreground">
+            Current model{" "}
+            <span className="font-mono text-foreground">
+              {connectedProvider.default_model || "auto"}
+            </span>
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void saveModel()}
+            disabled={
+              savingModel ||
+              !defaultModel.trim() ||
+              defaultModel === connectedProvider.default_model
+            }
+            className="ml-auto"
+          >
+            {savingModel ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+            {connectedProvider.default_model ? "Update model" : "Save model"}
+          </Button>
+          {modelStatus ? (
+            <span className="w-full text-[11px] text-muted-foreground">{modelStatus}</span>
+          ) : null}
+        </div>
+      ) : null}
 
       {connector ? (
         <div className="mt-4 rounded-lg border border-border/70 bg-surface-subtle/60 p-4">
@@ -408,6 +510,7 @@ export function SettingsView({
             title={`Level ${settings.autonomy.level ?? 2} · ${enabledCount(settings.autonomy)} enabled`}
           >
             <ToggleList values={settings.autonomy} limit={8} />
+            <ReadOnlyNote />
           </SettingsCard>
 
           <SettingsCard
@@ -416,10 +519,11 @@ export function SettingsView({
             title={`${enabledCount(settings.growth_autonomy)} / ${Object.keys(settings.growth_autonomy).length} enabled`}
           >
             <ToggleList values={settings.growth_autonomy} limit={8} />
+            <ReadOnlyNote />
           </SettingsCard>
 
           <SettingsCard icon={Shield} label="Limits & Signals" title="Operational guards">
-            <div className="space-y-1.5 text-[11px]">
+            <div className="select-none space-y-1.5 text-[11px]">
               <Row label="Max retries" value={settings.limits.max_retries_per_task as number} />
               <Row
                 label="Files before review"
@@ -438,6 +542,7 @@ export function SettingsView({
                 }
               />
             </div>
+            <ReadOnlyNote />
           </SettingsCard>
         </div>
       ) : null}
@@ -563,15 +668,37 @@ function ToggleList({
     ([key, value]) => key !== "level" && typeof value === "boolean",
   );
   return (
-    <div className="space-y-1 text-[11px]">
+    <div className="select-none space-y-1 text-[11px]">
       {entries.slice(0, limit).map(([key, value]) => (
         <div key={key} className="flex items-center justify-between gap-2">
           <span className="truncate text-muted-foreground">{formatLabel(key)}</span>
-          <span className={value ? "text-success" : "text-muted-foreground/60"}>
+          <span
+            className={cn(
+              "cursor-default rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide",
+              value
+                ? "bg-success-subtle/40 text-success"
+                : "bg-surface-subtle/60 text-muted-foreground/70",
+            )}
+          >
             {value ? "on" : "off"}
           </span>
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Inline notice that a settings card is display-only. Editing autonomy, growth
+ * policy, and limits requires a config write path that does not exist yet
+ * (tracked in SER-148); these cards visualize `bureauos.yaml` and must not look
+ * like live controls until that backend exists.
+ */
+function ReadOnlyNote() {
+  return (
+    <div className="mt-3 flex items-center gap-1.5 border-t border-border/50 pt-2 text-[10px] text-muted-foreground/80">
+      <Lock className="h-3 w-3" />
+      <span>Read-only. Edit in bureauos.yaml.</span>
     </div>
   );
 }

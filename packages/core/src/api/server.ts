@@ -78,6 +78,7 @@ import {
   authorizeOpenAICodexOAuth,
   completeOpenAICodexOAuth,
   providerAuthMethods,
+  type ProviderOAuthCallbackInput,
 } from "../providers/openai-codex-oauth-session.js";
 
 /**
@@ -1008,11 +1009,7 @@ const ROUTES: Record<string, RouteHandler> = {
   },
 
   "POST /provider/openai-codex/oauth/callback": async ({ res, options, req }) => {
-    const payload = (await readJson(req)) as {
-      method?: number;
-      code?: string;
-      defaultModel?: string;
-    };
+    const payload = (await readJson(req)) as ProviderOAuthCallbackInput;
     const result = await completeOpenAICodexOAuth({
       workspaceRoot: options.workspaceRoot,
       payload,
@@ -1071,6 +1068,40 @@ const ROUTES: Record<string, RouteHandler> = {
       result: "ok",
     });
     ok(res, await providerStatuses(options.workspaceRoot, options.config), 201);
+  },
+
+  "POST /providers/auth/model": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as {
+      provider?: string;
+      id?: string;
+      defaultModel?: string;
+    };
+    const provider = parseProvider(body.provider);
+    if (!provider) {
+      ok(res, { error: "provider required" }, 400);
+      return;
+    }
+    if (typeof body.defaultModel !== "string") {
+      ok(res, { error: "defaultModel required" }, 400);
+      return;
+    }
+    const id = body.id || defaultProviderId(provider);
+    const record = await ProviderAuthStore.forWorkspace(options.workspaceRoot).setDefaultModel(
+      provider,
+      body.defaultModel,
+      id,
+    );
+    if (!record) {
+      ok(res, { error: "provider is not connected" }, 404);
+      return;
+    }
+    await deps(options).audit.append({
+      actor: "owner",
+      action: "provider.auth.model",
+      target: `${provider}:${record.id}`,
+      result: "ok",
+    });
+    ok(res, await providerStatuses(options.workspaceRoot, options.config));
   },
 
   "POST /providers/auth/logout": async ({ res, options, req }) => {

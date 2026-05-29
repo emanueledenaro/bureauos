@@ -94,4 +94,31 @@ describe("ProviderAuthStore", () => {
       }),
     ).rejects.toThrow("openai-codex");
   });
+
+  it("updates the default model on an OAuth credential while keeping its tokens", async () => {
+    const store = ProviderAuthStore.forWorkspace(dir);
+    await store.upsert({
+      provider: "openai-codex",
+      accessToken: "oauth-access-token-123456",
+      refreshToken: "oauth-refresh-token-123456",
+      defaultModel: "gpt-5.3-codex",
+    });
+
+    const updated = await store.setDefaultModel("openai-codex", "gpt-5.4-codex");
+    expect(updated?.defaultModel).toBe("gpt-5.4-codex");
+    expect(updated?.accessToken).toBe("oauth-access-token-123456");
+    expect(updated?.refreshToken).toBe("oauth-refresh-token-123456");
+    expect(updated?.mode).toBe("oauth");
+
+    const records = await store.list();
+    expect(records).toHaveLength(1);
+    expect(records[0]?.defaultModel).toBe("gpt-5.4-codex");
+  });
+
+  it("does not create a credential when updating a model for an unconnected provider", async () => {
+    const store = ProviderAuthStore.forWorkspace(dir);
+    const result = await store.setDefaultModel("anthropic", "claude-x");
+    expect(result).toBeUndefined();
+    expect(await store.list()).toHaveLength(0);
+  });
 });
