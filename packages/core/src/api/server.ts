@@ -84,8 +84,16 @@ import {
  * Local HTTP API server.
  *
  * Endpoints expose kernel state for the Owner Interface (Phase 4). Read-only
- * for the first cut except for the approval resolve endpoints. CORS is open
- * for `http://localhost:*` so the Electron renderer can hit it during dev.
+ * for the first cut except for the approval resolve endpoints.
+ *
+ * Trust model: the server binds to loopback only. Every non-webhook request
+ * must additionally target a loopback `Host` (anti-DNS-rebinding) and, if it
+ * carries a browser `Origin`, that origin must be a loopback / `file://` origin
+ * (or an explicit `allowedOrigins` entry). Cross-origin browser callers are
+ * rejected and `Access-Control-Allow-Origin` reflects only an allowed origin —
+ * never a wildcard. A configured `token` adds bearer auth on top. The GitHub
+ * webhook route is exempt from these checks because it is authenticated by its
+ * HMAC signature instead.
  */
 
 export interface ApiServerOptions {
@@ -93,6 +101,14 @@ export interface ApiServerOptions {
   config: BureauConfig;
   port?: number;
   token?: string;
+  /**
+   * Extra browser origins allowed to make cross-origin requests, in addition to
+   * the loopback origins the desktop renderer uses (`http://localhost:*`,
+   * `http://127.0.0.1:*`, and the `null`/`file://` origin). Use this to permit a
+   * specific dev or packaged renderer origin. Foreign origins are always
+   * rejected as an anti-DNS-rebinding / CSRF defense.
+   */
+  allowedOrigins?: readonly string[];
   daemonSupervisor?: DaemonApiSupervisor;
   githubClient?: GitHubIssuePublishClient &
     Partial<GitHubPullRequestPublishClient> &
@@ -202,12 +218,12 @@ function redactAuditPayload(payload: unknown): unknown {
   );
 }
 
+// CORS headers are applied centrally in the request handler (see `applyCors`),
+// which reflects only an allowed origin instead of a wildcard. These helpers
+// only own the content-type and transport headers for the response body.
 function ok(res: ServerResponse, payload: unknown, status = 200): void {
   res.statusCode = status;
   res.setHeader("Content-Type", "application/json");
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Headers", "content-type, authorization");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.end(JSON.stringify(payload));
 }
 
@@ -216,7 +232,6 @@ function startSse(res: ServerResponse): void {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
-  res.setHeader("Access-Control-Allow-Origin", "*");
   res.write("retry: 5000\n\n");
 }
 
@@ -257,6 +272,129 @@ function headerString(req: IncomingMessage, name: string): string {
   const value = req.headers[name.toLowerCase()];
   if (Array.isArray(value)) return value[0] ?? "";
   return value ?? "";
+}
+
+/**
+ * Returns the hostname portion of a `Host`/authority header without the port,
+ * lowercased and with any IPv6 brackets stripped. Returns "" when the value
+ * cannot be parsed.
+ */
+function hostnameOf(authority: string): string {
+  const value = authority.trim().toLowerCase();
+  if (!value) return "";
+  // IPv6 literal, e.g. "[::1]:3737" or "[::1]".
+  if (value.startsWith("[")) {
+    const end = value.indexOf("]");
+    return end > 0 ? value.slice(1, end) : value.slice(1);
+  }
+  // IPv4 / hostname with optional ":port".
+  const colon = value.indexOf(":");
+  return colon >= 0 ? value.slice(0, colon) : value;
+}
+
+/** True when a hostname resolves to the local machine without DNS. */
+function isLoopbackHostname(hostname: string): boolean {
+  if (!hostname) return false;
+  if (hostname === "localhost" || hostname === "::1" || hostname === "0:0:0:0:0:0:0:1") {
+    return true;
+  }
+  // Any address in 127.0.0.0/8 is loopback.
+  return /^127(?:\.\d{1,3}){3}$/.test(hostname);
+}
+
+/** True when the `Host` header (authority) targets the loopback interface. */
+function isLoopbackHostHeader(host: string): boolean {
+  return isLoopbackHostname(hostnameOf(host));
+}
+
+/**
+ * Decides whether a browser `Origin` may make cross-origin requests to the
+ * local API. Same-process callers (no `Origin`) are handled by the caller; this
+ * only judges origins that are actually present.
+ */
+function isAllowedOrigin(origin: string, options: ApiServerOptions): boolean {
+  const value = origin.trim();
+  if (!value) return false;
+  // Packaged Electron renderers load from `file://`, which browsers send as the
+  // opaque `null` origin.
+  if (value === "null") return true;
+  if (options.allowedOrigins?.some((allowed) => allowed.trim() === value)) return true;
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol === "file:") return true;
+  if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+    return isLoopbackHostname(parsed.hostname.toLowerCase());
+  }
+  return false;
+}
+
+/**
+ * Computes the CORS headers for a response. Only an explicitly allowed origin is
+ * reflected; we never emit a wildcard `Access-Control-Allow-Origin`. Requests
+ * without an `Origin` (same-process, server-to-server, CLI) need no CORS header.
+ */
+function corsHeaders(req: IncomingMessage, options: ApiServerOptions): Record<string, string> {
+  const origin = headerString(req, "origin");
+  if (origin && isAllowedOrigin(origin, options)) {
+    return {
+      "Access-Control-Allow-Origin": origin,
+      Vary: "Origin",
+      "Access-Control-Allow-Headers": "content-type, authorization",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    };
+  }
+  return {};
+}
+
+function applyCors(res: ServerResponse, req: IncomingMessage, options: ApiServerOptions): void {
+  for (const [name, value] of Object.entries(corsHeaders(req, options))) {
+    res.setHeader(name, value);
+  }
+}
+
+interface RequestGuardResult {
+  ok: boolean;
+  status?: number;
+  error?: string;
+}
+
+/**
+ * Enforces the local API trust boundary for non-webhook routes:
+ *
+ * 1. The `Host` header must target loopback. A DNS-rebinding attacker page
+ *    resolves its own hostname to 127.0.0.1, so the rebound request still
+ *    carries the attacker hostname in `Host` and is rejected here.
+ * 2. A present browser `Origin` must be an allowed (loopback / file) origin.
+ *    This blocks a foreign page from driving the API even though it binds to
+ *    loopback.
+ * 3. When a bearer `token` is configured it must match. The host/origin checks
+ *    above are always enforced even when no token is set.
+ */
+function guardRequest(req: IncomingMessage, options: ApiServerOptions): RequestGuardResult {
+  const host = headerString(req, "host");
+  // HTTP/1.1 requires a Host header; a missing or non-loopback Host is treated
+  // as a foreign caller and rejected.
+  if (!isLoopbackHostHeader(host)) {
+    return { ok: false, status: 403, error: "forbidden: non-loopback host" };
+  }
+
+  const origin = headerString(req, "origin");
+  if (origin && !isAllowedOrigin(origin, options)) {
+    return { ok: false, status: 403, error: "forbidden: cross-origin request rejected" };
+  }
+
+  if (options.token) {
+    const auth = headerString(req, "authorization");
+    if (auth !== `Bearer ${options.token}`) {
+      return { ok: false, status: 401, error: "unauthorized" };
+    }
+  }
+
+  return { ok: true };
 }
 
 function verifyGitHubSignature(secret: string, raw: string, signature: string): boolean {
@@ -1244,11 +1382,15 @@ const ROUTES: Record<string, RouteHandler> = {
 
   "POST /github/webhook": async ({ res, options, req, url }) => {
     const raw = await readRaw(req);
+    // Webhooks are authenticated solely by their HMAC signature. Without a
+    // configured secret we cannot verify the sender, so reject rather than
+    // accept an unsigned payload.
+    if (!options.githubWebhookSecret) {
+      unauthorized(res);
+      return;
+    }
     const signature = headerString(req, "x-hub-signature-256");
-    if (
-      options.githubWebhookSecret &&
-      !verifyGitHubSignature(options.githubWebhookSecret, raw, signature)
-    ) {
+    if (!verifyGitHubSignature(options.githubWebhookSecret, raw, signature)) {
       unauthorized(res);
       return;
     }
@@ -1389,11 +1531,11 @@ const ROUTES: Record<string, RouteHandler> = {
   },
 
   "GET /events": async ({ res, options }) => {
+    // CORS headers are already applied centrally in the request handler.
     res.statusCode = 200;
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
-    res.setHeader("Access-Control-Allow-Origin", "*");
     res.write("retry: 5000\n\n");
 
     const auditPath = workspacePaths(options.workspaceRoot).auditLog;
@@ -1501,20 +1643,37 @@ export async function startApiServer(options: ApiServerOptions): Promise<ApiServ
       const method = req.method ?? "GET";
       const url = new URL(req.url ?? "/", `http://localhost:${options.port ?? 0}`);
 
+      // Reflect an allowed origin (never a wildcard) on every response, so both
+      // success and rejection responses carry consistent CORS headers.
+      applyCors(res, req, options);
+
+      // The GitHub webhook is authenticated by HMAC signature, may arrive
+      // through a reverse proxy (non-loopback Host) and never carries a browser
+      // Origin, so it bypasses the loopback/origin/bearer guard. Its own handler
+      // rejects unsigned or unconfigured deliveries.
+      const githubWebhookRoute = method === "POST" && url.pathname === "/github/webhook";
+
       if (method === "OPTIONS") {
+        // CORS preflight. The browser sends it without credentials, so we only
+        // enforce the anti-rebinding host check here; the reflected origin (set
+        // above) is what actually gates the follow-up request.
+        if (!githubWebhookRoute && !isLoopbackHostHeader(headerString(req, "host"))) {
+          res.statusCode = 403;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "forbidden: non-loopback host" }));
+          return;
+        }
         res.statusCode = 204;
-        res.setHeader("Access-Control-Allow-Origin", "*");
-        res.setHeader("Access-Control-Allow-Headers", "content-type, authorization");
-        res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
         res.end();
         return;
       }
 
-      const githubWebhookRoute = method === "POST" && url.pathname === "/github/webhook";
-      if (options.token && !(githubWebhookRoute && options.githubWebhookSecret)) {
-        const auth = req.headers["authorization"];
-        if (auth !== `Bearer ${options.token}`) {
-          unauthorized(res);
+      if (!githubWebhookRoute) {
+        const guard = guardRequest(req, options);
+        if (!guard.ok) {
+          res.statusCode = guard.status ?? 403;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: guard.error ?? "forbidden" }));
           return;
         }
       }
