@@ -297,7 +297,9 @@ test.describe("Operating Room approval history", () => {
 
     const main = page.locator("main");
     await expect(main).toContainText("Decision queue clear");
-    await expect(main).toContainText("No pending gates, so the latest resolved decisions are shown first.");
+    await expect(main).toContainText(
+      "No pending gates, so the latest resolved decisions are shown first.",
+    );
     await expect(main).toContainText("Send Final Proposals");
     await expect(main).toContainText("Resolve Retry Blocker");
     await expect(main).not.toContainText("No approvals in this view");

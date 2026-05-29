@@ -96,7 +96,9 @@ export function DeliveryView({
   const unverifiedCount = latestVerification?.unverified_count ?? 0;
   const linkedWork = buildLinkedWorkItems(state);
   const blockedProject = sortNewest(state.projects).find((project) => project.status === "blocked");
-  const missingRepositoryProject = sortNewest(state.projects).find((project) => !project.repository);
+  const missingRepositoryProject = sortNewest(state.projects).find(
+    (project) => !project.repository,
+  );
   const staleLinkedWork = linkedWork.find(
     (item) => item.prState === "stale" || item.issueState === "stale",
   );
@@ -131,11 +133,11 @@ export function DeliveryView({
         : "Repository is not linked yet. Connect the project repo before expecting GitHub-native delivery evidence."
       : deliveryFocus === "stale-linked-work" && staleLinkedWork
         ? staleLinkedWork.prDetail
-      : deliveryFocus === "missing-pr-run" && missingPrRun
-        ? missingPrRun.prDetail
-      : state.projects.length > 0
-        ? "No blocked project is first in the queue. Continue with repository verification and active project-manager runs."
-        : "No project memory exists yet. The coordinator should create a project from approved client scope.";
+        : deliveryFocus === "missing-pr-run" && missingPrRun
+          ? missingPrRun.prDetail
+          : state.projects.length > 0
+            ? "No blocked project is first in the queue. Continue with repository verification and active project-manager runs."
+            : "No project memory exists yet. The coordinator should create a project from approved client scope.";
 
   const verifyAll = useAsyncAction(onVerifyRepositories);
   const [busyProject, setBusyProject] = useState<string | undefined>();
