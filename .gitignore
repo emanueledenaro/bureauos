@@ -7,6 +7,7 @@ out/
 coverage/
 test-results/
 artifacts/interface-visual-qa/
+.playwright-mcp/
 .env
 .env.*
 !.env.example
