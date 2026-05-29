@@ -922,6 +922,7 @@ describe("API server", () => {
       "lead-qualification-report",
       "pricing-brief",
       "proposal-brief",
+      "compliance-review",
     ]);
 
     const reports = (await (await fetch(`${server.url}/revenue/pipeline`)).json()) as Array<{
