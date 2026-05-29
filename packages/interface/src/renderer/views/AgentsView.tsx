@@ -4,7 +4,7 @@ import { MetricTile } from "../components/dashboard/MetricTile";
 import { StatusPill } from "../components/dashboard/StatusPill";
 import { KpiBar } from "../components/dashboard/KpiBar";
 import { ResponsiveTable } from "../components/dashboard/ResponsiveTable";
-import { BaseCard, BaseCardHeader } from "../components/dashboard/BaseCard";
+import { BaseCard } from "../components/dashboard/BaseCard";
 import { Badge } from "../components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../components/ui/tooltip";
 import { agentAbbr } from "../lib/tone";
@@ -132,7 +132,7 @@ export function AgentsView({ state }: { state: DashboardState }) {
             <span className="truncate text-muted-foreground">
               {capability.required_approvals.length
                 ? capability.required_approvals.join(", ")
-                : "No approval gate"}
+                : "No owner decision"}
             </span>
           </div>
         ))}

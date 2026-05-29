@@ -49,7 +49,10 @@ function statusBody(item: ClientIntelligenceItem, generatedAt: string): string {
       ? "- No projects recorded."
       : item.projects
           .slice(0, 5)
-          .map((project) => `- ${project.name}: ${project.status}, repo ${project.repository || "not linked"}`)
+          .map(
+            (project) =>
+              `- ${project.name}: ${project.status}, repo ${project.repository || "not linked"}`,
+          )
           .join("\n");
   const opportunities =
     item.opportunities.length === 0

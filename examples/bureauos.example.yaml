@@ -154,6 +154,7 @@ agents:
     model: gpt-5.5
 
 autonomy:
+  level: 2
   observe_signals: true
   start_triage_runs: true
   create_internal_reports: true
@@ -264,6 +265,25 @@ capabilities:
       merge_pr: false
       deploy: false
     audit_required: true
+  linear:
+    type: mcp
+    allowed_agents:
+      - supreme_coordinator
+      - project_manager
+      - product
+      - development
+      - qa
+      - reviewer
+    actions:
+      read_issues: true
+      create_issues: true
+      update_issues: true
+      comment: true
+      set_issue_state: true
+      read_projects: true
+      create_projects: false
+      update_projects: false
+    audit_required: true
   skills:
     type: registry
     allowed_agents:
@@ -305,6 +325,11 @@ memory:
   retain_raw_history: true
   promote_daily_notes_to_durable_memory: true
   root_memory_always_loaded: true
+  semantic_index:
+    enabled: false
+    provider: "none"
+    index_path: ".bureauos/memory/indexes/semantic"
+    min_score: 0.72
   growth_memory:
     brand: ".bureauos/memory/BRAND.md"
     offers: ".bureauos/memory/OFFERS.md"

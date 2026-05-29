@@ -16,17 +16,23 @@ import type {
   CapacitySegment,
   DashboardState,
   GoalItem,
+  LinkedWorkItem,
+  LinkedWorkState,
   PortfolioLane,
   TodayAction,
   Workstream,
+  WorkstreamDeliverySignal,
+  WorkstreamPullRequestLink,
 } from "./types";
-import type { ClientRecord } from "./api";
+import type { ArtifactRecord, ClientRecord, ProjectRecord } from "./api";
 
 export function clientName(clients: ClientRecord[], clientId: string): string {
   return clients.find((client) => client.id === clientId)?.name ?? "No client";
 }
 
-export function sortNewest<T extends { created?: string; updated?: string }>(items: readonly T[]): T[] {
+export function sortNewest<T extends { created?: string; updated?: string }>(
+  items: readonly T[],
+): T[] {
   return [...items].sort((a, b) => {
     const left = Date.parse(a.updated || a.created || "");
     const right = Date.parse(b.updated || b.created || "");
@@ -34,8 +40,256 @@ export function sortNewest<T extends { created?: string; updated?: string }>(ite
   });
 }
 
-export function enabledCount(values: Record<string, boolean>): number {
-  return Object.values(values).filter(Boolean).length;
+export function enabledCount(values: Record<string, boolean | number>): number {
+  return Object.values(values).filter((value) => value === true).length;
+}
+
+export function normalizeRepositoryReference(repository?: string): string {
+  const raw = (repository ?? "").trim();
+  if (!raw) return "";
+
+  const sshMatch = raw.match(/^git@github\.com:(?<path>[^#?]+?)(?:\.git)?$/i);
+  if (sshMatch?.groups?.path) {
+    return sshMatch.groups.path.replace(/\.git$/i, "").toLowerCase();
+  }
+
+  const withoutProtocol = raw.replace(/^https?:\/\//i, "").replace(/^www\./i, "");
+  const withoutHost = withoutProtocol.replace(/^github\.com[:/]/i, "");
+  const path = withoutHost.split(/[?#]/)[0]?.replace(/\.git$/i, "") ?? "";
+  const [owner, repo] = path.split("/").filter(Boolean);
+
+  if (!owner || !repo) return raw.replace(/\.git$/i, "").toLowerCase();
+  return `${owner}/${repo}`.toLowerCase();
+}
+
+function latestGitHubSignalForProject(
+  project: ProjectRecord,
+  artifacts: ArtifactRecord[],
+): ArtifactRecord | undefined {
+  const repository = normalizeRepositoryReference(project.repository);
+  if (!repository) return undefined;
+
+  return sortNewest(
+    artifacts.filter(
+      (artifact) =>
+        artifact.type === "github-signal-report" &&
+        normalizeRepositoryReference(artifact.repository) === repository,
+    ),
+  )[0];
+}
+
+function artifactsForRun(
+  runId: string,
+  artifactIds: readonly string[] | undefined,
+  state: DashboardState,
+): ArtifactRecord[] {
+  const idSet = new Set(artifactIds ?? []);
+  return state.artifacts.filter((artifact) => artifact.run_id === runId || idSet.has(artifact.id));
+}
+
+function latestGitHubSignalForRun(
+  run: { id: string; project_id?: string; artifacts?: string[] },
+  state: DashboardState,
+): ArtifactRecord | undefined {
+  const runSignal = sortNewest(
+    artifactsForRun(run.id, run.artifacts, state).filter(
+      (artifact) => artifact.type === "github-signal-report",
+    ),
+  )[0];
+  if (runSignal) return runSignal;
+  const project = state.projects.find((item) => item.id === run.project_id);
+  return project ? latestGitHubSignalForProject(project, state.artifacts) : undefined;
+}
+
+function projectPullRequestLinks(signal?: ArtifactRecord): WorkstreamPullRequestLink[] {
+  if (!signal?.pull_request_refs?.length && !signal?.pull_request_urls?.length) return [];
+
+  const refs = signal.pull_request_refs ?? [];
+  const urls = signal.pull_request_urls ?? [];
+  const count = Math.max(refs.length, urls.length);
+
+  return Array.from({ length: count }, (_, index) => {
+    const ref = refs[index] ?? `PR ${index + 1}`;
+    const shortLabel = ref.match(/#\d+/)?.[0] ?? `PR ${index + 1}`;
+    return {
+      label: shortLabel,
+      title: ref,
+      ...(urls[index] ? { url: urls[index] } : {}),
+    };
+  }).slice(0, 3);
+}
+
+function runPullRequestLinks(run: {
+  pull_request_url?: string;
+  github_pr_url?: string;
+  pr_url?: string;
+  pull_request_urls?: string[];
+}): WorkstreamPullRequestLink[] {
+  const urls = [
+    run.pull_request_url,
+    run.github_pr_url,
+    run.pr_url,
+    ...(run.pull_request_urls ?? []),
+  ].filter((url): url is string => Boolean(url?.trim()));
+  return Array.from(new Set(urls)).map((url, index) => {
+    const number = /\/pull\/(\d+)/i.exec(url)?.[1];
+    return {
+      label: number ? `#${number}` : `PR ${index + 1}`,
+      title: url,
+      url,
+    };
+  });
+}
+
+function linkedWorkIssue(run: {
+  source_work_item_type?: string;
+  source_work_item_id?: string;
+  source_work_item_url?: string;
+  linear_identifier?: string;
+  linear_url?: string;
+  trigger_source?: string;
+}): Pick<LinkedWorkItem, "issueLabel" | "issueUrl" | "issueState" | "issueDetail"> {
+  const triggerSource = run.trigger_source ?? "";
+  const triggerMatch = /linear:\/\/issue\/([A-Z]+-\d+)/i.exec(triggerSource);
+  const label =
+    (run.source_work_item_type === "linear_issue" ? run.source_work_item_id : "") ||
+    run.linear_identifier ||
+    triggerMatch?.[1]?.toUpperCase() ||
+    "";
+  const url = run.source_work_item_url || run.linear_url;
+  if (label && url) {
+    return {
+      issueLabel: label,
+      issueUrl: url,
+      issueState: "linked",
+      issueDetail: "Source issue linked",
+    };
+  }
+  if (label) {
+    return {
+      issueLabel: label,
+      issueState: "missing",
+      issueDetail: "Issue identifier has no URL",
+    };
+  }
+  return {
+    issueLabel: "No issue",
+    issueState: "missing",
+    issueDetail: "Run has no Linear source issue",
+  };
+}
+
+function linkedTone(state: LinkedWorkState): "success" | "warning" | "danger" {
+  if (state === "linked") return "success";
+  if (state === "stale") return "warning";
+  return "danger";
+}
+
+function isDeliveryRun(type: string): boolean {
+  return ["feature", "bug", "review", "release"].includes(type);
+}
+
+export function linkedWorkTone(state: LinkedWorkState): "success" | "warning" | "danger" {
+  return linkedTone(state);
+}
+
+export function buildLinkedWorkItems(state: DashboardState): LinkedWorkItem[] {
+  return sortNewest(state.runs).map((run) => {
+    const signal = latestGitHubSignalForRun(run, state);
+    const signalLinks = projectPullRequestLinks(signal);
+    const runLinks = runPullRequestLinks(run);
+    const pullRequests = [...runLinks, ...signalLinks].slice(0, 3);
+    const staleCount = (signal?.stale_issues_count ?? 0) + (signal?.stale_pull_requests_count ?? 0);
+    const checks = signal?.checks_count ?? 0;
+    const failingChecks = signal?.failing_checks_count ?? 0;
+    const prState: LinkedWorkState =
+      staleCount > 0
+        ? "stale"
+        : pullRequests.length > 0
+          ? "linked"
+          : isDeliveryRun(run.type)
+            ? "missing"
+            : "linked";
+    const prDetail =
+      staleCount > 0
+        ? `${staleCount} stale GitHub item${staleCount === 1 ? "" : "s"}`
+        : pullRequests.length > 0
+          ? `PR ${pullRequests.length} · CI ${checks} · failing ${failingChecks}`
+          : isDeliveryRun(run.type)
+            ? "No PR linked for delivery run"
+            : "PR not required for this run type";
+    const project = state.projects.find((item) => item.id === run.project_id);
+    const repository = normalizeRepositoryReference(signal?.repository || project?.repository);
+    const branch =
+      run.branch_name || run.git_branch || signal?.branch_name || signal?.git_branch || "";
+    const commit = run.commit_sha || run.head_sha || signal?.commit_sha || signal?.head_sha || "";
+    return {
+      id: `linked-work:${run.id}`,
+      runId: run.id,
+      runType: run.type,
+      runScope: run.scope,
+      runStatus: run.status,
+      runTone: runTone(run.status),
+      ...linkedWorkIssue(run),
+      pullRequests,
+      prState,
+      prDetail,
+      repository: repository || "No repository",
+      branch: branch || "No branch",
+      commit: commit ? commit.slice(0, 12) : "No commit",
+      checks,
+      failingChecks,
+      staleCount,
+      created: run.created ?? run.updated,
+    };
+  });
+}
+
+export function buildProjectDeliverySignal(
+  project: ProjectRecord,
+  artifacts: ArtifactRecord[],
+): WorkstreamDeliverySignal {
+  const repository = normalizeRepositoryReference(project.repository);
+  if (!repository) {
+    return {
+      repository: "No repository linked",
+      label: "No repo",
+      detail: "Project memory only",
+      tone: "warning",
+      pullRequests: [],
+    };
+  }
+
+  const signal = latestGitHubSignalForProject(project, artifacts);
+  if (!signal) {
+    return {
+      repository,
+      label: "Repo linked",
+      detail: "GitHub sync not run",
+      tone: "neutral",
+      pullRequests: [],
+    };
+  }
+
+  const pullRequests = signal.pull_requests_count ?? 0;
+  const checks = signal.checks_count ?? 0;
+  const failing = signal.failing_checks_count ?? 0;
+  const stale = (signal.stale_issues_count ?? 0) + (signal.stale_pull_requests_count ?? 0);
+  const links = projectPullRequestLinks(signal);
+  const label =
+    failing > 0
+      ? `${failing} failing`
+      : stale > 0
+        ? `${stale} stale`
+        : links[0]?.label || (pullRequests > 0 ? `${pullRequests} PR` : "No PR");
+
+  return {
+    repository,
+    label,
+    detail: `PR ${pullRequests} · CI ${checks} · stale ${stale}`,
+    tone: failing > 0 ? "danger" : stale > 0 ? "warning" : checks > 0 ? "success" : "info",
+    pullRequests: links,
+  };
 }
 
 export function buildPortfolioLanes(state: DashboardState): PortfolioLane[] {
@@ -49,8 +303,11 @@ export function buildPortfolioLanes(state: DashboardState): PortfolioLane[] {
     laneMap.set(client.id, { client, streams: [] });
   }
 
+  const laneKey = (clientId?: string): string =>
+    clientId && clientsById.has(clientId) ? clientId : "unassigned";
+
   for (const project of state.projects) {
-    const key = project.client_id || "unassigned";
+    const key = laneKey(project.client_id);
     if (!laneMap.has(key)) laneMap.set(key, { streams: [] });
     const ownership = ownershipByProjectId.get(project.id);
     const manager = ownership?.manager_agent_id ?? "project_manager";
@@ -65,14 +322,14 @@ export function buildPortfolioLanes(state: DashboardState): PortfolioLane[] {
       status: formatLabel(project.status),
       tone: projectTone(project.status),
       progress: projectProgress(project.status),
-      meta: `${formatLabel(manager)} · ${project.stack || project.repository || "Project memory"}`,
-      github: project.repository ? "PR Open" : undefined,
-      badges: [agentAbbr(manager) || "PM", ...specialistBadges, project.repository ? "GH" : "MEM"],
+      meta: `${formatLabel(manager)} · ${project.stack || "Project memory"}`,
+      delivery: buildProjectDeliverySignal(project, state.artifacts),
+      badges: [agentAbbr(manager) || "PM", ...specialistBadges],
     });
   }
 
   for (const opportunity of state.opportunities) {
-    const key = opportunity.client_id || "unassigned";
+    const key = laneKey(opportunity.client_id);
     if (!laneMap.has(key)) laneMap.set(key, { streams: [] });
     laneMap.get(key)?.streams.push({
       id: opportunity.id,
@@ -280,7 +537,7 @@ export function buildGoalItems(state: DashboardState): GoalItem[] {
           ? "Generate the next draft-only growth asset from current positioning."
           : "Complete missing growth memory before campaign work.",
       route: "growth",
-      signals: [`${growthArtifacts} growth artifacts`, `${state.approvals.length} approval gates`],
+      signals: [`${growthArtifacts} growth artifacts`, `${state.approvals.length} owner decisions`],
     },
     {
       id: "autonomy-readiness",

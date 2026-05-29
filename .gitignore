@@ -5,6 +5,8 @@ dist/
 build/
 out/
 coverage/
+test-results/
+artifacts/interface-visual-qa/
 .env
 .env.*
 !.env.example
@@ -12,3 +14,7 @@ coverage/
 *.tsbuildinfo
 .bureauos/
 !docs/**/.bureauos/
+
+# Local agent/operator context. Keep public agent guidance in docs instead.
+/AGENTS.md
+/docs/superpowers/

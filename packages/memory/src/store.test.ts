@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -8,6 +8,8 @@ import {
   ScopedMemoryStore,
   assembleContextPacket,
 } from "./store.js";
+import { NoopSemanticMemoryIndex, type SemanticMemoryIndex } from "./semantic.js";
+import { SqliteFtsMemoryIndex } from "./sqlite-index.js";
 
 describe("LocalMemoryStore", () => {
   let dir: string;
@@ -39,6 +41,74 @@ describe("LocalMemoryStore", () => {
     expect(hits[0]?.score).toBeGreaterThan(0);
   });
 
+  it("rebuilds and searches the SQLite FTS5 index when available", async () => {
+    await writeFile(join(dir, "ROOT.md"), "# Root\nPizzeria Amodeo is active.\n", "utf8");
+    await mkdir(join(dir, "clients", "pizzeria-amodeo"), { recursive: true });
+    await writeFile(
+      join(dir, "clients", "pizzeria-amodeo", "CLIENT.md"),
+      "# Pizzeria Amodeo\nWebsite request for a pizza margherita landing page.\n",
+      "utf8",
+    );
+
+    const index = new SqliteFtsMemoryIndex(dir);
+    const status = await index.rebuild();
+    if (!status.available) return;
+
+    expect(status).toMatchObject({ document_count: 2, stale: false });
+
+    const hits = await new LocalMemoryStore(dir).search("margherita", {
+      backend: "sqlite_fts5",
+      limit: 5,
+    });
+
+    expect(hits[0]).toMatchObject({
+      relativePath: "clients/pizzeria-amodeo/CLIENT.md",
+      source: "sqlite_fts5",
+    });
+    expect(hits[0]?.snippet).toContain("margherita");
+    expect(hits[0]?.updated).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it("refreshes a stale SQLite FTS5 index from Markdown source of truth", async () => {
+    await writeFile(join(dir, "ROOT.md"), "# Root\nOld account wording.\n", "utf8");
+    const index = new SqliteFtsMemoryIndex(dir);
+    const status = await index.rebuild();
+    if (!status.available) return;
+
+    await writeFile(join(dir, "ROOT.md"), "# Root\nNew retention signal for Amodeo.\n", "utf8");
+
+    const hits = await new LocalMemoryStore(dir).search("retention", {
+      backend: "sqlite_fts5",
+    });
+
+    expect(hits[0]).toMatchObject({ relativePath: "ROOT.md", source: "sqlite_fts5" });
+    expect(hits[0]?.snippet).toContain("retention");
+  });
+
+  it("falls back safely when the SQLite index is corrupt", async () => {
+    await mkdir(join(dir, ".index"), { recursive: true });
+    await writeFile(join(dir, ".index", "memory-fts5.sqlite"), "not a sqlite database", "utf8");
+    await writeFile(join(dir, "ROOT.md"), "# Root\nAcme fallback context.\n", "utf8");
+
+    const hits = await new LocalMemoryStore(dir).search("fallback", { limit: 5 });
+
+    expect(hits[0]?.snippet).toContain("fallback");
+  });
+
+  it("ignores local index folders during Markdown scans and indexing", async () => {
+    await mkdir(join(dir, ".index"), { recursive: true });
+    await writeFile(join(dir, ".index", "STALE.md"), "Ghost stale memory.\n", "utf8");
+    await writeFile(join(dir, "ROOT.md"), "# Root\nVisible memory only.\n", "utf8");
+
+    await expect(new LocalMemoryStore(dir).search("ghost", { backend: "scan" })).resolves.toEqual(
+      [],
+    );
+
+    const status = await new SqliteFtsMemoryIndex(dir).rebuild();
+    if (!status.available) return;
+    expect(status.document_count).toBe(1);
+  });
+
   it("assembles a context packet from ROOT and search hits", async () => {
     await writeFile(join(dir, "ROOT.md"), "# Root\nMap of memory.\n", "utf8");
     await writeFile(join(dir, "COMPANY.md"), "We sell software services.\n", "utf8");
@@ -46,6 +116,47 @@ describe("LocalMemoryStore", () => {
     const packet = await assembleContextPacket(s, "software");
     expect(packet.rootMemory).toContain("Map of memory");
     expect(packet.topHits.length).toBeGreaterThan(0);
+    expect(packet.semanticHits).toEqual([]);
+  });
+
+  it("uses a safe no-op semantic index by default", async () => {
+    await writeFile(join(dir, "ROOT.md"), "# Root\nMap of memory.\n", "utf8");
+    const s = new LocalMemoryStore(dir);
+    const packet = await assembleContextPacket(s, "anything", {
+      semanticIndex: new NoopSemanticMemoryIndex(),
+    });
+
+    expect(packet.semanticHits).toEqual([]);
+  });
+
+  it("can include semantic hits from a configured index contract", async () => {
+    await writeFile(join(dir, "ROOT.md"), "# Root\nMap of memory.\n", "utf8");
+    const semanticIndex: SemanticMemoryIndex = {
+      kind: "test",
+      enabled: true,
+      async search(query, options) {
+        return [
+          {
+            path: "semantic://client-context",
+            snippet: `${query}:${options?.limit}`,
+            score: 0.92,
+          },
+        ];
+      },
+    };
+    const s = new LocalMemoryStore(dir);
+    const packet = await assembleContextPacket(s, "amodeo project status", {
+      semanticIndex,
+      semanticLimit: 3,
+    });
+
+    expect(packet.semanticHits).toEqual([
+      {
+        path: "semantic://client-context",
+        snippet: "amodeo project status:3",
+        score: 0.92,
+      },
+    ]);
   });
 
   it("refuses path traversal outside the memory root", async () => {

@@ -1,38 +1,103 @@
 import { useState } from "react";
-import { Activity, ChevronRight, DollarSign, Loader2, Target, TrendingUp, Wallet } from "lucide-react";
+import {
+  Activity,
+  ChevronRight,
+  DollarSign,
+  Loader2,
+  Target,
+  TrendingUp,
+  Wallet,
+} from "lucide-react";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { MetricTile } from "../components/dashboard/MetricTile";
 import { EmptyState } from "../components/dashboard/EmptyState";
 import { formatMoney } from "../lib/format";
 import type {
+  ArtifactRecord,
   BusinessReportResult,
+  ClientIntelligenceSummary,
   ClientRecord,
   CompanyPulse,
   OpportunityRecord,
 } from "../lib/api";
 
-function sparkline(seed: number, length = 12): number[] {
-  const values: number[] = [];
-  let cursor = seed > 0 ? seed * 0.6 : 1;
-  for (let index = 0; index < length; index += 1) {
-    const wave = Math.sin((index + seed) / 1.5);
-    const drift = (index / length) * (seed > 0 ? seed * 0.5 : 1);
-    cursor = Math.max(0.1, cursor + wave * (cursor * 0.08) + drift * 0.05);
-    values.push(cursor);
-  }
-  return values;
+interface RevenueHistoryPoint {
+  created: string;
+  pipeline: number;
+  active: number;
+}
+
+function numberValue(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function revenueHistory(
+  artifacts: readonly ArtifactRecord[],
+  current: Pick<RevenueHistoryPoint, "pipeline" | "active">,
+): RevenueHistoryPoint[] {
+  const reports = artifacts
+    .filter((artifact) => artifact.type === "revenue-pipeline-report")
+    .map((artifact) => ({
+      created: artifact.created ?? artifact.generated_at ?? "",
+      pipeline: numberValue(artifact.pipeline_value),
+      active: numberValue(artifact.open_opportunities),
+    }))
+    .filter((point) => point.created)
+    .sort((left, right) => left.created.localeCompare(right.created));
+
+  if (reports.length === 0) return [];
+  const latest = reports[reports.length - 1];
+  const latestMatchesCurrent =
+    latest?.pipeline === current.pipeline && latest.active === current.active;
+  return latestMatchesCurrent
+    ? reports
+    : [
+        ...reports,
+        {
+          created: new Date().toISOString(),
+          pipeline: current.pipeline,
+          active: current.active,
+        },
+      ];
+}
+
+function metricTrend(
+  current: number,
+  previous: number | undefined,
+  format: (value: number) => string,
+): { value: string; tone: "success" | "warning" | "neutral" } | undefined {
+  if (previous === undefined) return undefined;
+  const delta = current - previous;
+  if (delta === 0) return { value: "flat vs last report", tone: "neutral" };
+  const prefix = delta > 0 ? "+" : "-";
+  return {
+    value: `${prefix}${format(Math.abs(delta))} vs last report`,
+    tone: delta > 0 ? "success" : "warning",
+  };
+}
+
+function historyValues(
+  history: readonly RevenueHistoryPoint[],
+  key: "pipeline" | "active",
+): number[] | undefined {
+  if (history.length < 2) return undefined;
+  return history.map((point) => point[key]);
 }
 
 export function RevenuePulseView({
   pulse,
   clients,
+  clientIntelligence,
   opportunities,
+  artifacts,
   onGenerateReport,
 }: {
   pulse?: CompanyPulse;
   clients: ClientRecord[];
+  clientIntelligence?: ClientIntelligenceSummary;
   opportunities: OpportunityRecord[];
+  artifacts: ArtifactRecord[];
   onGenerateReport: () => Promise<BusinessReportResult>;
 }) {
   const [busy, setBusy] = useState(false);
@@ -47,12 +112,17 @@ export function RevenuePulseView({
   const won = opportunities
     .filter((item) => item.status === "won")
     .reduce((sum, item) => sum + (item.expected_value || 0), 0);
-  const topClients = clients
-    .map((client) => ({
-      client,
-      value: opportunities
-        .filter((item) => item.client_id === client.id)
-        .reduce((sum, item) => sum + (item.expected_value || 0), 0),
+  const history = revenueHistory(artifacts, { pipeline, active });
+  const previous = history.length >= 2 ? history[history.length - 2] : undefined;
+  const hasHistory = history.length >= 2;
+  const clientsWithPipeline =
+    clientIntelligence?.clients.filter((item) => item.revenue.pipeline_value > 0).length ?? 0;
+  const topClients = (clientIntelligence?.clients ?? [])
+    .map((item) => ({
+      client: item.client,
+      value: item.revenue.won_value + item.revenue.pipeline_value,
+      won: item.revenue.won_value,
+      pipeline: item.revenue.pipeline_value,
     }))
     .filter((item) => item.value > 0)
     .sort((a, b) => b.value - a.value)
@@ -77,7 +147,7 @@ export function RevenuePulseView({
             <h2 className="text-[14px] font-semibold text-foreground">Revenue Pulse</h2>
           </div>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            Real-time revenue and pipeline health.
+            Revenue and pipeline health from stored BOS records.
           </p>
           <Button
             variant="outline"
@@ -86,7 +156,11 @@ export function RevenuePulseView({
             onClick={() => void generate()}
             disabled={busy}
           >
-            {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <ChevronRight className="h-3 w-3" />}
+            {busy ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <ChevronRight className="h-3 w-3" />
+            )}
             {busy ? "Generating" : "View full report"}
           </Button>
           {report ? (
@@ -100,52 +174,60 @@ export function RevenuePulseView({
           <MetricTile
             label="Pipeline Value"
             value={formatMoney(pipeline)}
-            detail={`${opportunities.length} opportunities`}
+            detail={hasHistory ? `${history.length} stored snapshots` : "No trend history yet"}
             tone="success"
             icon={DollarSign}
-            sparkline={sparkline(pipeline / 1000)}
-            trend={pipeline > 0 ? { value: "↑ 18% vs 30d", tone: "success" } : undefined}
+            sparkline={historyValues(history, "pipeline")}
+            trend={metricTrend(pipeline, previous?.pipeline, formatMoney)}
           />
           <MetricTile
             label="Expected Margin"
             value={`${Math.round(margin)}%`}
-            detail="Average expected margin"
+            detail={
+              opportunities.length > 0
+                ? "Average expected margin"
+                : "No opportunity margin data yet"
+            }
             tone="info"
             icon={Target}
-            sparkline={sparkline(margin || 1)}
-            trend={margin > 30 ? { value: "↑ 3pp vs 30d", tone: "success" } : undefined}
           />
           <MetricTile
             label="Active Opportunities"
             value={String(active)}
-            detail="Not won or lost"
+            detail={hasHistory ? "Tracked from pipeline reports" : "No trend history yet"}
             tone="warning"
             icon={Activity}
-            sparkline={sparkline(active || 1)}
+            sparkline={historyValues(history, "active")}
+            trend={metricTrend(active, previous?.active, (value) => String(value))}
           />
           <MetricTile
             label="Won Revenue"
             value={formatMoney(won)}
-            detail="Closed won value"
+            detail={
+              clientIntelligence
+                ? "Closed won value from client memory"
+                : "Waiting for client intelligence"
+            }
             tone="success"
             icon={TrendingUp}
-            sparkline={sparkline(won / 1000)}
-            trend={won > 0 ? { value: "↑ 12% MTD", tone: "success" } : undefined}
           />
           <MetricTile
             label="Clients With Pipeline"
-            value={String(topClients.length)}
-            detail={`${clients.length} clients total`}
+            value={String(clientsWithPipeline)}
+            detail={
+              clientIntelligence
+                ? `${clients.length} clients total`
+                : "Waiting for client intelligence"
+            }
             tone="neutral"
             icon={Wallet}
-            sparkline={sparkline(topClients.length || 1)}
           />
         </div>
 
         <div className="rounded-lg border border-border/70 bg-surface-subtle/60 p-4">
           <div className="flex items-center justify-between">
             <div className="text-[12px] font-semibold text-foreground">Top Clients by LTV</div>
-            <span className="text-[10px] text-muted-foreground">Last 90d</span>
+            <span className="text-[10px] text-muted-foreground">Client memory</span>
           </div>
           {topClients.length > 0 ? (
             <ol className="mt-3 space-y-2">
@@ -160,14 +242,20 @@ export function RevenuePulseView({
                     </span>
                     <span className="truncate text-foreground">{item.client.name}</span>
                   </div>
-                  <span className="font-mono text-muted-foreground">{formatMoney(item.value)}</span>
+                  <span className="font-mono text-muted-foreground" title="Won + open pipeline">
+                    {formatMoney(item.value)}
+                  </span>
                 </li>
               ))}
             </ol>
           ) : (
             <EmptyState
-              title="No client revenue yet"
-              description="Top accounts will appear here once opportunities accumulate value."
+              title={clientIntelligence ? "No client revenue yet" : "Client intelligence loading"}
+              description={
+                clientIntelligence
+                  ? "Top accounts will appear once durable client revenue or pipeline exists."
+                  : "Top clients use client intelligence, not inferred UI-only totals."
+              }
               className="mt-3 min-h-0 border-0 bg-transparent p-2"
             />
           )}

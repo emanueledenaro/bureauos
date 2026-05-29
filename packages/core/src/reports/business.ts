@@ -114,7 +114,7 @@ function computeMetrics(args: {
 function nextActions(metrics: BusinessMetrics): string[] {
   const actions: string[] = [];
   if (metrics.approvals_pending > 0) {
-    actions.push(`Review ${metrics.approvals_pending} pending approval gates.`);
+    actions.push(`Review ${metrics.approvals_pending} serious owner decision(s).`);
   }
   if (metrics.projects_blocked > 0) {
     actions.push(`Unblock ${metrics.projects_blocked} blocked project(s).`);
@@ -156,7 +156,7 @@ function nextProjectAction(item: Omit<ProjectPortfolioItem, "next_action">): str
     case "needs_human":
       return "Resolve run needing human input before continuing autonomous work.";
     case "approval":
-      return "Review pending approval gates before external commitments.";
+      return "Review serious owner decisions before external commitments.";
     case "watch":
       return "Schedule or dispatch the next project-manager run.";
     case "clear":

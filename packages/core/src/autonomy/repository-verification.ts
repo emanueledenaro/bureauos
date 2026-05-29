@@ -139,6 +139,7 @@ export class ProjectRepositoryVerificationService {
           artifacts: this.artifacts,
           audit: this.audit,
           clients: this.clients,
+          projects: this.projects,
         })
       : undefined;
 
@@ -191,7 +192,9 @@ export class ProjectRepositoryVerificationService {
           repository,
           parsed_repository: parsed.repository,
           status: "unverified",
-          reasons: ["GitHub client is not configured; repository shape was parsed but live state was not checked"],
+          reasons: [
+            "GitHub client is not configured; repository shape was parsed but live state was not checked",
+          ],
           issues_count: 0,
           pull_requests_count: 0,
           checks_count: 0,
@@ -206,6 +209,7 @@ export class ProjectRepositoryVerificationService {
       const signal = await sync.sync({
         owner: parsed.owner,
         repo: parsed.repo,
+        projectSlug: project.slug,
         ...(input.staleDays !== undefined ? { staleDays: input.staleDays } : {}),
       });
       const staleCount = signal.staleIssues.length + signal.stalePullRequests.length;

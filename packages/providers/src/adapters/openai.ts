@@ -34,14 +34,7 @@ export class OpenAIAdapter implements ProviderAdapter {
   }
 
   async listModels(): Promise<readonly string[]> {
-    return [
-      "gpt-5.5",
-      "gpt-5.4",
-      "gpt-5.4-mini",
-      "gpt-5.4-nano",
-      "gpt-5.3-chat-latest",
-      "gpt-4o",
-    ];
+    return ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.3-chat-latest", "gpt-4o"];
   }
 
   async validateCredentials(): Promise<ValidationResult> {

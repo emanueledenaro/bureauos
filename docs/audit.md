@@ -4,11 +4,21 @@ Audit date: 2026-05-24
 
 This audit records the current state of the BureauOS repository, the completeness of the product logic, the main implementation gaps, and the recommended next build sequence.
 
-## Current Status
+## Current Implementation Update
 
-BureauOS is currently a protocol and architecture repository.
+This audit is historical. It captured the repository before the local-first runtime foundation was implemented.
 
-It has:
+Since this audit, BureauOS has added TypeScript workspace packages, the local BOS Kernel, CLI commands, Markdown-backed memory, registries, policy gates, artifacts, audit logging, provider routing, provider auth, GitHub workflow services, a local API server, ElectronJS Operating Room foundations, scheduler/daemon foundations, and automated tests.
+
+The current implementation coverage is tracked in [Implementation Coverage](implementation-coverage.md) and [Backlog](../BACKLOG.md). Treat those files as the current source of truth for shipped and remaining runtime work.
+
+BureauOS is still not a complete autonomous agency OS. Codex runtime execution, full autonomous PR lifecycle, production-grade daemon behavior, semantic memory indexing, tamper-evident audit rotation, and external business connectors remain partial or future work. Risky external actions remain disabled or approval-gated by default.
+
+## Historical Status At Audit Time
+
+BureauOS was a protocol and architecture repository at the time of this audit.
+
+At that time, it had:
 
 - core product positioning
 - agency operating model
@@ -27,7 +37,7 @@ It has:
 - example YAML configuration
 - contribution and security documents
 
-It does not yet have:
+At that time, it did not yet have:
 
 - runtime packages
 - CLI implementation
@@ -39,9 +49,11 @@ It does not yet have:
 - automated tests
 - released package
 
-The repository is ready as an open-source v0.1 protocol foundation. It is not ready to claim working automation.
+At that time, the repository was ready as an open-source v0.1 protocol foundation. It was not ready to claim working automation.
 
 ## Requirement Coverage
+
+The table below is also historical. See [Implementation Coverage](implementation-coverage.md) for the current runtime map.
 
 | Requirement | Current coverage | Status |
 | --- | --- | --- |

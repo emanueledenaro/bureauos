@@ -1,6 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { defaultConfig, loadConfig, ConfigError } from "./loader.js";
 
@@ -22,7 +23,14 @@ describe("loadConfig", () => {
     expect(config.organization.name).toBe("Acme");
     expect(config.setup.preset).toBe("freelancer");
     expect(config.autonomy.merge_pull_requests).toBe(false);
+    expect(config.autonomy.level).toBe(2);
     expect(config.growth_autonomy.publish_public_content).toBe(false);
+    expect(config.memory.semantic_index).toEqual({
+      enabled: false,
+      provider: "none",
+      index_path: ".bureauos/memory/indexes/semantic",
+      min_score: 0.72,
+    });
     expect(config.provider).toEqual({});
     expect(config.disabled_providers).toEqual([]);
     expect(config.capabilities).toEqual({});
@@ -33,6 +41,61 @@ describe("loadConfig", () => {
     await writeFile(path, `organization:\n  name: "Acme"\nsetup:\n  preset: "startup"\n`, "utf8");
     const config = await loadConfig(path);
     expect(config.setup.preset).toBe("startup");
+  });
+
+  it("maps autonomy levels to per-action switches", async () => {
+    const path = join(dir, "bureauos.yaml");
+    await writeFile(path, `autonomy:\n  level: 0\n`, "utf8");
+
+    const config = await loadConfig(path);
+
+    expect(config.autonomy.level).toBe(0);
+    expect(config.autonomy.observe_signals).toBe(true);
+    expect(config.autonomy.create_issues).toBe(false);
+    expect(config.autonomy.create_branches).toBe(false);
+    expect(config.autonomy.merge_pull_requests).toBe(false);
+    expect(config.autonomy.deploy_production).toBe(false);
+  });
+
+  it("keeps explicit autonomy overrides deterministic on top of a level", async () => {
+    const path = join(dir, "bureauos.yaml");
+    await writeFile(
+      path,
+      ["autonomy:", "  level: 0", "  create_issues: true", "  observe_signals: false"].join("\n"),
+      "utf8",
+    );
+
+    const config = await loadConfig(path);
+
+    expect(config.autonomy.level).toBe(0);
+    expect(config.autonomy.create_issues).toBe(true);
+    expect(config.autonomy.observe_signals).toBe(false);
+    expect(config.autonomy.create_branches).toBe(false);
+  });
+
+  it("parses semantic memory index configuration without requiring a provider", async () => {
+    const path = join(dir, "bureauos.yaml");
+    await writeFile(
+      path,
+      [
+        "memory:",
+        "  semantic_index:",
+        "    enabled: true",
+        "    provider: custom",
+        "    index_path: .bureauos/memory/indexes/custom-semantic",
+        "    min_score: 0.81",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const config = await loadConfig(path);
+
+    expect(config.memory.semantic_index).toEqual({
+      enabled: true,
+      provider: "custom",
+      index_path: ".bureauos/memory/indexes/custom-semantic",
+      min_score: 0.81,
+    });
   });
 
   it("throws ConfigError when the file does not exist", async () => {
@@ -145,6 +208,63 @@ describe("loadConfig", () => {
     expect(config.agents.content?.max_budget_tier).toBe("low");
     expect(config.agents.content?.prefer_low_cost).toBe(true);
     expect(config.agents.content?.required_model_capabilities).toEqual(["chat"]);
+  });
+
+  it("loads the documented example config with typed secondary sections", async () => {
+    const example = fileURLToPath(
+      new URL("../../../../examples/bureauos.example.yaml", import.meta.url),
+    );
+
+    const config = await loadConfig(example);
+
+    expect(config.setup.auto_detect.github_remote).toBe(true);
+    expect(config.interface.default_views).toContain("coordinator_chat");
+    expect(config.interface.notifications.approval_needed).toBe(true);
+    expect(config.supreme_coordinator.memory.search_index).toBe(
+      ".bureauos/memory/indexes/memory.sqlite",
+    );
+    expect(config.triggers.thresholds.blocked_issue_hours).toBe(24);
+    expect(config.growth_autonomy.require_action_sensitive_memory_for_approval).toBe(true);
+    expect(config.business.primary_objective).toBe("sustainable_owner_profit");
+    expect(config.business.metrics.track_client_lifetime_value).toBe(true);
+    expect(config.business.policies.require_compliance_review_before_external_commitment).toBe(
+      true,
+    );
+    expect(config.business.require_owner_approval_for).toContain("production_deploy");
+    expect(config.open_source.optimize_for).toContain("model_agnostic_integrations");
+    expect(config.memory.growth_memory.brand).toBe(".bureauos/memory/BRAND.md");
+    expect(config.memory.client_intelligence.profile).toBe("CLIENT.md");
+    expect(config.capabilities.mcp?.high_risk_actions_require_policy).toBe(true);
+    expect(config.provider.openai?.models["gpt-5.5"]?.budget_tier).toBe("high");
+  });
+
+  it("rejects unknown top-level fields instead of silently dropping them", async () => {
+    const path = join(dir, "bureauos.yaml");
+    await writeFile(
+      path,
+      ["organization:", '  name: "Acme"', "unknown_policy_section:", "  enabled: true"].join("\n"),
+      "utf8",
+    );
+
+    await expect(loadConfig(path)).rejects.toBeInstanceOf(ConfigError);
+  });
+
+  it("rejects malformed secondary config fields", async () => {
+    const path = join(dir, "bureauos.yaml");
+    await writeFile(
+      path,
+      [
+        "business:",
+        "  metrics:",
+        '    track_pipeline_value: "yes"',
+        "triggers:",
+        "  thresholds:",
+        "    stale_pr_hours: 48",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await expect(loadConfig(path)).rejects.toBeInstanceOf(ConfigError);
   });
 });
 

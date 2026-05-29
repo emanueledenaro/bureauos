@@ -14,6 +14,8 @@ The provider layer follows the OpenCode-style connector pattern:
 ## Auth Model
 
 Provider credentials are not stored in `bureauos.yaml`.
+For the full secret-handling, rotation, and local threat model, see
+[`docs/secrets.md`](./secrets.md).
 
 The default local auth file is:
 

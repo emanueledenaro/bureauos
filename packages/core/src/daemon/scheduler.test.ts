@@ -119,6 +119,47 @@ describe("Scheduler", () => {
     expect(after2).toBe(after1);
   });
 
+  it("persists scheduler cursors and does not duplicate processed windows after restart", async () => {
+    const config = defaultConfig("freelancer");
+    const approvals = new ApprovalRegistry(dir);
+    const policy = new PolicyEngine(config, approvals);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const runs = new RunEngine(dir, { audit, artifacts, policy });
+    const t0 = new Date("2026-05-26T10:00:00.000Z").getTime();
+
+    await new Scheduler({
+      config,
+      runs,
+      workspaceRoot: dir,
+      logger: () => {},
+    }).tick(t0);
+    const afterFirstProcess = await runs.list();
+
+    await new Scheduler({
+      config,
+      runs,
+      workspaceRoot: dir,
+      logger: () => {},
+    }).tick(t0 + 60_000);
+
+    const afterRestart = await runs.list();
+    expect(afterRestart).toHaveLength(afterFirstProcess.length);
+
+    const rawState = JSON.parse(
+      await readFile(workspacePaths(dir).daemonSchedulerState, "utf8"),
+    ) as {
+      cursors: Record<string, { last_success_at?: string; last_run_id?: string }>;
+    };
+    const dailyRun = afterFirstProcess.find(
+      (run) => run.trigger_source === "daily_executive_report",
+    );
+    expect(rawState.cursors["daily_executive_report"]).toMatchObject({
+      last_success_at: "2026-05-26T10:00:00.000Z",
+      last_run_id: dailyRun?.id,
+    });
+  });
+
   it("generates business reports during the daily executive report job", async () => {
     const config = defaultConfig("freelancer");
     const approvals = new ApprovalRegistry(dir);
@@ -213,8 +254,7 @@ describe("Scheduler", () => {
     expect(realPlans).toHaveLength(1);
     const accountReviewRun = (await runs.list()).find(
       (run) =>
-        run.trigger_source === "client_account_review" &&
-        run.artifacts.includes(realPlans[0]!.id),
+        run.trigger_source === "client_account_review" && run.artifacts.includes(realPlans[0]!.id),
     );
     expect(accountReviewRun).toBeDefined();
   });
@@ -293,7 +333,8 @@ describe("Scheduler", () => {
     expect(verificationReports).toHaveLength(1);
     expect(
       lines.some(
-        (line) => line.includes("repository verification") && line.includes("checked 1 repositories"),
+        (line) =>
+          line.includes("repository verification") && line.includes("checked 1 repositories"),
       ),
     ).toBe(true);
 

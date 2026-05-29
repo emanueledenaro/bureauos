@@ -192,6 +192,7 @@ describe("memory isolation", () => {
     expect(memory.topHits.some((hit) => hit.path === `projects/${beta.slug}/PROJECT.md`)).toBe(
       true,
     );
+    expect(memory.semanticHits).toEqual([]);
     expect(JSON.stringify(memory)).not.toContain(dir);
 
     await expect(

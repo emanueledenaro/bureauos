@@ -31,6 +31,11 @@ node /path/to/bureauos/packages/cli/dist/bin/bureau.js status
 node /path/to/bureauos/packages/cli/dist/bin/bureau.js audit tail -n 10
 ```
 
+For a guided safe local demo, see
+[`docs/getting-started.md`](./docs/getting-started.md).
+Release readiness and packaging are tracked in
+[`docs/release-process.md`](./docs/release-process.md).
+
 ### Owner Interface (ElectronJS)
 
 ```bash
@@ -53,7 +58,8 @@ After `bureau init` the directory contains:
 - `approvals/` — pending and resolved approval records
 
 See `docs/bos-kernel-infrastructure.md` for the full layout and
-[`BACKLOG.md`](./BACKLOG.md) for what's shipped and what's next.
+[`BACKLOG.md`](./BACKLOG.md) for what's shipped and what's next. v1 readiness is
+tracked in [`docs/v1-acceptance-checklist.md`](./docs/v1-acceptance-checklist.md).
 
 ### Build, test, typecheck
 
@@ -61,7 +67,18 @@ See `docs/bos-kernel-infrastructure.md` for the full layout and
 pnpm -r run build      # tsc + electron-vite build for the interface
 pnpm -r run typecheck  # strict TypeScript across all packages
 pnpm -r run test       # vitest
+pnpm run e2e:interface # Operating Room Playwright coverage
 ```
+
+For reviewable UI screenshots, run:
+
+```bash
+pnpm run visual:interface
+```
+
+The visual QA command starts a seeded local workspace and writes desktop, tablet,
+and phone screenshots to `artifacts/interface-visual-qa/`, which is ignored by
+git.
 
 CI on every push runs the same plus a smoke `bureau init`.
 
@@ -276,6 +293,8 @@ BureauOS treats GitHub as the operating surface for an AI-native software agency
 - [Growth and Revenue](docs/growth-and-revenue.md)
 - [Marketing and Ads Automation](docs/marketing-and-ads-automation.md)
 - [Risk and Compliance](docs/risk-and-compliance.md)
+- [Security and Policy Model](docs/security-and-policy-model.md)
+- [Secrets and Local Threat Model](docs/secrets.md)
 - [Capabilities and Integrations](docs/capabilities-and-integrations.md)
 - [Open Source Growth](docs/open-source-growth.md)
 - [Workflows](docs/workflows.md)

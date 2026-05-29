@@ -8,7 +8,11 @@ import { AuditLog } from "../audit/log.js";
 import type { BureauConfig } from "../config/schema.js";
 import { workspacePaths } from "../paths.js";
 import { PolicyEngine, type PolicyDecision } from "../policy/engine.js";
-import { ApprovalRegistry, type ApprovalRecord } from "../registries/approval.js";
+import {
+  ApprovalRegistry,
+  type ApprovalRecord,
+  type ApprovalRiskLevel,
+} from "../registries/approval.js";
 
 export interface CapabilityUseInput {
   agent: string;
@@ -19,6 +23,7 @@ export interface CapabilityUseInput {
   linkedIssueNumbers?: readonly number[];
   testEvidence?: readonly string[];
   approvalIds?: readonly string[];
+  changedFiles?: readonly string[];
 }
 
 export interface CapabilityUseResult {
@@ -67,6 +72,12 @@ const POLICY_ACTIONS: Readonly<Record<string, string>> = {
   "github.read_checks": "observe_signals",
   "github.read_issues": "observe_signals",
   "github.read_prs": "observe_signals",
+  "linear.comment": "comment_on_issues",
+  "linear.create_issues": "create_issues",
+  "linear.read_issues": "observe_signals",
+  "linear.read_projects": "observe_signals",
+  "linear.set_issue_state": "comment_on_issues",
+  "linear.update_issues": "comment_on_issues",
   "mcp.inspect": "observe_signals",
   "skills.inspect": "observe_signals",
   "skills.use_skill": "observe_signals",
@@ -82,7 +93,10 @@ function capabilityConfig(config: BureauConfig): Record<string, CapabilityConfig
 
 function policyActionFor(input: CapabilityUseInput): string {
   if (input.policyAction) return input.policyAction;
-  return POLICY_ACTIONS[`${input.capabilityId}.${input.action}`] ?? `${input.capabilityId}.${input.action}`;
+  return (
+    POLICY_ACTIONS[`${input.capabilityId}.${input.action}`] ??
+    `${input.capabilityId}.${input.action}`
+  );
 }
 
 function auditPolicyResult(
@@ -95,12 +109,35 @@ function missingEvidenceGates(args: {
   policy: PolicyDecision;
   linkedIssues: readonly number[];
   tests: readonly string[];
+  changedFiles?: readonly string[];
+  changedFileLimit: number;
 }): string[] {
   const gates = new Set<string>(args.policy.required_gates);
   const missing: string[] = [];
   if (gates.has("tests_required") && args.tests.length === 0) missing.push("tests_required");
   if (gates.has("linked_issue") && args.linkedIssues.length === 0) missing.push("linked_issue");
+  if (args.changedFiles !== undefined && args.changedFiles.length > args.changedFileLimit) {
+    missing.push("changed_file_limit");
+  }
   return missing;
+}
+
+function blockedReasonFor(args: {
+  capability: CapabilityUseDecision;
+  policy: PolicyDecision;
+  missingGates: readonly string[];
+  changedFileCount: number;
+  changedFileLimit: number;
+}): string {
+  if (!args.capability.allowed) return args.capability.reason;
+  if (!args.policy.allowed) return args.policy.reason;
+  if (args.missingGates.includes("changed_file_limit")) {
+    return `changed file count ${args.changedFileCount} exceeds limit ${args.changedFileLimit}`;
+  }
+  if (args.missingGates.length) {
+    return `missing required capability gate(s): ${args.missingGates.join(", ")}`;
+  }
+  return "";
 }
 
 function auditBody(args: {
@@ -110,11 +147,14 @@ function auditBody(args: {
   policy: PolicyDecision;
   status: "allowed" | "blocked";
   missingGates: readonly string[];
+  changedFileCount: number;
+  changedFileLimit: number;
   approval?: ApprovalRecord;
 }): string {
   const linkedIssues = args.input.linkedIssueNumbers ?? [];
   const testEvidence = args.input.testEvidence ?? [];
   const approvalIds = args.input.approvalIds ?? [];
+  const changedFiles = args.input.changedFiles;
   return `# Capability Use Audit
 
 ## Request
@@ -138,6 +178,8 @@ function auditBody(args: {
 - Policy action: ${args.policy.action}
 - Outcome: ${args.policy.outcome}
 - Allowed by policy: ${args.policy.allowed}
+- Matched rule: ${args.policy.matched_rule}
+- Approval required: ${args.policy.approval_required}
 - Reason: ${args.policy.reason}
 - Required gates: ${args.policy.required_gates.join(", ") || "(none)"}
 - Approval: ${args.approval?.id ?? args.policy.approval_id ?? "(none)"}
@@ -147,6 +189,8 @@ function auditBody(args: {
 - Linked issues: ${linkedIssues.length ? linkedIssues.map((issue) => `#${issue}`).join(", ") : "(none)"}
 - Test evidence: ${testEvidence.length ? testEvidence.join("; ") : "(none)"}
 - Approval evidence: ${approvalIds.length ? approvalIds.join(", ") : "(none)"}
+- Changed files: ${changedFiles ? `${args.changedFileCount} / ${args.changedFileLimit}` : "(not reported)"}
+- Changed file list: ${changedFiles?.length ? changedFiles.join(", ") : "(none)"}
 - Missing gates: ${args.missingGates.length ? args.missingGates.join(", ") : "(none)"}
 
 ## Execution Boundary
@@ -161,11 +205,13 @@ export class CapabilityUseService {
   private readonly approvals: ApprovalRegistry;
   private readonly policy: PolicyEngine;
   private readonly audit: AuditLog;
+  private readonly config: BureauConfig;
 
   constructor(
     private readonly workspaceRoot: string,
     deps: CapabilityUseDeps,
   ) {
+    this.config = deps.config;
     this.registry = deps.registry ?? CapabilityRegistry.fromConfig(capabilityConfig(deps.config));
     this.artifacts = deps.artifacts ?? new ArtifactStore(workspaceRoot);
     this.approvals = deps.approvals ?? new ApprovalRegistry(workspaceRoot);
@@ -177,6 +223,9 @@ export class CapabilityUseService {
     const target = input.target?.trim() || `${input.capabilityId}.${input.action}`;
     const linkedIssues = input.linkedIssueNumbers ?? [];
     const tests = input.testEvidence ?? [];
+    const changedFiles = input.changedFiles;
+    const changedFileLimit = this.config.limits.max_files_changed_without_human_review;
+    const changedFileCount = changedFiles?.length ?? 0;
     const capability = this.registry.check({
       capability_id: input.capabilityId,
       agent: input.agent,
@@ -191,15 +240,15 @@ export class CapabilityUseService {
       riskClass: capability.risk_class,
     });
     const missingGates = capability.allowed
-      ? missingEvidenceGates({ policy, linkedIssues, tests })
+      ? missingEvidenceGates({ policy, linkedIssues, tests, changedFiles, changedFileLimit })
       : [];
-    const blockedReason = !capability.allowed
-      ? capability.reason
-      : !policy.allowed
-        ? policy.reason
-        : missingGates.length
-          ? `missing required capability gate(s): ${missingGates.join(", ")}`
-          : "";
+    const blockedReason = blockedReasonFor({
+      capability,
+      policy,
+      missingGates,
+      changedFileCount,
+      changedFileLimit,
+    });
     const approval =
       blockedReason && (policy.outcome === "require_approval" || missingGates.length > 0)
         ? await this.findOrRequestApproval({
@@ -207,11 +256,23 @@ export class CapabilityUseService {
             actor: input.agent,
             target,
             scope: `${input.capabilityId}.${input.action}`,
+            riskLevel: capability.risk_class,
             reason: blockedReason,
           })
         : undefined;
     const status =
       capability.allowed && policy.allowed && missingGates.length === 0 ? "allowed" : "blocked";
+    const effectivePolicy: PolicyDecision = missingGates.length
+      ? {
+          ...policy,
+          allowed: false,
+          outcome: "require_approval",
+          reason: blockedReason,
+          approval_required: true,
+          required_gates: missingGates,
+          ...(approval ? { approval_id: approval.id } : {}),
+        }
+      : policy;
 
     const artifact = await this.artifacts.write({
       type: "capability-audit",
@@ -221,16 +282,37 @@ export class CapabilityUseService {
         capability_id: input.capabilityId,
         action: input.action,
         target,
-        status,
-        policy_action: policy.action,
-        policy_outcome: policy.outcome,
+        decision_status: status,
+        policy_action: effectivePolicy.action,
+        policy_outcome: effectivePolicy.outcome,
+        policy_reason: effectivePolicy.reason,
+        policy_matched_rule: effectivePolicy.matched_rule,
+        policy_required_gates: effectivePolicy.required_gates,
+        policy_approval_required: effectivePolicy.approval_required,
         capability_status: capability.status,
+        capability_reason: capability.reason,
+        capability_risk_class: capability.risk_class,
         missing_gates: missingGates,
         linked_issues: linkedIssues.map(String),
         test_evidence: [...tests],
+        changed_file_count: changedFileCount,
+        changed_file_limit: changedFileLimit,
+        changed_file_limit_exceeded:
+          changedFiles !== undefined && changedFileCount > changedFileLimit,
+        changed_files: changedFiles ? [...changedFiles] : [],
         approval_id: approval?.id ?? policy.approval_id ?? "",
       },
-      body: auditBody({ input, target, capability, policy, status, missingGates, approval }),
+      body: auditBody({
+        input,
+        target,
+        capability,
+        policy: effectivePolicy,
+        status,
+        missingGates,
+        changedFileCount,
+        changedFileLimit,
+        approval,
+      }),
     });
 
     await this.audit.append({
@@ -244,7 +326,7 @@ export class CapabilityUseService {
         status === "allowed"
           ? "allow"
           : capability.allowed
-            ? auditPolicyResult(policy.outcome)
+            ? auditPolicyResult(effectivePolicy.outcome)
             : "deny",
       result: "ok",
     });
@@ -252,16 +334,7 @@ export class CapabilityUseService {
     return {
       status,
       capability,
-      policy: missingGates.length
-        ? {
-            ...policy,
-            allowed: false,
-            outcome: "require_approval",
-            reason: blockedReason,
-            required_gates: missingGates,
-            ...(approval ? { approval_id: approval.id } : {}),
-          }
-        : policy,
+      policy: effectivePolicy,
       target,
       missing_gates: missingGates,
       ...(approval ? { approval } : {}),
@@ -274,6 +347,7 @@ export class CapabilityUseService {
     actor: string;
     target: string;
     scope: string;
+    riskLevel: ApprovalRiskLevel;
     reason: string;
   }): Promise<ApprovalRecord> {
     const pending = await this.approvals.listPending();
@@ -286,6 +360,7 @@ export class CapabilityUseService {
       actor: input.actor,
       target: input.target,
       scope: input.scope,
+      riskLevel: input.riskLevel,
       body: `# Approval: capability use
 
 Capability scope: ${input.scope}

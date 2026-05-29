@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import {
   ApprovalRegistry,
@@ -12,8 +11,9 @@ import {
   ClientRegistry,
   ClientSuccessStatusService,
   ConfigError,
-  CoordinatorIntakeService,
+  CoordinatorToolRuntime,
   DaemonStateStore,
+  DaemonLifecycleSupervisor,
   GitHubIssueDraftService,
   GitHubIssuePublishService,
   GitHubPullRequestPublishService,
@@ -36,14 +36,20 @@ import {
   Scheduler,
   VERSION,
   appendDailyNote,
-  appendDecision,
+  createCoordinatorRunDispatcher,
+  autonomyLevelName,
   defaultConfig,
   initWorkspace,
   loadConfig,
+  linearIssueSourceWorkItem,
+  recordDecision,
   startApiServer,
+  sourceWorkItemFromTriggerSource,
+  sourceWorkItemLabel,
   workspacePaths,
   type BureauConfig,
   type CreateProjectInput,
+  type DailyNoteSection,
   type Preset,
   type RunType,
 } from "@bureauos/core";
@@ -97,7 +103,7 @@ Registries:
   growth review [--recent-days n]           Generate growth review artifact
 
 Runs and audit:
-  run new --type <t> --scope <s> [--client slug] [--project slug]
+  run new --type <t> --scope <s> [--client slug] [--project slug] [--linear-issue id] [--linear-url u] [--stub]
   run list
   autonomy memory-scan                      Start due follow-up runs from durable memory
   autonomy retry-scan [--max-attempts n]    Retry failed/blocked runs within policy limits
@@ -147,7 +153,8 @@ GitHub:
   github create-pr --project slug --owner O --repo R --head H --title T
                                             Open a policy-gated GitHub pull request
   github ensure-labels --owner O --repo R   Apply the BureauOS label taxonomy
-  github sync --owner O --repo R [--state]  Pull issues, PRs, and check signals into memory
+  github sync --owner O --repo R [--project slug] [--state]
+                                            Pull issues, PRs, and check signals into memory
 
 Misc:
   --version | -v       Print version
@@ -231,6 +238,19 @@ function parseFlags(
 function err(message: string): number {
   process.stderr.write(`bureau: ${message}\n`);
   return 1;
+}
+
+function parseDailyNoteSection(value: string | undefined): DailyNoteSection | undefined {
+  const section = value ?? "Follow-ups";
+  if (
+    section === "Events" ||
+    section === "Runs" ||
+    section === "Decisions" ||
+    section === "Follow-ups"
+  ) {
+    return section;
+  }
+  return undefined;
 }
 
 async function loadWorkspaceConfig(cwd: string): Promise<BureauConfig> {
@@ -352,8 +372,8 @@ const handleIntake: Handler = async (args) => {
   if (typeof flags === "string") return err(`intake: ${flags}`);
   if (typeof flags.message !== "string") return err("intake: --message is required");
   const config = await loadWorkspaceConfig(process.cwd());
-  const service = new CoordinatorIntakeService(process.cwd(), { config });
-  const result = await service.process({
+  const runtime = new CoordinatorToolRuntime(process.cwd(), { config });
+  const execution = await runtime.executeCreateIntake({
     message: flags.message,
     source: typeof flags.source === "string" ? flags.source : "cli",
     ...(typeof flags.client === "string" ? { clientName: flags.client } : {}),
@@ -361,7 +381,9 @@ const handleIntake: Handler = async (args) => {
     ...(typeof flags.industry === "string" ? { industry: flags.industry } : {}),
     ...(typeof flags.value === "number" ? { expectedValue: flags.value } : {}),
     ...(typeof flags.margin === "number" ? { expectedMargin: flags.margin } : {}),
+    toolSource: "cli",
   });
+  const result = execution.result;
 
   process.stdout.write(`bureau: ${result.summary}\n`);
   process.stdout.write(`client:      ${result.client.id} (${result.client.slug})\n`);
@@ -369,7 +391,9 @@ const handleIntake: Handler = async (args) => {
   process.stdout.write(`opportunity: ${result.opportunity.id}\n`);
   process.stdout.write(`run:         ${result.run.id}\n`);
   process.stdout.write(`artifacts:   ${result.artifacts.map((a) => a.id).join(", ")}\n`);
-  process.stdout.write(`approvals:   ${result.approvals.map((a) => a.id).join(", ")}\n`);
+  if (result.approvals.length > 0) {
+    process.stdout.write(`approvals:   ${result.approvals.map((a) => a.id).join(", ")}\n`);
+  }
   return 0;
 };
 
@@ -659,9 +683,9 @@ const handleProjectHealth: Handler = async (args) => {
   );
   for (const item of result.projects) {
     process.stdout.write(
-      `${item.project.slug.padEnd(28)}  ${item.risk.padEnd(12)}  score=${String(
-        item.score,
-      ).padEnd(4)}  next=${item.next_action}\n`,
+      `${item.project.slug.padEnd(28)}  ${item.risk.padEnd(12)}  score=${String(item.score).padEnd(
+        4,
+      )}  next=${item.next_action}\n`,
     );
   }
   return 0;
@@ -817,16 +841,40 @@ const handleRunNew: Handler = async (args) => {
     client: { type: "string", alias: "c" },
     project: { type: "string", alias: "p" },
     source: { type: "string" },
+    "linear-issue": { type: "string" },
+    "linear-url": { type: "string" },
+    stub: { type: "boolean" },
   });
   if (typeof flags === "string") return err(`run new: ${flags}`);
   if (typeof flags.type !== "string") return err("run new: --type is required");
   if (typeof flags.scope !== "string") return err("run new: --scope is required");
+  const sourceWorkItem =
+    typeof flags["linear-issue"] === "string"
+      ? linearIssueSourceWorkItem(flags["linear-issue"], String(flags["linear-url"] ?? ""))
+      : typeof flags.source === "string"
+        ? sourceWorkItemFromTriggerSource(flags.source)
+        : undefined;
+  const triggerSource =
+    sourceWorkItem?.type === "linear_issue"
+      ? `linear://issue/${sourceWorkItem.identifier}`
+      : typeof flags.source === "string"
+        ? flags.source
+        : "cli";
   const config = await loadWorkspaceConfig(process.cwd());
   const approvals = new ApprovalRegistry(process.cwd());
   const audit = new AuditLog(workspacePaths(process.cwd()).auditLog);
   const policy = new PolicyEngine(config, approvals);
   const artifacts = new ArtifactStore(process.cwd());
-  const engine = new RunEngine(process.cwd(), { audit, artifacts, policy });
+  const dispatcher =
+    flags.stub === true
+      ? undefined
+      : createCoordinatorRunDispatcher({ audit, artifacts, policy, config });
+  const engine = new RunEngine(process.cwd(), {
+    audit,
+    artifacts,
+    policy,
+    ...(dispatcher ? { dispatcher } : {}),
+  });
   let clientId: string | undefined;
   let projectId: string | undefined;
   if (typeof flags.client === "string") {
@@ -842,12 +890,16 @@ const handleRunNew: Handler = async (args) => {
   const record = await engine.start({
     type: flags.type as never,
     triggerType: "owner_request",
-    triggerSource: typeof flags.source === "string" ? flags.source : "cli",
+    triggerSource,
     scope: flags.scope,
     ...(clientId !== undefined ? { clientId } : {}),
     ...(projectId !== undefined ? { projectId } : {}),
+    ...(sourceWorkItem ? { sourceWorkItem } : {}),
   });
   process.stdout.write(`bureau: run ${record.id} (${record.status})\n`);
+  if (sourceWorkItemLabel(record) !== "(none)") {
+    process.stdout.write(`bureau: source: ${sourceWorkItemLabel(record)}\n`);
+  }
   if (record.artifacts.length) {
     process.stdout.write(`bureau: artifacts: ${record.artifacts.join(", ")}\n`);
   }
@@ -869,7 +921,9 @@ const handleRunList: Handler = async () => {
     return 0;
   }
   for (const r of all) {
-    process.stdout.write(`${r.id}  ${r.type.padEnd(12)}  ${r.status.padEnd(14)}  ${r.scope}\n`);
+    process.stdout.write(
+      `${r.id}  ${r.type.padEnd(12)}  ${r.status.padEnd(14)}  ${sourceWorkItemLabel(r).padEnd(32)}  ${r.scope}\n`,
+    );
   }
   return 0;
 };
@@ -1125,7 +1179,8 @@ const handleGitHubCreatePr: Handler = async (args) => {
     test: { type: "string" },
   });
   if (typeof flags === "string") return err(`github create-pr: ${flags}`);
-  if (typeof flags.project !== "string") return err("github create-pr: --project <slug> is required");
+  if (typeof flags.project !== "string")
+    return err("github create-pr: --project <slug> is required");
   if (typeof flags.owner !== "string") return err("github create-pr: --owner required");
   if (typeof flags.repo !== "string") return err("github create-pr: --repo required");
   if (typeof flags.title !== "string") return err("github create-pr: --title required");
@@ -1234,7 +1289,10 @@ const handleAutonomyRetryScan: Handler = async (args) => {
     );
   }
   for (const item of result.escalated) {
-    process.stdout.write(`escalated: ${item.run.id} attempts=${item.attempts}\n`);
+    process.stdout.write(
+      `escalated: ${item.run.id} attempts=${item.attempts} reason=${item.reason} approval=${item.approval?.id ?? "none"}\n`,
+    );
+    process.stdout.write(`blocker: ${item.blocker}\n`);
   }
   return 0;
 };
@@ -1287,6 +1345,9 @@ const handlePolicyExplain: Handler = async (args) => {
   });
   process.stdout.write(`Action:   ${decision.action}\n`);
   process.stdout.write(`Actor:    ${decision.actor}\n`);
+  process.stdout.write(
+    `Autonomy: Level ${config.autonomy.level} (${autonomyLevelName(config.autonomy.level)})\n`,
+  );
   process.stdout.write(`Outcome:  ${decision.outcome}\n`);
   process.stdout.write(`Allowed:  ${decision.allowed}\n`);
   process.stdout.write(`Reason:   ${decision.reason}\n`);
@@ -1305,6 +1366,10 @@ const handleApprovalsList: Handler = async () => {
   }
   for (const a of pending) {
     process.stdout.write(`${a.id}  ${a.action.padEnd(24)}  ${a.target}\n`);
+    if (a.scope) process.stdout.write(`  scope: ${a.scope}\n`);
+    if (a.source) process.stdout.write(`  source: ${a.source}\n`);
+    if (a.limit) process.stdout.write(`  limit: ${a.limit}\n`);
+    if (a.expires_at) process.stdout.write(`  expires: ${a.expires_at}\n`);
   }
   return 0;
 };
@@ -1375,6 +1440,18 @@ const runDaemonForeground: Handler = async (args) => {
   });
 
   try {
+    const lock = await state.acquireLock({
+      pid: process.pid,
+      message: "foreground daemon run",
+    });
+    if (!lock.acquired) {
+      const message = lock.state
+        ? `daemon already running with pid ${lock.state.pid}`
+        : "daemon lock could not be acquired";
+      await state.markError(message);
+      return err(`daemon run: ${message}`);
+    }
+
     scheduler.start();
     const server = await startApiServer({
       workspaceRoot: process.cwd(),
@@ -1400,6 +1477,7 @@ const runDaemonForeground: Handler = async (args) => {
       scheduler.stop();
       await server.close();
       await state.markStopped(`received ${signal}`);
+      await state.releaseLock(process.pid);
       process.exit(0);
     };
 
@@ -1410,6 +1488,7 @@ const runDaemonForeground: Handler = async (args) => {
   } catch (error) {
     scheduler.stop();
     await state.markError((error as Error).message);
+    await state.releaseLock(process.pid);
     throw error;
   }
 };
@@ -1418,32 +1497,15 @@ const handleDaemonStart: Handler = async (args) => {
   const flags = parseFlags(args, { port: { type: "number", alias: "p" } });
   if (typeof flags === "string") return err(`daemon start: ${flags}`);
   await loadWorkspaceConfig(process.cwd());
-  const state = new DaemonStateStore(process.cwd());
-  const current = await state.status();
-  if (current.status === "running" && current.alive) {
-    return err(`daemon already running with pid ${current.state?.pid ?? "unknown"}`);
-  }
-
-  const script = process.argv[1];
-  if (!script) return err("daemon start: cannot locate bureau executable");
-  const childArgs = [script, "daemon", "run"];
-  if (typeof flags.port === "number") childArgs.push("--port", String(flags.port));
-  const child = spawn(process.execPath, childArgs, {
-    cwd: process.cwd(),
-    detached: true,
-    env: process.env,
-    stdio: "ignore",
+  const supervisor = new DaemonLifecycleSupervisor({
+    workspaceRoot: process.cwd(),
+    scriptPath: process.argv[1],
   });
-  child.unref();
-  if (!child.pid) return err("daemon start: failed to spawn background process");
-
-  const port = typeof flags.port === "number" ? flags.port : 0;
-  await state.markRunning({
-    pid: child.pid,
-    apiUrl: port > 0 ? `http://127.0.0.1:${port}` : "starting",
-    port,
+  const result = await supervisor.start({
+    ...(typeof flags.port === "number" ? { port: flags.port } : {}),
   });
-  process.stdout.write(`bureau: daemon started pid ${child.pid}\n`);
+  if (!result.ok) return err(`daemon start: ${result.message}`);
+  process.stdout.write(`bureau: ${result.message}\n`);
   process.stdout.write(`bureau: run \`bureau daemon status\` to inspect it\n`);
   return 0;
 };
@@ -1461,7 +1523,22 @@ const handleDaemonStatus: Handler = async () => {
   );
   if (state.pid) process.stdout.write(`pid: ${state.pid}\n`);
   if (state.api_url) process.stdout.write(`api: ${state.api_url}\n`);
-  process.stdout.write(`scheduler: ${state.scheduler_active ? "active" : "inactive"}\n`);
+  process.stdout.write(`scheduler: ${snapshot.heartbeat.scheduler_status}\n`);
+  if (snapshot.heartbeat.uptime_seconds !== undefined) {
+    process.stdout.write(`uptime_seconds: ${snapshot.heartbeat.uptime_seconds}\n`);
+  }
+  if (snapshot.heartbeat.last_run) {
+    const run = snapshot.heartbeat.last_run;
+    process.stdout.write(
+      `last_run: ${run.trigger}${run.run_id ? ` -> ${run.run_id}` : ""} at ${run.at}\n`,
+    );
+  }
+  if (snapshot.heartbeat.last_error) {
+    const error = snapshot.heartbeat.last_error;
+    process.stdout.write(
+      `last_error: ${error.trigger} failed ${error.failure_count} time(s): ${error.error}\n`,
+    );
+  }
   if (state.started_at) process.stdout.write(`started: ${state.started_at}\n`);
   if (state.updated_at) process.stdout.write(`updated: ${state.updated_at}\n`);
   if (state.message) process.stdout.write(`message: ${state.message}\n`);
@@ -1471,21 +1548,8 @@ const handleDaemonStatus: Handler = async () => {
 
 const handleDaemonStop: Handler = async () => {
   await loadWorkspaceConfig(process.cwd());
-  const state = new DaemonStateStore(process.cwd());
-  const snapshot = await state.status();
-  if (!snapshot.state || snapshot.status !== "running" || !snapshot.alive || !snapshot.state.pid) {
-    await state.markStopped("not running");
-    process.stdout.write("bureau: daemon is not running\n");
-    return 0;
-  }
-
-  try {
-    process.kill(snapshot.state.pid, "SIGTERM");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
-  }
-  await state.markStopped("owner requested stop");
-  process.stdout.write(`bureau: stop signal sent to pid ${snapshot.state.pid}\n`);
+  const result = await new DaemonLifecycleSupervisor({ workspaceRoot: process.cwd() }).stop();
+  process.stdout.write(`bureau: ${result.message}\n`);
   return 0;
 };
 
@@ -1645,8 +1709,7 @@ const handleCapabilitiesCheck: Handler = async (args) => {
   });
   if (typeof flags === "string") return err(`capabilities check: ${flags}`);
   if (typeof flags.agent !== "string") return err("capabilities check: --agent required");
-  if (typeof flags.capability !== "string")
-    return err("capabilities check: --capability required");
+  if (typeof flags.capability !== "string") return err("capabilities check: --capability required");
   if (typeof flags.action !== "string") return err("capabilities check: --action required");
 
   const config = await loadWorkspaceConfig(process.cwd()).catch(() => defaultConfig("freelancer"));
@@ -1655,9 +1718,7 @@ const handleCapabilitiesCheck: Handler = async (args) => {
     capabilityId: flags.capability,
     action: flags.action,
     ...(typeof flags.target === "string" ? { target: flags.target } : {}),
-    ...(typeof flags["policy-action"] === "string"
-      ? { policyAction: flags["policy-action"] }
-      : {}),
+    ...(typeof flags["policy-action"] === "string" ? { policyAction: flags["policy-action"] } : {}),
     ...(typeof flags.issue === "number" ? { linkedIssueNumbers: [flags.issue] } : {}),
     ...(typeof flags.test === "string" ? { testEvidence: [flags.test] } : {}),
     ...(typeof flags.approval === "string" ? { approvalIds: [flags.approval] } : {}),
@@ -1753,7 +1814,7 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
     if (typeof flags === "string") return err(`decision: ${flags}`);
     if (typeof flags.what !== "string") return err("decision: --what required");
     if (typeof flags.why !== "string") return err("decision: --why required");
-    await appendDecision(process.cwd(), {
+    const result = await recordDecision(process.cwd(), {
       actor: typeof flags.actor === "string" ? flags.actor : "owner",
       what: flags.what,
       why: flags.why,
@@ -1767,13 +1828,7 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
           }
         : {}),
     });
-    await new AuditLog(workspacePaths(process.cwd()).auditLog).append({
-      actor: "cli",
-      action: "decision.append",
-      target: flags.what,
-      result: "ok",
-    });
-    process.stdout.write(`bureau: decision recorded in DECISIONS.md\n`);
+    process.stdout.write(`bureau: decision ${result.id} recorded in DECISIONS.md\n`);
     return 0;
   },
   "follow-up": async (args: readonly string[]) => {
@@ -1783,12 +1838,17 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
     });
     if (typeof flags === "string") return err(`follow-up: ${flags}`);
     if (typeof flags.line !== "string") return err("follow-up: --line required");
-    const section = (typeof flags.section === "string" ? flags.section : "Follow-ups") as
-      | "Events"
-      | "Runs"
-      | "Decisions"
-      | "Follow-ups";
+    const section = parseDailyNoteSection(
+      typeof flags.section === "string" ? flags.section : undefined,
+    );
+    if (!section) return err("follow-up: --section must be Events, Runs, Decisions, or Follow-ups");
     const path = await appendDailyNote(process.cwd(), section, flags.line);
+    await new AuditLog(workspacePaths(process.cwd()).auditLog).append({
+      actor: "cli",
+      action: "memory.daily_note_appended",
+      target: section,
+      result: "ok",
+    });
     process.stdout.write(`bureau: appended to ${path}\n`);
     return 0;
   },
@@ -1834,6 +1894,7 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
         token: { type: "string" },
         state: { type: "string" },
         client: { type: "string" },
+        project: { type: "string" },
         "stale-days": { type: "number" },
         "no-issues": { type: "boolean" },
         "no-prs": { type: "boolean" },
@@ -1863,6 +1924,7 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
           | "closed"
           | "all",
         ...(typeof flags.client === "string" ? { clientSlug: flags.client } : {}),
+        ...(typeof flags.project === "string" ? { projectSlug: flags.project } : {}),
         includeIssues: flags["no-issues"] !== true,
         includePullRequests: flags["no-prs"] !== true,
         includeChecks: flags["no-checks"] !== true,
@@ -1884,6 +1946,9 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
       process.stdout.write(
         `bureau: synced ${result.repository}: ${result.issues.length} issues, ${result.pullRequests.length} PRs, ${result.checks.length} checks\n`,
       );
+      if (result.project) {
+        process.stdout.write(`project: ${result.project.slug}\n`);
+      }
       process.stdout.write(
         `signals: ${result.failingChecks.length} failing checks, ${result.staleIssues.length + result.stalePullRequests.length} stale items, ${result.createdOpportunities.length} new opportunities\n`,
       );

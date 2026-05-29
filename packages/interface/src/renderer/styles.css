@@ -4,13 +4,13 @@
 
 @layer base {
   :root {
-    --background: 240 10% 3.5%;
+    --background: 240 9% 4%;
     --foreground: 0 0% 96%;
 
     /* Surface gerarchia a 4 livelli con stacco percepibile */
-    --surface: 240 8% 6%;
-    --surface-subtle: 240 8% 8%;
-    --surface-raised: 240 7% 13%;
+    --surface: 240 8% 5.8%;
+    --surface-subtle: 240 7% 8.5%;
+    --surface-raised: 240 6% 12.5%;
 
     --card: 240 8% 7%;
     --card-foreground: 0 0% 96%;
@@ -53,7 +53,7 @@
     --input: 240 5% 14%;
     --ring: 158 64% 42%;
 
-    --radius: 0.625rem;
+    --radius: 0.5rem;
 
     color-scheme: dark;
   }
@@ -143,28 +143,28 @@
 
 @layer components {
   .panel {
-    @apply rounded-xl border border-border bg-card text-card-foreground shadow-[0_1px_0_0_hsl(var(--border)/0.5),0_8px_24px_-12px_hsl(0_0%_0%/0.6)];
+    @apply rounded-lg border border-border/70 bg-card/95 text-card-foreground shadow-[0_1px_0_0_hsl(var(--border)/0.35),0_8px_24px_-18px_hsl(0_0%_0%/0.6)];
   }
 
   .panel-muted {
-    @apply rounded-lg border border-border bg-surface-subtle text-card-foreground;
+    @apply rounded-lg border border-border/70 bg-surface-subtle/45 text-card-foreground;
   }
 
   .surface-elevated {
-    @apply rounded-lg border border-border bg-surface-raised;
+    @apply rounded-lg border border-border/70 bg-surface-raised/75;
   }
 
   /* Semantic typography classes — scala formale a 8 step */
   .text-display {
-    @apply text-[28px] leading-[34px] font-semibold tracking-tight text-foreground;
+    @apply text-[28px] leading-[34px] font-semibold text-foreground;
   }
 
   .text-kpi {
-    @apply text-[20px] leading-[26px] font-semibold tracking-tight text-foreground;
+    @apply text-[20px] leading-[26px] font-semibold text-foreground;
   }
 
   .text-view-title {
-    @apply text-[16px] leading-[22px] font-semibold tracking-tight text-foreground;
+    @apply text-[16px] leading-[22px] font-semibold text-foreground;
   }
 
   .text-section-title {
@@ -261,7 +261,13 @@
   }
 
   .gradient-mask-fade {
-    mask-image: linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent);
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      black 24px,
+      black calc(100% - 24px),
+      transparent
+    );
   }
 }
 

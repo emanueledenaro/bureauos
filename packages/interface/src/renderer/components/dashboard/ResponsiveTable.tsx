@@ -17,7 +17,7 @@ export function ResponsiveTable({
 }) {
   return (
     <div className={cn("overflow-hidden rounded-lg border border-border/70", className)}>
-      <div className="overflow-x-auto">
+      <div data-e2e-horizontal-scroll="true" className="overflow-x-auto">
         <div style={{ minWidth: `${minWidth}px` }}>{children}</div>
       </div>
     </div>

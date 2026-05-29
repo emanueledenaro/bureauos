@@ -1,0 +1,154 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { ArtifactStore } from "../artifacts/store.js";
+import { CapabilityUseService } from "../capabilities/usage.js";
+import { defaultConfig } from "../config/loader.js";
+import { initWorkspace } from "../init/initializer.js";
+import { LinearIssueIngestionService } from "./issue-ingestion.js";
+
+describe("LinearIssueIngestionService", () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "bureauos-linear-ingestion-"));
+    await initWorkspace({ root: dir, organizationName: "Linear Agency", preset: "agency" });
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("checks Linear read capability and writes a ready scope artifact", async () => {
+    const config = defaultConfig("agency");
+    const result = await new LinearIssueIngestionService(dir, {
+      config,
+      capabilities: new CapabilityUseService(dir, { config }),
+    }).ingest({
+      issue: {
+        identifier: "SER-62",
+        title: "Wire Codex runtime adapter to development agent execution",
+        description:
+          "Acceptance criteria:\n- Development Agent calls Codex runtime.\n- Runtime output is stored as artifacts.",
+        url: "https://linear.app/serium/issue/SER-62/wire-codex-runtime-adapter",
+        labels: ["Feature"],
+        projectId: "bureauos-project",
+        teamKey: "SER",
+      },
+      projectId: "bureauos",
+      clientId: "internal",
+      runId: "run_123",
+    });
+
+    expect(result.status).toBe("ready");
+    expect(result.capability.status).toBe("allowed");
+    expect(result.scope?.triggerSource).toBe("linear://issue/SER-62");
+    expect(result.artifact?.type).toBe("project-dispatch-packet");
+    expect(result.artifact?.source_work_item_type).toBe("linear_issue");
+    expect(result.artifact?.source_work_item_id).toBe("SER-62");
+    expect(result.artifact?.source_work_item_url).toBe(
+      "https://linear.app/serium/issue/SER-62/wire-codex-runtime-adapter",
+    );
+
+    const written = await new ArtifactStore(dir).read(result.artifact!.id);
+    expect(written?.record.linear_identifier).toBe("SER-62");
+    expect(written?.record.linear_url).toBe(
+      "https://linear.app/serium/issue/SER-62/wire-codex-runtime-adapter",
+    );
+    expect(written?.body).toContain("SER-62");
+    expect(written?.body).toContain("Development Agent calls Codex runtime");
+    expect(written?.body).toContain("Readiness: ready");
+    expect(written?.body).toContain("## Product Planning");
+    expect(written?.body).toContain("## Project Manager Task Plan");
+    expect(written?.body).toContain("development: ready");
+    expect(written?.record.intake_risk_level).toBe("low");
+    expect(written?.record.intake_agent_assignments).toContain("development:ready");
+  });
+
+  it("writes a clarification artifact instead of allowing ambiguous work", async () => {
+    const config = defaultConfig("agency");
+    const result = await new LinearIssueIngestionService(dir, {
+      config,
+      capabilities: new CapabilityUseService(dir, { config }),
+    }).ingest({
+      issue: {
+        identifier: "SER-200",
+        title: "Make BureauOS better",
+        description: "Improve the whole thing.",
+        url: "https://linear.app/serium/issue/SER-200/make-bureauos-better",
+        labels: ["Feature"],
+        projectId: "bureauos-project",
+        teamKey: "SER",
+      },
+    });
+
+    expect(result.status).toBe("needs_clarification");
+    expect(result.scope?.blockers).toContain("missing acceptance criteria");
+    expect(result.artifact?.type).toBe("project-dispatch-packet");
+
+    const written = await new ArtifactStore(dir).read(result.artifact!.id);
+    expect(written?.body).toContain("Readiness: needs_clarification");
+    expect(written?.body).toContain("missing acceptance criteria");
+    expect(written?.body).toContain("Clarification: Provide concrete acceptance criteria");
+    expect(written?.body).toContain("development: blocked");
+  });
+
+  it("writes an oversized planning blocker before development execution", async () => {
+    const config = defaultConfig("agency");
+    const criteria = Array.from(
+      { length: 11 },
+      (_, index) => `- Criterion ${index + 1} must be verified independently.`,
+    ).join("\n");
+    const result = await new LinearIssueIngestionService(dir, {
+      config,
+      capabilities: new CapabilityUseService(dir, { config }),
+    }).ingest({
+      issue: {
+        identifier: "SER-202",
+        title: "Build all dashboards at once",
+        description: `Acceptance criteria:\n${criteria}`,
+        url: "https://linear.app/serium/issue/SER-202/build-all-dashboards-at-once",
+        labels: ["Feature"],
+        projectId: "bureauos-project",
+        teamKey: "SER",
+      },
+    });
+
+    expect(result.status).toBe("needs_clarification");
+    expect(result.scope?.blockers).toContain("oversized issue scope: 11 acceptance criteria");
+    expect(result.scope?.intakePlan.riskLevel).toBe("high");
+
+    const written = await new ArtifactStore(dir).read(result.artifact!.id);
+    expect(written?.body).toContain("oversized issue scope: 11 acceptance criteria");
+    expect(written?.body).toContain("Split the issue into smaller tickets");
+    expect(written?.body).toContain(
+      "Coordinator waits for clarified scope before development execution",
+    );
+  });
+
+  it("blocks before scope mapping when Linear reads are disallowed by policy", async () => {
+    const config = defaultConfig("agency");
+    config.autonomy.observe_signals = false;
+    const result = await new LinearIssueIngestionService(dir, {
+      config,
+      capabilities: new CapabilityUseService(dir, { config }),
+    }).ingest({
+      issue: {
+        identifier: "SER-62",
+        title: "Wire Codex runtime adapter to development agent execution",
+        description:
+          "Acceptance criteria:\n- Development Agent calls Codex runtime.\n- Runtime output is stored as artifacts.",
+        url: "https://linear.app/serium/issue/SER-62/wire-codex-runtime-adapter",
+        labels: ["Feature"],
+        projectId: "bureauos-project",
+        teamKey: "SER",
+      },
+    });
+
+    expect(result.status).toBe("blocked");
+    expect(result.capability.status).toBe("blocked");
+    expect(result.scope).toBeUndefined();
+    expect(result.artifact).toBeUndefined();
+  });
+});

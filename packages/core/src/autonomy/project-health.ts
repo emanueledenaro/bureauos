@@ -20,6 +20,10 @@ export interface ProjectHealthItem {
   pending_approvals: number;
   active_runs: number;
   runs_needing_human: number;
+  github_failing_checks: number;
+  github_stale_items: number;
+  github_open_pull_requests: number;
+  latest_github_signal_at: string;
   open_pipeline_value: number;
   latest_run_at: string;
 }
@@ -64,12 +68,37 @@ function daysBetween(now: Date, iso: string): number | undefined {
 }
 
 function latestRunAt(runs: readonly RunRecord[]): string {
-  return runs.map((run) => run.updated || run.created).filter(Boolean).sort().at(-1) ?? "";
+  return (
+    runs
+      .map((run) => run.updated || run.created)
+      .filter(Boolean)
+      .sort()
+      .at(-1) ?? ""
+  );
+}
+
+function latestArtifact(records: readonly ArtifactRecord[]): ArtifactRecord | undefined {
+  return records
+    .filter((record) => record.created)
+    .sort((a, b) => a.created.localeCompare(b.created))
+    .at(-1);
+}
+
+function frontNumber(record: ArtifactRecord | undefined, key: string): number {
+  const value = record?.[key];
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
 }
 
 function approvalMatchesProject(scope: string, target: string, project: ProjectRecord): boolean {
   const haystack = `${scope} ${target}`.toLowerCase();
-  return haystack.includes(project.id.toLowerCase()) || haystack.includes(project.name.toLowerCase());
+  return (
+    haystack.includes(project.id.toLowerCase()) || haystack.includes(project.name.toLowerCase())
+  );
 }
 
 function riskFor(args: {
@@ -77,11 +106,14 @@ function riskFor(args: {
   pendingApprovals: number;
   activeRuns: number;
   runsNeedingHuman: number;
+  githubFailingChecks: number;
+  githubStaleItems: number;
   ageDays?: number;
 }): ProjectHealthRisk {
   if (args.project.status === "blocked") return "blocked";
   if (args.runsNeedingHuman > 0) return "needs_human";
   if (args.pendingApprovals > 0) return "approval";
+  if (args.githubFailingChecks > 0 || args.githubStaleItems > 0) return "watch";
   if (
     ACTIVE_STATUSES.has(args.project.status) &&
     (args.activeRuns === 0 || (args.ageDays !== undefined && args.ageDays >= 7))
@@ -96,6 +128,8 @@ function scoreFor(args: {
   pendingApprovals: number;
   activeRuns: number;
   runsNeedingHuman: number;
+  githubFailingChecks: number;
+  githubStaleItems: number;
   openPipelineValue: number;
   ageDays?: number;
 }): number {
@@ -106,6 +140,8 @@ function scoreFor(args: {
   if (args.risk === "watch") score -= 15;
   score -= Math.min(15, args.pendingApprovals * 5);
   score -= Math.min(20, args.runsNeedingHuman * 10);
+  score -= Math.min(25, args.githubFailingChecks * 10);
+  score -= Math.min(15, args.githubStaleItems * 5);
   if (args.activeRuns === 0) score -= 8;
   if (args.openPipelineValue > 0) score += 5;
   if (args.ageDays !== undefined && args.ageDays >= 14) score -= 10;
@@ -117,6 +153,8 @@ function reasonsFor(args: {
   pendingApprovals: number;
   activeRuns: number;
   runsNeedingHuman: number;
+  githubFailingChecks: number;
+  githubStaleItems: number;
   openPipelineValue: number;
   ageDays?: number;
 }): string[] {
@@ -124,13 +162,18 @@ function reasonsFor(args: {
   if (args.project.status === "blocked") reasons.push("project is blocked");
   if (args.runsNeedingHuman > 0) reasons.push(`${args.runsNeedingHuman} run(s) need owner input`);
   if (args.pendingApprovals > 0) reasons.push(`${args.pendingApprovals} pending approval gate(s)`);
+  if (args.githubFailingChecks > 0)
+    reasons.push(`${args.githubFailingChecks} failing GitHub check signal(s)`);
+  if (args.githubStaleItems > 0)
+    reasons.push(`${args.githubStaleItems} stale GitHub issue/PR signal(s)`);
   if (args.activeRuns === 0 && ACTIVE_STATUSES.has(args.project.status)) {
     reasons.push("no active run is moving this project");
   }
   if (args.ageDays !== undefined && args.ageDays >= 7) {
     reasons.push(`project memory has not changed for ${args.ageDays} day(s)`);
   }
-  if (args.openPipelineValue > 0) reasons.push(`client has ${money(args.openPipelineValue)} open pipeline`);
+  if (args.openPipelineValue > 0)
+    reasons.push(`client has ${money(args.openPipelineValue)} open pipeline`);
   if (reasons.length === 0) reasons.push("no immediate delivery risk detected");
   return reasons;
 }
@@ -162,7 +205,7 @@ ${
     ? "- No projects recorded."
     : items
         .map((item) => {
-          return `- ${item.project.name}: risk ${item.risk}, score ${item.score}/100, approvals ${item.pending_approvals}, active runs ${item.active_runs}, pipeline ${money(item.open_pipeline_value)}. Next: ${item.next_action}`;
+          return `- ${item.project.name}: risk ${item.risk}, score ${item.score}/100, approvals ${item.pending_approvals}, active runs ${item.active_runs}, GitHub failing checks ${item.github_failing_checks}, stale GitHub items ${item.github_stale_items}, pipeline ${money(item.open_pipeline_value)}. Next: ${item.next_action}`;
         })
         .join("\n")
 }
@@ -224,19 +267,29 @@ export class ProjectHealthReviewService {
   async generate(input: ProjectHealthReviewInput = {}): Promise<ProjectHealthReviewResult> {
     const now = input.now ?? new Date();
     const generatedAt = now.toISOString();
-    const [projects, clients, opportunities, approvals, runs] = await Promise.all([
-      this.projects.list(),
-      this.clients.list(),
-      this.opportunities.list(),
-      this.approvals.listPending(),
-      this.listRuns(),
-    ]);
+    const [projects, clients, opportunities, approvals, runs, githubSignalReports] =
+      await Promise.all([
+        this.projects.list(),
+        this.clients.list(),
+        this.opportunities.list(),
+        this.approvals.listPending(),
+        this.listRuns(),
+        this.artifacts.list({ type: "github-signal-report" }),
+      ]);
     const clientsById = new Map(clients.map((client) => [client.id, client]));
     const selectedProjects = input.projectId
       ? projects.filter((project) => project.id === input.projectId)
       : projects;
     const items = selectedProjects.map((project): ProjectHealthItem => {
       const projectRuns = runs.filter((run) => run.project_id === project.id);
+      const latestGithubSignal = latestArtifact(
+        githubSignalReports.filter((report) => report.project_id === project.id),
+      );
+      const githubFailingChecks = frontNumber(latestGithubSignal, "failing_checks_count");
+      const githubStaleItems =
+        frontNumber(latestGithubSignal, "stale_issues_count") +
+        frontNumber(latestGithubSignal, "stale_pull_requests_count");
+      const githubOpenPullRequests = frontNumber(latestGithubSignal, "pull_requests_count");
       const activeRuns = projectRuns.filter((run) => !CLOSED_RUN_STATUSES.has(run.status));
       const runsNeedingHuman = activeRuns.filter((run) => run.status === "needs_human").length;
       const pendingApprovals = approvals.filter((approval) =>
@@ -257,6 +310,8 @@ export class ProjectHealthReviewService {
         pendingApprovals,
         activeRuns: activeRuns.length,
         runsNeedingHuman,
+        githubFailingChecks,
+        githubStaleItems,
         ageDays,
       });
       return {
@@ -270,6 +325,8 @@ export class ProjectHealthReviewService {
           pendingApprovals,
           activeRuns: activeRuns.length,
           runsNeedingHuman,
+          githubFailingChecks,
+          githubStaleItems,
           openPipelineValue,
           ageDays,
         }),
@@ -278,6 +335,8 @@ export class ProjectHealthReviewService {
           pendingApprovals,
           activeRuns: activeRuns.length,
           runsNeedingHuman,
+          githubFailingChecks,
+          githubStaleItems,
           openPipelineValue,
           ageDays,
         }),
@@ -285,6 +344,10 @@ export class ProjectHealthReviewService {
         pending_approvals: pendingApprovals,
         active_runs: activeRuns.length,
         runs_needing_human: runsNeedingHuman,
+        github_failing_checks: githubFailingChecks,
+        github_stale_items: githubStaleItems,
+        github_open_pull_requests: githubOpenPullRequests,
+        latest_github_signal_at: latestGithubSignal?.created ?? "",
         open_pipeline_value: openPipelineValue,
         latest_run_at: latestRunAt(projectRuns),
       };
@@ -302,6 +365,9 @@ export class ProjectHealthReviewService {
         needs_human_count: items.filter((item) => item.risk === "needs_human").length,
         approval_count: items.filter((item) => item.risk === "approval").length,
         watch_count: items.filter((item) => item.risk === "watch").length,
+        github_attention_count: items.filter(
+          (item) => item.github_failing_checks > 0 || item.github_stale_items > 0,
+        ).length,
       },
       body: reportBody(generatedAt, items),
     });

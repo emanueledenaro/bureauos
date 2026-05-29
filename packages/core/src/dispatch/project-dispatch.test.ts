@@ -79,6 +79,22 @@ describe("ProjectDispatchService", () => {
     expect(packet?.body).toContain("Manager agent: project_manager");
     expect(packet?.body).toContain("Source Artifacts");
 
+    const developmentHandoff = await new ArtifactStore(dir).read(
+      result.handoffs.find((handoff) => handoff.role === "development")!.artifact.id,
+    );
+    expect(developmentHandoff?.record).toMatchObject({
+      type: "agent-handoff",
+      source_agent_id: "project_manager",
+      target_agent_id: "development",
+      scope: "Prepare dev-ready work for booking website MVP",
+      dispatch_packet_id: result.packet.id,
+    });
+    expect(developmentHandoff?.record.input_artifact_ids).toContain(result.packet.id);
+    expect(developmentHandoff?.record.expected_output_types).toEqual(["technical-plan"]);
+    expect(developmentHandoff?.record.acceptance_checks).toHaveLength(4);
+    expect(developmentHandoff?.body).toContain("## Contract");
+    expect(developmentHandoff?.body).toContain("## Acceptance Checks");
+
     const runs = await readFile(
       join(workspacePaths(dir).projectsDir, intake.project.slug, "RUNS.md"),
       "utf8",

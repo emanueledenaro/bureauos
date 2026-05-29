@@ -24,6 +24,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Private context check
+        run: pnpm run private-context:check
+
       - name: Build
         run: pnpm -r run build
 

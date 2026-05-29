@@ -1,10 +1,12 @@
 import { rename } from "node:fs/promises";
 import { join } from "node:path";
 import { newId } from "../ids.js";
+import { LocalNotificationCenter, type ApprovalNotificationSink } from "../notifications/local.js";
 import { workspacePaths } from "../paths.js";
 import { ensureDir, fileExists, listDocs, readDoc, writeDoc, type FrontMatter } from "./base.js";
 
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "expired";
+export type ApprovalRiskLevel = "low" | "medium" | "high" | "critical";
 
 export interface ApprovalRecord extends FrontMatter {
   id: string;
@@ -12,6 +14,10 @@ export interface ApprovalRecord extends FrontMatter {
   actor: string;
   target: string;
   scope: string;
+  source: string;
+  limit: string;
+  run_id: string;
+  risk_level: ApprovalRiskLevel;
   status: ApprovalStatus;
   expires_at: string;
   one_off: boolean;
@@ -28,14 +34,100 @@ export interface CreateApprovalInput {
   actor: string;
   target: string;
   scope: string;
+  source?: string;
+  limit?: string;
+  runId?: string;
+  riskLevel?: ApprovalRiskLevel;
   expiresAt?: string;
   oneOff?: boolean;
   recurring?: boolean;
   body?: string;
 }
 
+export interface ApprovalRegistryDeps {
+  notifications?: ApprovalNotificationSink | false;
+}
+
+const APPROVAL_ACTION_RISK: Readonly<Record<string, ApprovalRiskLevel>> = {
+  accept_projects: "high",
+  auth_policy_change: "critical",
+  change_ad_budget: "high",
+  change_billing: "critical",
+  change_pricing: "high",
+  contact_clients_directly: "high",
+  create_repositories: "high",
+  delete_data: "critical",
+  deploy_production: "critical",
+  destructive_db_change: "critical",
+  launch_ad_campaigns: "high",
+  make_legal_commitment: "critical",
+  merge_pull_requests: "high",
+  publish_public_content: "high",
+  publish_social_posts: "high",
+  run_paid_ads: "high",
+  send_client_messages: "high",
+  send_final_proposals: "high",
+  touch_secrets: "critical",
+};
+
+export function normalizeApprovalRiskLevel(value: unknown): ApprovalRiskLevel | undefined {
+  return value === "low" || value === "medium" || value === "high" || value === "critical"
+    ? value
+    : undefined;
+}
+
+export function inferApprovalRiskLevel(action: string, target = "", scope = ""): ApprovalRiskLevel {
+  const explicit = APPROVAL_ACTION_RISK[action];
+  if (explicit) return explicit;
+  const descriptor = `${action} ${target} ${scope}`.toLowerCase();
+  if (
+    /\b(secret|billing|payment|stripe|legal|delete|destructive|production|deploy|domain)\b/.test(
+      descriptor,
+    )
+  ) {
+    return "critical";
+  }
+  if (
+    /\b(client|public|publish|paid|ads?|budget|merge|proposal|pricing|price|contract)\b/.test(
+      descriptor,
+    )
+  ) {
+    return "high";
+  }
+  if (/\b(github|pull|repository|issue|comment|provider|oauth)\b/.test(descriptor)) {
+    return "medium";
+  }
+  return "low";
+}
+
+export function approvalRiskLevel(
+  approval: Pick<ApprovalRecord, "action" | "target" | "scope" | "risk_level">,
+): ApprovalRiskLevel {
+  return (
+    normalizeApprovalRiskLevel(approval.risk_level) ??
+    inferApprovalRiskLevel(approval.action, approval.target, approval.scope)
+  );
+}
+
+export function approvalRequiresDecisionNote(
+  approval: Pick<ApprovalRecord, "action" | "target" | "scope" | "risk_level">,
+): boolean {
+  const risk = approvalRiskLevel(approval);
+  return risk === "high" || risk === "critical";
+}
+
 export class ApprovalRegistry {
-  constructor(public readonly workspaceRoot: string) {}
+  private readonly notifications?: ApprovalNotificationSink;
+
+  constructor(
+    public readonly workspaceRoot: string,
+    deps: ApprovalRegistryDeps = {},
+  ) {
+    this.notifications =
+      deps.notifications === false
+        ? undefined
+        : (deps.notifications ?? new LocalNotificationCenter(workspaceRoot));
+  }
 
   private paths() {
     return workspacePaths(this.workspaceRoot);
@@ -59,6 +151,11 @@ export class ApprovalRegistry {
       actor: input.actor,
       target: input.target,
       scope: input.scope,
+      source: input.source ?? "",
+      limit: input.limit ?? "",
+      run_id: input.runId ?? "",
+      risk_level:
+        input.riskLevel ?? inferApprovalRiskLevel(input.action, input.target, input.scope),
       status: "pending",
       expires_at: input.expiresAt ?? "",
       one_off: input.oneOff ?? true,
@@ -70,7 +167,23 @@ export class ApprovalRegistry {
       reason: "",
     };
     await writeDoc(this.pendingFile(id), record, input.body ?? "");
+    await this.emitApprovalNotification(record);
     return record;
+  }
+
+  private async emitApprovalNotification(record: ApprovalRecord): Promise<void> {
+    try {
+      await this.notifications?.notifyApprovalNeeded(record);
+    } catch {
+      // Notification delivery is best-effort; approval creation remains the source of truth.
+    }
+  }
+
+  async getPending(id: string): Promise<ApprovalRecord | undefined> {
+    const path = this.pendingFile(id);
+    if (!(await fileExists(path))) return undefined;
+    const doc = await readDoc<ApprovalRecord>(path);
+    return doc.front;
   }
 
   async resolve(

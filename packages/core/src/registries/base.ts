@@ -21,6 +21,19 @@ export interface ParsedDocument<T extends FrontMatter = FrontMatter> {
 
 const FM_RE = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/;
 
+function parseStringValue(value: string): string {
+  if (value.startsWith('"') && value.endsWith('"')) {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      if (typeof parsed === "string") return parsed;
+    } catch {
+      return value.slice(1, -1);
+    }
+  }
+  if (value.startsWith("'") && value.endsWith("'")) return value.slice(1, -1);
+  return value;
+}
+
 export function parseFrontMatter<T extends FrontMatter = FrontMatter>(
   raw: string,
 ): ParsedDocument<T> {
@@ -45,7 +58,7 @@ export function parseFrontMatter<T extends FrontMatter = FrontMatter>(
     } else if (/^-?\d+(\.\d+)?$/.test(value)) {
       front[key] = Number(value);
     } else {
-      front[key] = value.replace(/^["']|["']$/g, "");
+      front[key] = parseStringValue(value);
     }
   }
   return { front: front as T, body };
@@ -57,7 +70,7 @@ export function renderFrontMatter(front: FrontMatter, body: string): string {
     if (Array.isArray(v)) {
       lines.push(`${k}: [${v.map((x) => JSON.stringify(x)).join(", ")}]`);
     } else if (typeof v === "string") {
-      lines.push(`${k}: ${v.includes(":") || v.includes("#") ? JSON.stringify(v) : v}`);
+      lines.push(`${k}: ${/[:#"']/.test(v) ? JSON.stringify(v) : v}`);
     } else {
       lines.push(`${k}: ${String(v)}`);
     }

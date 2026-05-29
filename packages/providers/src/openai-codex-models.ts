@@ -89,8 +89,5 @@ export function normalizeOpenAICodexOAuthModel(model?: string): string {
 export function listOpenAICodexOAuthModelIDs(defaultModel?: string): string[] {
   const normalizedDefault = normalizeOpenAICodexOAuthModel(defaultModel);
   const knownIDs = OPENAI_CODEX_OAUTH_MODELS.map((model) => model.id);
-  return [
-    normalizedDefault,
-    ...knownIDs.filter((model) => model !== normalizedDefault),
-  ];
+  return [normalizedDefault, ...knownIDs.filter((model) => model !== normalizedDefault)];
 }

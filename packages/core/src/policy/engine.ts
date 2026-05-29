@@ -1,4 +1,4 @@
-import type { BureauConfig } from "../config/schema.js";
+import { autonomyLevelName, type BureauConfig } from "../config/schema.js";
 import { ApprovalRegistry } from "../registries/approval.js";
 
 export type PolicyOutcome =
@@ -23,9 +23,12 @@ export interface PolicyDecision {
   actor: string;
   target?: string;
   capability?: string;
+  risk_class?: RiskClass;
   allowed: boolean;
   outcome: PolicyOutcome;
   reason: string;
+  matched_rule: string;
+  approval_required: boolean;
   required_gates: string[];
   approval_id?: string;
 }
@@ -90,11 +93,15 @@ export class PolicyEngine {
   ) {}
 
   async evaluate(input: PolicyInput): Promise<PolicyDecision> {
-    const base: Omit<PolicyDecision, "outcome" | "allowed" | "reason" | "required_gates"> = {
+    const base: Omit<
+      PolicyDecision,
+      "outcome" | "allowed" | "reason" | "matched_rule" | "approval_required" | "required_gates"
+    > = {
       action: input.action,
       actor: input.actor,
       ...(input.target !== undefined ? { target: input.target } : {}),
       ...(input.capability !== undefined ? { capability: input.capability } : {}),
+      ...(input.riskClass !== undefined ? { risk_class: input.riskClass } : {}),
     };
 
     if (ALWAYS_HUMAN.has(input.action)) {
@@ -105,6 +112,8 @@ export class PolicyEngine {
           outcome: "allow",
           allowed: true,
           reason: `approved by ${approval.resolved_by} (${approval.id})`,
+          matched_rule: `policy.always_human.${input.action}`,
+          approval_required: true,
           required_gates: [],
           approval_id: approval.id,
         };
@@ -114,22 +123,27 @@ export class PolicyEngine {
         outcome: "escalate",
         allowed: false,
         reason: "action requires explicit human approval",
+        matched_rule: `policy.always_human.${input.action}`,
+        approval_required: true,
         required_gates: ["human_approval"],
       };
     }
 
     if (AUTONOMY_ACTIONS.has(input.action)) {
-      const allowed = (this.config.autonomy as Record<string, boolean>)[input.action] === true;
+      const allowed =
+        (this.config.autonomy as Record<string, boolean | number>)[input.action] === true;
       if (allowed) {
         return {
           ...base,
           outcome: "allow",
           allowed: true,
-          reason: `enabled by autonomy.${input.action}`,
+          reason: `enabled by autonomy.${input.action} at level ${this.config.autonomy.level} (${autonomyLevelName(this.config.autonomy.level)})`,
+          matched_rule: `autonomy.${input.action}`,
+          approval_required: false,
           required_gates: this.gatesFor(input),
         };
       }
-      return this.requireOrEscalate(base, input);
+      return this.requireOrEscalate(base, input, `autonomy.${input.action}`);
     }
 
     if (GROWTH_ACTIONS.has(input.action)) {
@@ -141,10 +155,12 @@ export class PolicyEngine {
           outcome: "allow",
           allowed: true,
           reason: `enabled by growth_autonomy.${input.action}`,
+          matched_rule: `growth_autonomy.${input.action}`,
+          approval_required: false,
           required_gates: this.gatesFor(input),
         };
       }
-      return this.requireOrEscalate(base, input);
+      return this.requireOrEscalate(base, input, `growth_autonomy.${input.action}`);
     }
 
     // Unknown action: deny by default, escalate so a human can decide policy.
@@ -153,13 +169,19 @@ export class PolicyEngine {
       outcome: "escalate",
       allowed: false,
       reason: `unknown action "${input.action}" requires policy definition`,
+      matched_rule: "policy.unknown_action",
+      approval_required: true,
       required_gates: ["policy_definition"],
     };
   }
 
   private async requireOrEscalate(
-    base: Omit<PolicyDecision, "outcome" | "allowed" | "reason" | "required_gates">,
+    base: Omit<
+      PolicyDecision,
+      "outcome" | "allowed" | "reason" | "matched_rule" | "approval_required" | "required_gates"
+    >,
     input: PolicyInput,
+    matchedRule: string,
   ): Promise<PolicyDecision> {
     const approval = await this.approvals.match(input.action, input.target ?? "*");
     if (approval) {
@@ -168,6 +190,8 @@ export class PolicyEngine {
         outcome: "allow",
         allowed: true,
         reason: `policy disabled but approved by ${approval.resolved_by} (${approval.id})`,
+        matched_rule: matchedRule,
+        approval_required: true,
         required_gates: [],
         approval_id: approval.id,
       };
@@ -177,6 +201,8 @@ export class PolicyEngine {
       outcome: "require_approval",
       allowed: false,
       reason: `policy disabled for action "${input.action}"; requires owner approval`,
+      matched_rule: matchedRule,
+      approval_required: true,
       required_gates: ["owner_approval"],
     };
   }

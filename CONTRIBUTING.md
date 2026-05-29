@@ -39,7 +39,15 @@ Include:
 - how it was verified
 - any risk or follow-up
 
+Before opening a public pull request, run:
+
+```bash
+pnpm run private-context:check
+```
+
+See `docs/repository-hygiene.md` for the local-only agent files that must not
+be committed.
+
 ## Design Rule
 
 When in doubt, prefer explicit artifacts over hidden agent behavior.
-

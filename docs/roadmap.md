@@ -138,6 +138,8 @@ Deliverables:
 
 Goal: manage multiple clients and projects with always-on teams.
 
+Readiness source of truth: `docs/v1-acceptance-checklist.md`.
+
 Deliverables:
 
 - supreme coordinator

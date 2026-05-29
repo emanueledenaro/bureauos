@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, MessageSquare, Send, X } from "lucide-react";
 import { Button } from "../ui/button";
-import { Dialog, DialogContent, DialogTitle } from "../ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { useAutosizeTextarea } from "../../hooks/useAutosizeTextarea";
 import type { CoordinatorAttachmentInput, CoordinatorChatResult } from "../../lib/api";
@@ -64,6 +64,9 @@ export function QuickChatPopover({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl gap-0 p-0">
         <DialogTitle className="sr-only">Quick chat with coordinator</DialogTitle>
+        <DialogDescription className="sr-only">
+          Send a short message to the Supreme Coordinator without leaving the current view.
+        </DialogDescription>
         <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
           <div className="flex items-center gap-2">
             <MessageSquare className="h-4 w-4 text-muted-foreground" />
@@ -97,7 +100,7 @@ export function QuickChatPopover({
             }}
             placeholder="Ask the coordinator…"
             rows={2}
-            className="w-full resize-none rounded-md border border-border bg-surface-raised px-3 py-2.5 text-body-lg text-foreground placeholder:text-muted-foreground/70 focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring/30"
+            className="w-full resize-none rounded-md border border-border/70 bg-background/45 px-3 py-2.5 text-body-lg text-foreground placeholder:text-muted-foreground/70 focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring/30"
           />
           {error ? (
             <div className="rounded-md border border-danger/40 bg-danger-subtle/40 px-3 py-2 text-meta text-danger">
@@ -124,7 +127,11 @@ export function QuickChatPopover({
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button size="sm" onClick={() => void send()} disabled={busy || !draft.trim()}>
-                  {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                  {busy ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Send className="h-3 w-3" />
+                  )}
                   {busy ? "Sending" : "Send"}
                 </Button>
               </TooltipTrigger>

@@ -15,6 +15,10 @@ import {
   ProviderRouter,
   type GenerateTextOptions,
   type ProviderAdapter,
+  type RuntimeAdapter,
+  type RuntimeContext,
+  type RuntimeResult,
+  type RuntimeTask,
 } from "@bureauos/providers";
 import { configureAgentProviderRouting } from "../agents/provider-routing.js";
 
@@ -41,6 +45,32 @@ class FakeProvider implements ProviderAdapter {
 
   async *stream(): AsyncIterable<string> {
     yield "unused";
+  }
+}
+
+class FakeRuntime implements RuntimeAdapter {
+  readonly id = "codex-test";
+  readonly type = "codex" as const;
+  prepared?: RuntimeContext;
+  executed?: RuntimeTask;
+
+  canExecute(capability: string): boolean {
+    return ["edit_code", "run_tests"].includes(capability);
+  }
+
+  async prepare(context: RuntimeContext): Promise<void> {
+    this.prepared = context;
+  }
+
+  async execute(task: RuntimeTask): Promise<RuntimeResult> {
+    this.executed = task;
+    return {
+      ok: true,
+      artifacts: ["runtime_artifact"],
+      evidence: "runtime tests passed",
+      changedFiles: ["packages/core/src/runtime-target.ts"],
+      commands: ["pnpm test"],
+    };
   }
 }
 
@@ -117,6 +147,52 @@ describe("Supreme Coordinator dispatch", () => {
       "security",
       "reviewer",
     ]);
+  });
+
+  it("passes supplied runtime capability into the development step", async () => {
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const artifacts = new ArtifactStore(dir);
+    const policy = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
+    const runs = new RunEngine(dir, { audit, artifacts, policy });
+    const developmentRuntime = new FakeRuntime();
+
+    const run = await runs.start({
+      type: "feature",
+      triggerType: "owner_request",
+      triggerSource: "test",
+      scope: "Wire development runtime",
+    });
+
+    await dispatchRun(
+      {
+        audit,
+        artifacts,
+        policy,
+        developmentRuntime,
+        capabilityUse: {
+          async check(input) {
+            const artifact = await artifacts.write({
+              type: "capability-audit",
+              createdBy: input.agent,
+              runId: run.id,
+              body: `# Gate ${input.action}\n\nAllowed.`,
+            });
+            return { status: "allowed", artifact };
+          },
+        },
+      },
+      { workspaceRoot: dir, run, scope: "Wire development runtime" },
+    );
+
+    expect(developmentRuntime.prepared).toMatchObject({ workspaceRoot: dir, runId: run.id });
+    expect(developmentRuntime.executed).toMatchObject({
+      capability: "edit_code",
+      intent: "development_agent_execution",
+    });
+    const allArtifacts = await artifacts.list({ run_id: run.id });
+    expect(allArtifacts.some((artifact) => artifact.type === "test-evidence-report")).toBe(true);
+    const log = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(log).toContain("agent.development.runtime_executed");
   });
 
   it("passes a selected model provider to agents while preserving deterministic templates", async () => {

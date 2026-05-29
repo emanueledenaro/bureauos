@@ -1,6 +1,7 @@
 import { AgentRegistry } from "../agents/runtime.js";
 import { buildDefaultAgentRegistry } from "../agents/concrete/index.js";
 import { MODEL_PROVIDER_CAPABILITY, selectAgentModel } from "../agents/provider-routing.js";
+import type { AgentCapabilityChecker } from "../agents/runtime.js";
 import type { ArtifactStore } from "../artifacts/store.js";
 import type { AuditLog } from "../audit/log.js";
 import type { BureauConfig } from "../config/schema.js";
@@ -9,8 +10,8 @@ import { workspacePaths } from "../paths.js";
 import { ensureDir, writeDoc, type FrontMatter } from "../registries/base.js";
 import { join } from "node:path";
 import { newId } from "../ids.js";
-import type { RunRecord, RunType } from "./engine.js";
-import type { ProviderRouter } from "@bureauos/providers";
+import type { RunDispatcher, RunRecord, RunType } from "./engine.js";
+import type { ProviderRouter, RuntimeAdapter } from "@bureauos/providers";
 import {
   MEMORY_BOUNDARY_CAPABILITY,
   MEMORY_CAPABILITY,
@@ -33,6 +34,8 @@ export interface CoordinatorDeps {
   policy: PolicyEngine;
   config?: BureauConfig;
   providerRouter?: ProviderRouter;
+  capabilityUse?: AgentCapabilityChecker;
+  developmentRuntime?: RuntimeAdapter;
   registry?: AgentRegistry;
   memory?: MemoryBoundaryService;
 }
@@ -94,6 +97,7 @@ export async function dispatchRun(
       artifacts: deps.artifacts,
       audit: deps.audit,
       policy: deps.policy,
+      ...(deps.capabilityUse ? { capabilityUse: deps.capabilityUse } : {}),
     });
   const memory = deps.memory ?? new MemoryBoundaryService(input.workspaceRoot);
   const pipeline = pipelineForRunType(input.run.type);
@@ -166,8 +170,12 @@ ${input.briefing ?? "(none supplied)"}
     }
     const out = await agent.execute({
       context: {
+        workspaceRoot: input.workspaceRoot,
         runId: input.run.id,
         scope: input.scope,
+        ...(input.contextArtifactIdsByRole?.[role]?.[0]
+          ? { handoffArtifactId: input.contextArtifactIdsByRole[role][0] }
+          : {}),
         ...(input.run.project_id ? { projectId: input.run.project_id } : {}),
         ...(input.run.client_id ? { clientId: input.run.client_id } : {}),
         ...(input.briefing ? { briefing: input.briefing } : {}),
@@ -175,6 +183,9 @@ ${input.briefing ?? "(none supplied)"}
       capabilities: new Map<string, unknown>([
         [MEMORY_CAPABILITY, boundary.store],
         [MEMORY_BOUNDARY_CAPABILITY, boundary],
+        ...(deps.developmentRuntime && role === "development"
+          ? ([["codex", deps.developmentRuntime]] as const)
+          : []),
         ...(modelSelection ? ([[MODEL_PROVIDER_CAPABILITY, modelSelection]] as const) : []),
       ]),
     });
@@ -189,4 +200,28 @@ ${input.briefing ?? "(none supplied)"}
   }
 
   return { runId: input.run.id, steps, briefingArtifactId: briefingId };
+}
+
+export function createCoordinatorRunDispatcher(deps: CoordinatorDeps): RunDispatcher {
+  return async ({ workspaceRoot, run, startInput }) => {
+    const output = await dispatchRun(deps, {
+      workspaceRoot,
+      run,
+      scope: startInput.scope,
+      briefing: startInput.scope,
+    });
+    const stepArtifactIds = output.steps.flatMap((step) => step.artifactIds);
+    const pipeline = output.steps.map((step) => step.role);
+
+    return {
+      status: "completed",
+      artifactIds: [output.briefingArtifactId, ...stepArtifactIds],
+      decisions: output.steps.map((step) => `${step.role}: ${step.notes}`),
+      metadata: {
+        dispatch_mode: "coordinator",
+        dispatch_briefing_artifact_id: output.briefingArtifactId,
+        dispatch_pipeline: pipeline,
+      },
+    };
+  };
 }

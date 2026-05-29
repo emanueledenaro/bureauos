@@ -29,7 +29,12 @@ export const SPACING_PX = {
  * Superfici a 4 livelli con stacco ≥5% lightness per garantire bordi
  * percepibili anche con border-border/70 nidificati.
  */
-export const SURFACE_LEVELS = ["background", "surface-subtle", "surface-raised", "popover"] as const;
+export const SURFACE_LEVELS = [
+  "background",
+  "surface-subtle",
+  "surface-raised",
+  "popover",
+] as const;
 export type SurfaceLevel = (typeof SURFACE_LEVELS)[number];
 
 /**

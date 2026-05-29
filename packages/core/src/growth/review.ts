@@ -150,7 +150,8 @@ export class GrowthReviewService {
     deps: GrowthReviewDeps = {},
   ) {
     this.growthMemory = deps.growthMemory ?? new GrowthMemoryService(workspaceRoot);
-    this.clientIntelligence = deps.clientIntelligence ?? new ClientIntelligenceService(workspaceRoot);
+    this.clientIntelligence =
+      deps.clientIntelligence ?? new ClientIntelligenceService(workspaceRoot);
     this.opportunities = deps.opportunities ?? new OpportunityRegistry(workspaceRoot);
     this.artifacts = deps.artifacts ?? new ArtifactStore(workspaceRoot);
     this.audit = deps.audit ?? new AuditLog(workspacePaths(workspaceRoot).auditLog);

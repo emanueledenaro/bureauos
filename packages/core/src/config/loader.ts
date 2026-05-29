@@ -18,7 +18,7 @@ export class ConfigError extends Error {
  * Load and validate a `bureauos.yaml` file.
  *
  * - Missing optional fields are filled with safe defaults.
- * - Unknown top-level fields are accepted but ignored (warned in stderr).
+ * - Unknown top-level fields are rejected so meaningful config does not disappear silently.
  * - Type errors throw a `ConfigError` with a path pointing to the offending file.
  */
 export async function loadConfig(filePath: string): Promise<BureauConfig> {

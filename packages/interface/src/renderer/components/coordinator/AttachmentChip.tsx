@@ -21,13 +21,9 @@ export function AttachmentChip({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div className="flex min-w-0 max-w-[260px] items-center gap-2 rounded-lg border border-border bg-surface-raised p-2">
+        <div className="flex min-w-0 max-w-[260px] items-center gap-2 rounded-md border border-border/70 bg-background/45 p-2">
           {previewUrl ? (
-            <img
-              src={previewUrl}
-              alt=""
-              className="h-10 w-10 shrink-0 rounded object-cover"
-            />
+            <img src={previewUrl} alt="" className="h-10 w-10 shrink-0 rounded object-cover" />
           ) : (
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded bg-surface-subtle text-muted-foreground">
               <FileText className="h-4 w-4" />

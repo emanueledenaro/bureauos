@@ -1,10 +1,9 @@
 import { ArtifactStore, type ArtifactRecord } from "../artifacts/store.js";
 import { AuditLog } from "../audit/log.js";
-import {
-  ClientIntelligenceService,
-  type ClientIntelligenceItem,
-} from "../clients/intelligence.js";
+import { ClientIntelligenceService, type ClientIntelligenceItem } from "../clients/intelligence.js";
+import { requestExternalCommitmentGate } from "../compliance/external-commitments.js";
 import { workspacePaths } from "../paths.js";
+import { ApprovalRegistry, type ApprovalRecord } from "../registries/approval.js";
 import { ClientRegistry, type ClientRecord } from "../registries/client.js";
 import {
   OpportunityRegistry,
@@ -32,6 +31,7 @@ export interface RevenuePipelineItem {
   risks: string[];
   next_action: string;
   artifacts: ArtifactRecord[];
+  approvals: ApprovalRecord[];
 }
 
 export interface RevenuePipelineResult {
@@ -50,6 +50,7 @@ export interface RevenuePipelineDeps {
   clientIntelligence?: ClientIntelligenceService;
   opportunities?: OpportunityRegistry;
   artifacts?: ArtifactStore;
+  approvals?: ApprovalRegistry;
   audit?: AuditLog;
 }
 
@@ -481,6 +482,7 @@ export class RevenuePipelineService {
   private readonly clientIntelligence: ClientIntelligenceService;
   private readonly opportunities: OpportunityRegistry;
   private readonly artifacts: ArtifactStore;
+  private readonly approvals: ApprovalRegistry;
   private readonly audit: AuditLog;
 
   constructor(
@@ -492,6 +494,7 @@ export class RevenuePipelineService {
       deps.clientIntelligence ?? new ClientIntelligenceService(workspaceRoot);
     this.opportunities = deps.opportunities ?? new OpportunityRegistry(workspaceRoot);
     this.artifacts = deps.artifacts ?? new ArtifactStore(workspaceRoot);
+    this.approvals = deps.approvals ?? new ApprovalRegistry(workspaceRoot);
     this.audit = deps.audit ?? new AuditLog(workspacePaths(workspaceRoot).auditLog);
   }
 
@@ -523,6 +526,7 @@ export class RevenuePipelineService {
       });
       const updated = await this.opportunities.update(opportunity.id, evaluation.patch);
       const artifacts: ArtifactRecord[] = [];
+      const approvals: ApprovalRecord[] = [];
       const common = {
         generatedAt,
         opportunity: updated,
@@ -551,40 +555,63 @@ export class RevenuePipelineService {
       );
 
       if (evaluation.stage === "proposal_ready") {
+        const commitmentDrafts: ArtifactRecord[] = [];
         artifacts.push(
-          await this.artifacts.write({
-            type: "pricing-brief",
-            createdBy: "pricing",
+          ...(await Promise.all([
+            this.artifacts.write({
+              type: "pricing-brief",
+              createdBy: "pricing",
+              ...(input.runId ? { runId: input.runId } : {}),
+              ...(client ? { clientId: client.id } : {}),
+              status: "draft",
+              metadata: {
+                generated_at: generatedAt,
+                opportunity_id: updated.id,
+                score: evaluation.score,
+                fit: evaluation.fit,
+                approval_required: true,
+              },
+              body: pricingBriefBody(common),
+            }),
+            this.artifacts.write({
+              type: "proposal-brief",
+              createdBy: "proposal",
+              ...(input.runId ? { runId: input.runId } : {}),
+              ...(client ? { clientId: client.id } : {}),
+              status: "draft",
+              metadata: {
+                generated_at: generatedAt,
+                opportunity_id: updated.id,
+                score: evaluation.score,
+                fit: evaluation.fit,
+                approval_required: true,
+              },
+              body: proposalBriefBody(common),
+            }),
+          ])),
+        );
+        commitmentDrafts.push(...artifacts.filter((artifact) => artifact.type.endsWith("-brief")));
+        const gate = await requestExternalCommitmentGate(
+          {
+            artifacts: this.artifacts,
+            approvals: this.approvals,
+            audit: this.audit,
+          },
+          {
+            generatedAt,
+            source: "revenue.pipeline",
+            target: updated.id,
+            scope: `Send final proposal and pricing for ${updated.title}`,
+            limit: `Draft value ${updated.expected_value > 0 ? money(updated.expected_value) : "not enough data"}; final price, scope, client send, and billing remain blocked`,
+            actions: ["change_pricing", "send_final_proposals", "send_client_messages"],
+            sourceArtifactIds: commitmentDrafts.map((artifact) => artifact.id),
             ...(input.runId ? { runId: input.runId } : {}),
             ...(client ? { clientId: client.id } : {}),
-            status: "draft",
-            metadata: {
-              generated_at: generatedAt,
-              opportunity_id: updated.id,
-              score: evaluation.score,
-              fit: evaluation.fit,
-              approval_required: true,
-            },
-            body: pricingBriefBody(common),
-          }),
+            opportunityId: updated.id,
+          },
         );
-        artifacts.push(
-          await this.artifacts.write({
-            type: "proposal-brief",
-            createdBy: "proposal",
-            ...(input.runId ? { runId: input.runId } : {}),
-            ...(client ? { clientId: client.id } : {}),
-            status: "draft",
-            metadata: {
-              generated_at: generatedAt,
-              opportunity_id: updated.id,
-              score: evaluation.score,
-              fit: evaluation.fit,
-              approval_required: true,
-            },
-            body: proposalBriefBody(common),
-          }),
-        );
+        artifacts.push(gate.complianceReview);
+        approvals.push(...gate.approvals);
       }
 
       if (evaluation.stage !== "proposal_ready") {
@@ -617,6 +644,7 @@ export class RevenuePipelineService {
         risks: evaluation.risks,
         next_action: evaluation.nextAction,
         artifacts,
+        approvals,
       });
     }
 

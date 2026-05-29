@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
+import { AlertTriangle, CheckCircle2, ShieldCheck, XCircle } from "lucide-react";
 import { Sidebar, SidebarDrawer } from "./components/layout/Sidebar";
 import { Header } from "./components/layout/Header";
 import { AgentLayer } from "./components/layout/AgentLayer";
 import { QuickChatPopover } from "./components/coordinator/QuickChatPopover";
 import { TooltipProvider } from "./components/ui/tooltip";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "./components/ui/sheet";
+import { Button } from "./components/ui/button";
 import { CoordinatorView } from "./views/CoordinatorView";
 import { PortfolioView } from "./views/PortfolioView";
 import { TodayView } from "./views/TodayView";
@@ -19,7 +28,6 @@ import { AgentsView } from "./views/AgentsView";
 import { ReportsView } from "./views/ReportsView";
 import { SettingsView } from "./views/SettingsView";
 import { TimelineView } from "./views/TimelineView";
-import { PendingApprovalsView } from "./views/PendingApprovalsView";
 import { RevenuePulseView } from "./views/RevenuePulseView";
 import { useDashboard } from "./hooks/useDashboard";
 import { adaptiveDefaultMode } from "./lib/builders";
@@ -30,7 +38,9 @@ import {
   type ClientSuccessStatusResult,
   type CoordinatorAttachmentInput,
   type CoordinatorChatResult,
+  type CoordinatorChatStreamHandlers,
   type GrowthContentPipelineResult,
+  type GrowthReviewResult,
   type MemoryTriggerResult,
   type ProjectRepositoryVerificationResult,
   type RevenuePipelineResult,
@@ -43,12 +53,22 @@ export function App() {
   const [modeTouched, setModeTouched] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [quickChatOpen, setQuickChatOpen] = useState(false);
+  const [approvalsOpen, setApprovalsOpen] = useState(false);
+  const [isSmallScreen, setIsSmallScreen] = useState(false);
+
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 767px)");
+    const sync = (): void => setIsSmallScreen(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
 
   useEffect(() => {
     if (!modeTouched && !state.loading) {
-      setMode(adaptiveDefaultMode(state));
+      setMode(isSmallScreen ? "coordinator" : adaptiveDefaultMode(state));
     }
-  }, [modeTouched, state]);
+  }, [isSmallScreen, modeTouched, state]);
 
   // ⌘K / Ctrl+K apre il quick-chat coordinator da qualsiasi vista.
   useEffect(() => {
@@ -73,9 +93,16 @@ export function App() {
     setMode(nextMode);
   };
 
-  const onResolve = async (id: string, status: "approved" | "rejected"): Promise<void> => {
-    await Api.resolveApproval(id, status);
-    await refresh();
+  const onResolve = async (
+    id: string,
+    status: "approved" | "rejected",
+    reason?: string,
+  ): Promise<void> => {
+    try {
+      await Api.resolveApproval(id, status, reason);
+    } finally {
+      await refresh();
+    }
   };
 
   const onCoordinatorMessage = async (
@@ -90,6 +117,22 @@ export function App() {
     return result;
   };
 
+  const onCoordinatorMessageStream = async (
+    message: string,
+    attachments: CoordinatorAttachmentInput[] | undefined,
+    handlers: CoordinatorChatStreamHandlers,
+  ): Promise<CoordinatorChatResult> => {
+    const result = await Api.coordinatorChatStream(
+      {
+        message,
+        ...(attachments?.length ? { attachments } : {}),
+      },
+      handlers,
+    );
+    await refresh();
+    return result;
+  };
+
   const onGenerateReport = async (): Promise<BusinessReportResult> => {
     const result = await Api.generateReports();
     await refresh();
@@ -98,6 +141,12 @@ export function App() {
 
   const onGenerateGrowthContent = async (): Promise<GrowthContentPipelineResult> => {
     const result = await Api.generateGrowthContent({ maxDrafts: 4 });
+    await refresh();
+    return result;
+  };
+
+  const onGenerateGrowthReview = async (): Promise<GrowthReviewResult> => {
+    const result = await Api.generateGrowthReview({ recentDays: 7 });
     await refresh();
     return result;
   };
@@ -172,6 +221,7 @@ export function App() {
             onModeChange={onModeChange}
             onOpenSidebar={() => setSidebarOpen(true)}
             onOpenQuickChat={() => setQuickChatOpen(true)}
+            onOpenApprovals={() => setApprovalsOpen(true)}
           />
           <main className="min-w-0 flex-1 overflow-y-auto bg-background">
             <DashboardLayout
@@ -180,6 +230,7 @@ export function App() {
               onModeChange={onModeChange}
               onResolve={onResolve}
               onCoordinatorMessage={onCoordinatorMessage}
+              onCoordinatorMessageStream={onCoordinatorMessageStream}
               onGenerateReport={onGenerateReport}
               onProviderLogin={onProviderLogin}
               onProviderLogout={onProviderLogout}
@@ -188,11 +239,17 @@ export function App() {
               onGenerateClientSuccessStatus={onGenerateClientSuccessStatus}
               onMemoryTriggerScan={onMemoryTriggerScan}
               onGenerateGrowthContent={onGenerateGrowthContent}
+              onGenerateGrowthReview={onGenerateGrowthReview}
               onGenerateRevenuePipeline={onGenerateRevenuePipeline}
               onRefresh={refresh}
             />
           </main>
-          <AgentLayer agents={state.agents} />
+          <AgentLayer
+            agents={state.agents}
+            capabilities={state.capabilities}
+            runs={state.runs}
+            onOpenAgents={() => onModeChange("agents")}
+          />
           {state.error ? (
             <div className="border-t border-danger/40 bg-danger-subtle/40 px-5 py-2 text-meta text-danger">
               API server unreachable: {state.error}
@@ -205,8 +262,106 @@ export function App() {
           onSubmit={onCoordinatorMessage}
           onOpenFullCoordinator={openCoordinatorPage}
         />
+        <PendingApprovalsSheet
+          open={approvalsOpen}
+          onOpenChange={setApprovalsOpen}
+          state={state}
+          onResolve={onResolve}
+          onOpenApprovalsPage={() => {
+            setApprovalsOpen(false);
+            onModeChange("approvals");
+          }}
+        />
       </div>
     </TooltipProvider>
+  );
+}
+
+function PendingApprovalsSheet({
+  open,
+  onOpenChange,
+  state,
+  onResolve,
+  onOpenApprovalsPage,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  state: DashboardState;
+  onResolve: (id: string, status: "approved" | "rejected", reason?: string) => Promise<void>;
+  onOpenApprovalsPage: () => void;
+}) {
+  const pending = state.approvals.slice(0, 5);
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="bottom" className="max-h-[82vh] rounded-t-xl p-0 sm:max-h-[70vh]">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4" />
+            Pending approvals
+          </SheetTitle>
+          <SheetDescription>
+            Money, deletion, legal, production, security, and final external commitments.
+          </SheetDescription>
+        </SheetHeader>
+        <div className="min-h-0 overflow-y-auto px-4 py-4 sm:px-5">
+          {pending.length > 0 ? (
+            <div className="flex flex-col gap-3">
+              {pending.map((approval) => (
+                <div
+                  key={approval.id}
+                  className="rounded-lg border border-border/70 bg-surface-subtle/60 p-3"
+                >
+                  <div className="flex items-start gap-2.5">
+                    <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-md border border-border/60 bg-surface-raised text-warning">
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[13px] font-semibold text-foreground">
+                        {approval.target}
+                      </div>
+                      <div className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
+                        {approval.scope}
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                        <span>{approval.risk_level ?? "risk"}</span>
+                        <span aria-hidden>·</span>
+                        <span>{approval.action}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void onResolve(approval.id, "rejected", "Rejected by owner")}
+                    >
+                      <XCircle className="h-3.5 w-3.5" />
+                      Reject
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => void onResolve(approval.id, "approved", "Approved by owner")}
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Approve
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-border/70 bg-surface-subtle/50 p-4 text-[12px] text-muted-foreground">
+              No pending approvals.
+            </div>
+          )}
+        </div>
+        <div className="border-t border-border/60 px-4 py-3 sm:px-5">
+          <Button variant="outline" className="w-full" onClick={onOpenApprovalsPage}>
+            Open approvals
+          </Button>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -216,6 +371,7 @@ function DashboardLayout({
   onModeChange,
   onResolve,
   onCoordinatorMessage,
+  onCoordinatorMessageStream,
   onGenerateReport,
   onProviderLogin,
   onProviderLogout,
@@ -224,16 +380,22 @@ function DashboardLayout({
   onGenerateClientSuccessStatus,
   onMemoryTriggerScan,
   onGenerateGrowthContent,
+  onGenerateGrowthReview,
   onGenerateRevenuePipeline,
   onRefresh,
 }: {
   mode: AdaptiveMode;
   state: DashboardState;
   onModeChange: (mode: AdaptiveMode) => void;
-  onResolve: (id: string, status: "approved" | "rejected") => Promise<void>;
+  onResolve: (id: string, status: "approved" | "rejected", reason?: string) => Promise<void>;
   onCoordinatorMessage: (
     message: string,
     attachments?: CoordinatorAttachmentInput[],
+  ) => Promise<CoordinatorChatResult>;
+  onCoordinatorMessageStream: (
+    message: string,
+    attachments: CoordinatorAttachmentInput[] | undefined,
+    handlers: CoordinatorChatStreamHandlers,
   ) => Promise<CoordinatorChatResult>;
   onGenerateReport: () => Promise<BusinessReportResult>;
   onProviderLogin: (input: {
@@ -251,6 +413,7 @@ function DashboardLayout({
   onGenerateClientSuccessStatus: () => Promise<ClientSuccessStatusResult>;
   onMemoryTriggerScan: () => Promise<MemoryTriggerResult>;
   onGenerateGrowthContent: () => Promise<GrowthContentPipelineResult>;
+  onGenerateGrowthReview: () => Promise<GrowthReviewResult>;
   onGenerateRevenuePipeline: () => Promise<RevenuePipelineResult>;
   onRefresh: () => Promise<void>;
 }) {
@@ -262,6 +425,7 @@ function DashboardLayout({
         <CoordinatorView
           state={state}
           onMessage={onCoordinatorMessage}
+          onStreamMessage={onCoordinatorMessageStream}
           onModeChange={onModeChange}
         />
       </div>
@@ -280,6 +444,7 @@ function DashboardLayout({
     onGenerateClientSuccessStatus,
     onMemoryTriggerScan,
     onGenerateGrowthContent,
+    onGenerateGrowthReview,
     onGenerateRevenuePipeline,
     onRefresh,
   });
@@ -287,11 +452,19 @@ function DashboardLayout({
   return (
     <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 p-3 sm:p-4 lg:p-5">
       {mainView}
-      <TimelineView events={state.audit} artifacts={state.artifacts} />
+      <TimelineView
+        events={state.audit}
+        artifacts={state.artifacts}
+        runs={state.runs}
+        approvals={state.approvals}
+        resolvedApprovals={state.resolvedApprovals}
+      />
       <RevenuePulseView
         pulse={state.pulse}
         clients={state.clients}
+        clientIntelligence={state.clientIntelligence}
         opportunities={state.opportunities}
+        artifacts={state.artifacts}
         onGenerateReport={onGenerateReport}
       />
     </div>
@@ -310,13 +483,14 @@ function renderMainView({
   onGenerateClientSuccessStatus,
   onMemoryTriggerScan,
   onGenerateGrowthContent,
+  onGenerateGrowthReview,
   onGenerateRevenuePipeline,
   onRefresh,
 }: {
   mode: AdaptiveMode;
   state: DashboardState;
   onModeChange: (mode: AdaptiveMode) => void;
-  onResolve: (id: string, status: "approved" | "rejected") => Promise<void>;
+  onResolve: (id: string, status: "approved" | "rejected", reason?: string) => Promise<void>;
   onProviderLogin: (input: {
     provider: string;
     mode?: "oauth" | "api-key" | "local";
@@ -332,6 +506,7 @@ function renderMainView({
   onGenerateClientSuccessStatus: () => Promise<ClientSuccessStatusResult>;
   onMemoryTriggerScan: () => Promise<MemoryTriggerResult>;
   onGenerateGrowthContent: () => Promise<GrowthContentPipelineResult>;
+  onGenerateGrowthReview: () => Promise<GrowthReviewResult>;
   onGenerateRevenuePipeline: () => Promise<RevenuePipelineResult>;
   onRefresh: () => Promise<void>;
 }) {
@@ -356,7 +531,13 @@ function renderMainView({
     case "delivery":
       return <DeliveryView state={state} onVerifyRepositories={onVerifyRepositories} />;
     case "growth":
-      return <GrowthView state={state} onGenerateContent={onGenerateGrowthContent} />;
+      return (
+        <GrowthView
+          state={state}
+          onGenerateContent={onGenerateGrowthContent}
+          onGenerateReview={onGenerateGrowthReview}
+        />
+      );
     case "clients":
       return (
         <ClientsView

@@ -9,6 +9,7 @@ Agents need capabilities:
 - MCP servers
 - local CLI tools
 - GitHub integrations
+- Linear work-item tracking
 - browser automation
 - design/image tools
 - database tools
@@ -39,6 +40,11 @@ Useful for:
 - reviewing diffs
 - using local tools
 - using project-specific skills
+
+The v1 adapter validates workspace/run context, accepts a host-provided runner,
+returns structured artifacts/evidence/changed-file metadata, and blocks merge,
+production deploy, secret-file, and destructive git actions before they can be
+treated as successful execution.
 
 Recommended assignment:
 
@@ -136,6 +142,25 @@ capabilities:
       open_pr: true
       deploy: false
 
+  linear:
+    type: mcp
+    allowed_agents:
+      - supreme_coordinator
+      - project_manager
+      - product
+      - development
+      - qa
+      - reviewer
+    actions:
+      read_issues: true
+      create_issues: true
+      update_issues: true
+      comment: true
+      set_issue_state: true
+      read_projects: true
+      create_projects: false
+      update_projects: false
+
   ads_platform:
     type: mcp
     allowed_agents:
@@ -158,6 +183,7 @@ Runtime status:
 - `POST /capabilities/check` and `bureau capabilities check` evaluate a requested capability use against registry, policy, and evidence gates before execution.
 - Every check writes a `capability-audit` artifact and an audit-log event.
 - The ElectronJS Agents view shows assigned capabilities, enabled actions, risk class, and approval gates.
+- Linear is modeled as a policy-gated MCP work-item source. BureauOS can inspect or update Linear issues only through the capability boundary; GitHub remains the delivery surface for branches, tests, pull requests, and checks.
 
 ## Per-Agent Capability Boundaries
 

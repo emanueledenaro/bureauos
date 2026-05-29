@@ -10,6 +10,10 @@ Detection and triage are allowed by default. Higher-impact actions require the c
 
 Autonomy applies to capabilities too. An agent may only use tools, skills, MCP servers, runtimes, and external APIs that are assigned to that agent and allowed by policy.
 
+In `bureauos.yaml`, `autonomy.level` selects the baseline for levels 0-5.
+Per-action values under `autonomy` remain explicit overrides on top of that
+baseline.
+
 ### Level 0: Read Only
 
 Agents may:
@@ -143,6 +147,7 @@ For early open-source BureauOS:
 
 ```yaml
 autonomy:
+  level: 2
   observe_signals: true
   start_triage_runs: true
   create_internal_reports: true

@@ -1,8 +1,14 @@
 export const VERSION = "0.0.0";
 
 // Config
-export { BureauConfigSchema } from "./config/schema.js";
-export type { BureauConfig, Preset, AutonomyMode, ProviderName } from "./config/schema.js";
+export { BureauConfigSchema, autonomyLevelName } from "./config/schema.js";
+export type {
+  BureauConfig,
+  Preset,
+  AutonomyMode,
+  AutonomyLevel,
+  ProviderName,
+} from "./config/schema.js";
 export { loadConfig, defaultConfig, ConfigError } from "./config/loader.js";
 
 // Paths and IDs
@@ -54,6 +60,17 @@ export type {
 export { ApprovalRegistry } from "./registries/approval.js";
 export type { ApprovalRecord, ApprovalStatus, CreateApprovalInput } from "./registries/approval.js";
 
+export { LocalNotificationCenter } from "./notifications/local.js";
+export type {
+  ApprovalNotificationInput,
+  ApprovalNotificationSink,
+  CreateLocalNotificationInput,
+  LocalNotificationRecord,
+  LocalNotificationSeverity,
+  LocalNotificationStatus,
+  LocalNotificationType,
+} from "./notifications/local.js";
+
 export { CompanyRegistry } from "./registries/company.js";
 export type { CompanyRecord } from "./registries/company.js";
 
@@ -89,8 +106,11 @@ export type {
 
 // Memory helpers
 export { appendDailyNote } from "./memory/daily.js";
-export { appendDecision } from "./memory/decisions.js";
-export type { DecisionInput } from "./memory/decisions.js";
+export type { DailyNoteSection } from "./memory/daily.js";
+export { appendDecision, recordDecision } from "./memory/decisions.js";
+export type { DecisionInput, DecisionWriteResult } from "./memory/decisions.js";
+export { writeRunOutcomeMemory } from "./memory/run-outcomes.js";
+export type { RunOutcomeWritebackDeps, RunOutcomeWritebackResult } from "./memory/run-outcomes.js";
 export {
   MEMORY_BOUNDARY_CAPABILITY,
   MEMORY_CAPABILITY,
@@ -117,6 +137,13 @@ export type {
 // Policy
 export { PolicyEngine } from "./policy/engine.js";
 export type { PolicyInput, PolicyDecision, PolicyOutcome, RiskClass } from "./policy/engine.js";
+export { PolicyExplainService } from "./policy/explain.js";
+export type {
+  PolicyExplainDecision,
+  PolicyExplainOptions,
+  PolicyExplainOutcome,
+  PolicyExplainResult,
+} from "./policy/explain.js";
 
 // Artifacts
 export { ArtifactStore } from "./artifacts/store.js";
@@ -131,8 +158,12 @@ export type {
   RunTriggerType,
   StartRunInput,
   RunEngineDeps,
+  RunDispatcher,
+  RunDispatchInput,
+  RunDispatchResult,
+  RunDispatchTerminalStatus,
 } from "./runs/engine.js";
-export { dispatchRun } from "./runs/coordinator.js";
+export { createCoordinatorRunDispatcher, dispatchRun } from "./runs/coordinator.js";
 export type { DispatchInput, DispatchOutput, CoordinatorDeps } from "./runs/coordinator.js";
 
 // Supreme coordinator
@@ -149,7 +180,32 @@ export type {
   CoordinatorChatInput,
   CoordinatorChatProviderMeta,
   CoordinatorChatResult,
+  CoordinatorChatStreamEvent,
 } from "./coordinator/chat.js";
+export {
+  COORDINATOR_MUTATION_PATH_INVENTORY,
+  COORDINATOR_TOOL_DEFINITIONS,
+  coordinatorToolPromptCatalog,
+  implementedCoordinatorToolNames,
+  listCoordinatorMutationPathInventory,
+  parseCoordinatorToolPlan,
+} from "./coordinator/tool-planning.js";
+export type {
+  CoordinatorImplementedToolAction,
+  CoordinatorMutationPathInventoryItem,
+  CoordinatorToolAction,
+  CoordinatorToolDefinition,
+  CoordinatorToolPlan,
+  CoordinatorToolRouteClass,
+} from "./coordinator/tool-planning.js";
+export { CoordinatorToolRuntime, coordinatorToolMeta } from "./coordinator/tool-runtime.js";
+export type {
+  CoordinatorCreateIntakeToolExecution,
+  CoordinatorCreateIntakeToolInput,
+  CoordinatorToolExecutionSource,
+  CoordinatorToolMeta,
+  CoordinatorToolRuntimeDeps,
+} from "./coordinator/tool-runtime.js";
 export { CoordinatorMessageStore } from "./coordinator/messages.js";
 export type {
   CoordinatorMessageAttachment,
@@ -176,6 +232,9 @@ export type {
   AgentRunOutput,
   AgentContext,
   AgentDeps,
+  AgentCapabilityChecker,
+  AgentCapabilityCheckInput,
+  AgentCapabilityCheckResult,
 } from "./agents/runtime.js";
 export {
   MODEL_PROVIDER_CAPABILITY,
@@ -193,6 +252,18 @@ export {
   SecurityAgent,
   ComplianceAgent,
 } from "./agents/concrete/index.js";
+export {
+  agentHandoffBody,
+  agentHandoffMetadata,
+  blockedByInvalidHandoff,
+  validateAgentHandoff,
+  validateRequiredHandoff,
+} from "./agents/handoff.js";
+export type {
+  AgentHandoffContract,
+  AgentHandoffContractInput,
+  AgentHandoffValidation,
+} from "./agents/handoff.js";
 
 // Reports
 export { BusinessReportService } from "./reports/business.js";
@@ -281,11 +352,7 @@ export type {
 
 // Growth reviews
 export { GrowthReviewService } from "./growth/review.js";
-export type {
-  GrowthReviewDeps,
-  GrowthReviewInput,
-  GrowthReviewResult,
-} from "./growth/review.js";
+export type { GrowthReviewDeps, GrowthReviewInput, GrowthReviewResult } from "./growth/review.js";
 
 // Capability usage
 export { CapabilityUseService } from "./capabilities/usage.js";
@@ -294,6 +361,78 @@ export type {
   CapabilityUseInput,
   CapabilityUseResult,
 } from "./capabilities/usage.js";
+
+// Linear work scope ingestion
+export { LinearIssueActionService } from "./linear/issue-actions.js";
+export { LinearIssueIngestionService } from "./linear/issue-ingestion.js";
+export { LinearIssueReaderService } from "./linear/issue-reader.js";
+export { linearIssueToRunScope } from "./linear/work-scope.js";
+export type {
+  LinearIssueActionAdapter,
+  LinearIssueActionBaseInput,
+  LinearIssueActionDeps,
+  LinearIssueActionExternalResult,
+  LinearIssueActionResult,
+  LinearIssueCommentAdapterInput,
+  LinearIssueCommentInput,
+  LinearIssueStateAdapterInput,
+  LinearIssueStateInput,
+  LinearIssueUpdateAdapterInput,
+  LinearIssueUpdateInput,
+} from "./linear/issue-actions.js";
+export type {
+  LinearIssueIngestionDeps,
+  LinearIssueIngestionInput,
+  LinearIssueIngestionResult,
+} from "./linear/issue-ingestion.js";
+export type {
+  LinearIssueAdapter,
+  LinearIssueListInput,
+  LinearIssueListResult,
+  LinearIssueReaderDeps,
+  LinearIssueReadInput,
+  LinearIssueReadResult,
+} from "./linear/issue-reader.js";
+export type { LinearIssueRunScope, LinearIssueScopeInput } from "./linear/work-scope.js";
+
+// Source work item metadata
+export {
+  linearIssueSourceWorkItem,
+  sourceWorkItemFromFrontMatter,
+  sourceWorkItemFromTriggerSource,
+  sourceWorkItemFrontMatter,
+  sourceWorkItemLabel,
+} from "./work-items/source.js";
+export type { SourceWorkItemInput } from "./work-items/source.js";
+
+// Development execution helpers
+export {
+  DevelopmentBranchService,
+  branchNameForDevelopmentRun,
+} from "./execution/development-branch.js";
+export type {
+  DevelopmentBranchClient,
+  DevelopmentBranchCreateRequest,
+  DevelopmentBranchInput,
+  DevelopmentBranchResult,
+  DevelopmentBranchSafety,
+  DevelopmentBranchServiceDeps,
+} from "./execution/development-branch.js";
+export {
+  ProjectTestRunnerService,
+  SubprocessProjectCommandRunner,
+  resolveProjectTestCommand,
+} from "./execution/project-test-runner.js";
+export type {
+  ProjectCommandRunner,
+  ProjectCommandRunnerOptions,
+  ProjectTestCommand,
+  ProjectTestExecution,
+  ProjectTestRunnerDeps,
+  ProjectTestRunnerInput,
+  ProjectTestRunnerResult,
+  ResolvedProjectTestCommand,
+} from "./execution/project-test-runner.js";
 
 // Provider auth
 export {
@@ -375,10 +514,29 @@ export type { ApiServerOptions, ApiServer } from "./api/server.js";
 // Daemon
 export { Scheduler } from "./daemon/scheduler.js";
 export type { SchedulerOptions } from "./daemon/scheduler.js";
-export { DaemonStateStore } from "./daemon/state.js";
+export { DaemonSchedulerStateStore, DaemonStateStore } from "./daemon/state.js";
 export type {
+  SchedulerCursorRecord,
+  SchedulerStateRecord,
   DaemonStateRecord,
   DaemonStatus,
+  DaemonSchedulerStatus,
+  DaemonHeartbeat,
+  DaemonHeartbeatLastRun,
+  DaemonHeartbeatLastError,
+  DaemonDiagnosticEvent,
   DaemonStatusSnapshot,
+  DaemonLockRecord,
+  DaemonLockSnapshot,
+  DaemonLockAcquisition,
   ProcessAliveCheck,
 } from "./daemon/state.js";
+export { DaemonLifecycleSupervisor } from "./daemon/supervisor.js";
+export type {
+  DaemonLifecycleSupervisorOptions,
+  DaemonSpawn,
+  DaemonKill,
+  DaemonStartResult,
+  DaemonStopResult,
+  SpawnedDaemonProcess,
+} from "./daemon/supervisor.js";

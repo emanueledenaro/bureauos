@@ -3,6 +3,7 @@ import { constants as FS } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { ApprovalRegistry, DaemonStateStore } from "@bureauos/core";
 import { main } from "./main.js";
 
 async function exists(path: string): Promise<boolean> {
@@ -11,6 +12,22 @@ async function exists(path: string): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+async function captureStdout(
+  run: () => Promise<number>,
+): Promise<{ code: number; output: string }> {
+  const originalWrite = process.stdout.write;
+  let output = "";
+  process.stdout.write = ((chunk: unknown, ..._args: unknown[]) => {
+    output += String(chunk);
+    return true;
+  }) as typeof process.stdout.write;
+  try {
+    return { code: await run(), output };
+  } finally {
+    process.stdout.write = originalWrite;
   }
 }
 
@@ -41,6 +58,41 @@ describe("bureau cli", () => {
     expect(await exists(join(dir, ".bureauos", "bureauos.yaml"))).toBe(true);
     const yaml = await readFile(join(dir, ".bureauos", "bureauos.yaml"), "utf8");
     expect(yaml).toContain("Acme");
+    expect(yaml).toContain("level: 2");
+  });
+
+  it("prints the active autonomy level in policy explain", async () => {
+    await main(["node", "bureau", "init"]);
+
+    const result = await captureStdout(() =>
+      main(["node", "bureau", "policy", "explain", "merge_pull_requests"]),
+    );
+
+    expect(result.code).toBe(0);
+    expect(result.output).toContain("Autonomy: Level 2 (Branch and PR)");
+    expect(result.output).toContain("Outcome:  require_approval");
+  });
+
+  it("prints approval source limit and expiry in approvals list", async () => {
+    await main(["node", "bureau", "init"]);
+    await new ApprovalRegistry(dir).request({
+      action: "send_final_proposals",
+      actor: "supreme_coordinator",
+      target: "opp_123",
+      scope: "Send final proposal to Acme.",
+      source: "revenue.pipeline:art_123",
+      limit: "Draft value $12,000; client send only",
+      expiresAt: "2026-06-01T10:00:00.000Z",
+      riskLevel: "high",
+    });
+
+    const result = await captureStdout(() => main(["node", "bureau", "approvals", "list"]));
+
+    expect(result.code).toBe(0);
+    expect(result.output).toContain("send_final_proposals");
+    expect(result.output).toContain("source: revenue.pipeline:art_123");
+    expect(result.output).toContain("limit: Draft value $12,000; client send only");
+    expect(result.output).toContain("expires: 2026-06-01T10:00:00.000Z");
   });
 
   it("refuses to overwrite without --force", async () => {
@@ -63,6 +115,57 @@ describe("bureau cli", () => {
   it("rejects unknown command", async () => {
     const code = await main(["node", "bureau", "frobnicate"]);
     expect(code).toBe(1);
+  });
+
+  it("records durable decisions and daily notes from CLI", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+
+    const decision = await captureStdout(() =>
+      main([
+        "node",
+        "bureau",
+        "decision",
+        "--what",
+        "Keep Coordinator replies clean",
+        "--why",
+        "Owner-facing chat should not expose internal traces.",
+        "--actor",
+        "supreme_coordinator",
+        "--affects",
+        "SER-42,coordinator",
+      ]),
+    );
+    expect(decision.code).toBe(0);
+    expect(decision.output).toContain("bureau: decision decision_");
+
+    expect(
+      await main([
+        "node",
+        "bureau",
+        "follow-up",
+        "--section",
+        "Decisions",
+        "--line",
+        "Review durable memory write-back.",
+      ]),
+    ).toBe(0);
+
+    const decisions = await readFile(join(dir, ".bureauos", "memory", "DECISIONS.md"), "utf8");
+    expect(decisions).toContain("Keep Coordinator replies clean");
+    expect(decisions).toContain("SER-42, coordinator");
+
+    const dailyDir = join(dir, ".bureauos", "memory", "memory");
+    const dailyBodies = await Promise.all(
+      (await readdir(dailyDir)).map((file) => readFile(join(dailyDir, file), "utf8")),
+    );
+    expect(dailyBodies.some((body) => body.includes("Review durable memory write-back."))).toBe(
+      true,
+    );
+    expect(dailyBodies.some((body) => body.includes("- (Decisions)"))).toBe(false);
+
+    const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
+    expect(audit).toContain("memory.decision_recorded");
+    expect(audit).toContain("memory.daily_note_appended");
   });
 
   it("runs supreme coordinator intake from a raw owner message", async () => {
@@ -98,6 +201,7 @@ describe("bureau cli", () => {
 
     const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
     expect(audit).toContain("coordinator.intake.completed");
+    expect(audit).toContain("coordinator_tool.create_intake");
   });
 
   it("generates business reports from CLI", async () => {
@@ -171,6 +275,20 @@ describe("bureau cli", () => {
     });
   });
 
+  it("refuses to start a duplicate daemon when an active lock exists", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+    const state = new DaemonStateStore(dir);
+    await state.acquireLock({ pid: process.pid, message: "test daemon" });
+
+    const code = await main(["node", "bureau", "daemon", "start"]);
+
+    expect(code).toBe(1);
+    await expect(state.lockStatus()).resolves.toMatchObject({
+      alive: true,
+      state: { pid: process.pid },
+    });
+  });
+
   it("runs the bounded autonomy retry scan from CLI", async () => {
     await main(["node", "bureau", "init", "--name", "BOS"]);
     await main([
@@ -208,6 +326,92 @@ describe("bureau cli", () => {
     expect(patchedRun).toContain("retry_attempts: 1");
     const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
     expect(audit).toContain("autonomy.retry.started");
+  });
+
+  it("dispatches new runs through the coordinator by default", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+
+    const code = await main([
+      "node",
+      "bureau",
+      "run",
+      "new",
+      "--type",
+      "planning",
+      "--scope",
+      "Plan delivery priorities",
+    ]);
+
+    expect(code).toBe(0);
+    const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
+    expect(audit).toContain("coordinator.briefing_written");
+    expect(audit).toContain("coordinator.step_completed");
+    expect(audit).toContain("run.dispatch_completed");
+
+    const runsDir = join(dir, ".bureauos", "memory", "runs");
+    const runFile = (await readdir(runsDir)).find((file) => file.endsWith(".md"));
+    expect(runFile).toBeDefined();
+    const runDoc = await readFile(join(runsDir, runFile!), "utf8");
+    expect(runDoc).toContain("dispatch_mode: coordinator");
+    expect(runDoc).toContain('dispatch_pipeline: ["project_manager", "product"]');
+  });
+
+  it("keeps the run new stub path explicit with --stub", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+
+    const code = await main([
+      "node",
+      "bureau",
+      "run",
+      "new",
+      "--type",
+      "planning",
+      "--scope",
+      "Plan delivery priorities",
+      "--stub",
+    ]);
+
+    expect(code).toBe(0);
+    const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
+    expect(audit).toContain("run.dispatch_stub_completed");
+    expect(audit).not.toContain("coordinator.briefing_written");
+  });
+
+  it("surfaces Linear source work items in run CLI output and persisted metadata", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+
+    const created = await captureStdout(() =>
+      main([
+        "node",
+        "bureau",
+        "run",
+        "new",
+        "--type",
+        "feature",
+        "--scope",
+        "SER-34 source metadata",
+        "--linear-issue",
+        "SER-34",
+        "--linear-url",
+        "https://linear.app/serium/issue/SER-34/link-linear-issue-metadata-to-bureauos-runs-and-artifacts",
+        "--stub",
+      ]),
+    );
+
+    expect(created.code).toBe(0);
+    expect(created.output).toContain("bureau: source: linear_issue:SER-34");
+    expect(created.output).toContain("https://linear.app/serium/issue/SER-34");
+
+    const listed = await captureStdout(() => main(["node", "bureau", "run", "list"]));
+    expect(listed.code).toBe(0);
+    expect(listed.output).toContain("linear_issue:SER-34");
+
+    const runsDir = join(dir, ".bureauos", "memory", "runs");
+    const runFile = (await readdir(runsDir)).find((file) => file.endsWith(".md"));
+    expect(runFile).toBeDefined();
+    const runDoc = await readFile(join(runsDir, runFile!), "utf8");
+    expect(runDoc).toContain("source_work_item_id: SER-34");
+    expect(runDoc).toContain("linear_url:");
   });
 
   it("prints client intelligence from real registries", async () => {
@@ -279,14 +483,7 @@ describe("bureau cli", () => {
       "--status",
       "active",
     ]);
-    const clientPath = join(
-      dir,
-      ".bureauos",
-      "memory",
-      "clients",
-      "pizzeria-aurora",
-      "CLIENT.md",
-    );
+    const clientPath = join(dir, ".bureauos", "memory", "clients", "pizzeria-aurora", "CLIENT.md");
     const clientDoc = await readFile(clientPath, "utf8");
     await writeFile(
       clientPath,
@@ -404,7 +601,16 @@ describe("bureau cli", () => {
 
   it("runs the revenue pipeline from CLI", async () => {
     await main(["node", "bureau", "init", "--name", "BOS"]);
-    await main(["node", "bureau", "client", "create", "--name", "Nebula Studios", "--status", "active"]);
+    await main([
+      "node",
+      "bureau",
+      "client",
+      "create",
+      "--name",
+      "Nebula Studios",
+      "--status",
+      "active",
+    ]);
     await main([
       "node",
       "bureau",
@@ -672,7 +878,9 @@ describe("bureau cli", () => {
     expect(code).toBe(0);
     const artifacts = await readdir(join(dir, ".bureauos", "memory", "artifacts"));
     const bodies = await Promise.all(
-      artifacts.map((file) => readFile(join(dir, ".bureauos", "memory", "artifacts", file), "utf8")),
+      artifacts.map((file) =>
+        readFile(join(dir, ".bureauos", "memory", "artifacts", file), "utf8"),
+      ),
     );
     expect(bodies.some((body) => body.includes("Capability Use Audit"))).toBe(true);
 

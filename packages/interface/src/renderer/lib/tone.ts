@@ -148,10 +148,7 @@ export const toneProgressClass: Record<Tone, string> = {
   neutral: "bg-muted-foreground/40",
 };
 
-export const toneBadgeVariant: Record<
-  Tone,
-  "success" | "warning" | "danger" | "info" | "muted"
-> = {
+export const toneBadgeVariant: Record<Tone, "success" | "warning" | "danger" | "info" | "muted"> = {
   success: "success",
   warning: "warning",
   danger: "danger",

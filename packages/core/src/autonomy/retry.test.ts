@@ -77,17 +77,26 @@ describe("AutonomousRetryService", () => {
 
     const patchedOriginal = await runs.get(original.id);
     expect(patchedOriginal?.["retry_attempts"]).toBe(1);
+    expect(patchedOriginal?.["next_retry_at"]).toBe("2026-05-25T12:30:00.000Z");
     expect(patchedOriginal?.["retry_recovered_at"]).toBe(NOW.toISOString());
     expect(patchedOriginal?.["retry_child_runs"]).toEqual([result.triggered[0]!.retryRun.id]);
 
     const retryArtifacts = await artifacts.list({ run_id: result.triggered[0]!.retryRun.id });
     expect(retryArtifacts.length).toBeGreaterThan(1);
+    const retryRun = await runs.get(result.triggered[0]!.retryRun.id);
+    expect(retryRun).toMatchObject({
+      retry_parent_run_id: original.id,
+      retry_attempt: 1,
+      retry_max_attempts: 2,
+      retry_classification: "retryable_failure",
+      retry_report_id: result.report!.id,
+    });
     const log = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(log).toContain("autonomy.retry.started");
     expect(log).toContain("coordinator.step_completed");
   });
 
-  it("escalates instead of looping after the retry limit", async () => {
+  it("escalates with an owner-visible blocker instead of looping after the retry limit", async () => {
     const { artifacts, audit, policy, runs } = runtime();
     const original = await runs.start({
       type: "bug",
@@ -111,11 +120,66 @@ describe("AutonomousRetryService", () => {
     expect(result.triggered).toHaveLength(0);
     expect(result.escalated).toHaveLength(1);
     expect(result.escalated[0]?.attempts).toBe(2);
+    expect(result.escalated[0]?.reason).toBe("max_attempts_reached");
+    expect(result.escalated[0]?.blocker).toContain("Retry limit reached");
+    expect(result.escalated[0]?.approval?.action).toBe("resolve_retry_blocker");
     const patchedOriginal = await runs.get(original.id);
+    expect(patchedOriginal?.["next_retry_at"]).toBe("");
     expect(patchedOriginal?.["retry_escalated_at"]).toBe(NOW.toISOString());
+    expect(patchedOriginal?.["retry_escalation_reason"]).toBe("max_attempts_reached");
+    expect(patchedOriginal?.["retry_blocker_approval_id"]).toBe(result.escalated[0]?.approval?.id);
+    expect(patchedOriginal?.["retry_report_id"]).toBe(result.report?.id);
+
+    const approvals = await new ApprovalRegistry(dir).listPending();
+    expect(approvals).toEqual([
+      expect.objectContaining({
+        id: result.escalated[0]?.approval?.id,
+        action: "resolve_retry_blocker",
+        run_id: original.id,
+        status: "pending",
+      }),
+    ]);
 
     const log = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(log).toContain("autonomy.retry.escalated");
+    expect(log).toContain(result.escalated[0]!.approval!.id);
+  });
+
+  it("escalates non-retryable failures without spending an attempt", async () => {
+    const { artifacts, audit, policy, runs } = runtime();
+    const original = await runs.start({
+      type: "bug",
+      triggerType: "owner_request",
+      triggerSource: "owner:bug",
+      scope: "Fix booking regression",
+    });
+    await runs.patch(original.id, {
+      status: "blocked",
+      completed: "",
+      dispatch_blockers: ["Missing production credential approval"],
+    });
+
+    const result = await new AutonomousRetryService(dir, {
+      runs,
+      audit,
+      artifacts,
+      policy,
+    }).scan({ now: NOW, maxAttempts: 2 });
+
+    expect(result.triggered).toHaveLength(0);
+    expect(result.escalated).toHaveLength(1);
+    expect(result.escalated[0]).toMatchObject({
+      attempts: 0,
+      reason: "non_retryable_failure",
+      blocker: "Failure needs credential or access intervention before retry.",
+    });
+    const patchedOriginal = await runs.get(original.id);
+    expect(patchedOriginal).toMatchObject({
+      retry_attempts: 0,
+      retry_escalation_reason: "non_retryable_failure",
+      retry_classification: "non_retryable_credentials",
+    });
+    expect(patchedOriginal?.["retry_child_runs"]).toBeUndefined();
   });
 
   it("honors policy when retry triage is disabled", async () => {

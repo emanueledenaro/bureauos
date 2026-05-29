@@ -57,7 +57,7 @@ export function DataTable<Row>({
     ) : null;
 
   const table = (
-    <div className="overflow-hidden rounded-lg border border-border">
+    <div className="overflow-hidden rounded-lg border border-border/70 bg-card/95">
       {mobileFallback === "cards" ? (
         <>
           <div className="hidden md:block">
@@ -120,14 +120,11 @@ function TableGrid<Row>({
   const content = (
     <div style={{ minWidth: `${minWidth}px` }}>
       <div
-        className={cn(
-          "grid bg-surface-subtle/60 text-eyebrow",
-          rowPadding,
-        )}
+        className={cn("grid gap-3 bg-surface-subtle/35 text-eyebrow", rowPadding)}
         style={{ gridTemplateColumns: gridTemplate }}
       >
         {columns.map((column) => (
-          <span key={column.id} className={alignClass(column.align)}>
+          <span key={column.id} className={cn("min-w-0 truncate", alignClass(column.align))}>
             {column.header}
           </span>
         ))}
@@ -136,7 +133,7 @@ function TableGrid<Row>({
         <div
           key={rowKey(row, index)}
           className={cn(
-            "grid items-center gap-3 border-t border-border/60 text-body transition-colors hover:bg-surface-subtle/40",
+            "grid items-center gap-3 border-t border-border/50 text-body transition-colors hover:bg-surface-subtle/35",
             rowPadding,
           )}
           style={{ gridTemplateColumns: gridTemplate }}
@@ -152,7 +149,11 @@ function TableGrid<Row>({
   );
 
   if (wrap === "overflow") {
-    return <div className="overflow-x-auto">{content}</div>;
+    return (
+      <div data-e2e-horizontal-scroll="true" className="overflow-x-auto">
+        {content}
+      </div>
+    );
   }
   return content;
 }
@@ -168,14 +169,16 @@ function MobileCard<Row>({
 }) {
   return (
     <div className={cn("flex flex-col gap-2", className)}>
-      {columns.filter((column) => !column.hideOnMobile).map((column) => (
-        <Fragment key={column.id}>
-          <div className="flex flex-col gap-0.5">
-            <span className="text-eyebrow">{column.mobileLabel ?? column.header}</span>
-            <div className="text-body">{column.render(row)}</div>
-          </div>
-        </Fragment>
-      ))}
+      {columns
+        .filter((column) => !column.hideOnMobile)
+        .map((column) => (
+          <Fragment key={column.id}>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-eyebrow">{column.mobileLabel ?? column.header}</span>
+              <div className="text-body">{column.render(row)}</div>
+            </div>
+          </Fragment>
+        ))}
     </div>
   );
 }

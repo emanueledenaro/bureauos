@@ -4,7 +4,13 @@ import { SectionShell } from "../components/dashboard/SectionShell";
 import { ResponsiveTable } from "../components/dashboard/ResponsiveTable";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
 import { Badge } from "../components/ui/badge";
 import { cn } from "../lib/utils";
 import { enabledCount } from "../lib/builders";
@@ -196,7 +202,10 @@ export function SettingsView({
   };
 
   return (
-    <SectionShell title="Settings" description="Provider authentication, autonomy policy, and routing.">
+    <SectionShell
+      title="Settings"
+      description="Provider authentication, autonomy policy, and routing."
+    >
       <div className="grid gap-3 rounded-lg border border-border/70 bg-surface-subtle/60 p-4 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
         <div className="flex flex-col gap-1">
           <label className="text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -281,9 +290,7 @@ export function SettingsView({
                 </Badge>
                 <Badge variant="outline">Default {connector.defaultModel}</Badge>
                 <Badge variant="outline">{connector.models.length} models</Badge>
-                {modelList ? (
-                  <Badge variant="outline">Models from {modelList.source}</Badge>
-                ) : null}
+                {modelList ? <Badge variant="outline">Models from {modelList.source}</Badge> : null}
                 {selectedModel ? (
                   <Badge variant="info">{formatLabel(selectedModel.budgetTier)} budget</Badge>
                 ) : null}
@@ -369,7 +376,9 @@ export function SettingsView({
           >
             <div className="text-[11px] text-muted-foreground">
               Model{" "}
-              <span className="font-mono text-foreground">{settings.supreme_coordinator.model}</span>
+              <span className="font-mono text-foreground">
+                {settings.supreme_coordinator.model}
+              </span>
             </div>
             <div className="mt-3 flex flex-wrap gap-1.5">
               <Badge variant="outline">
@@ -396,7 +405,7 @@ export function SettingsView({
           <SettingsCard
             icon={Shield}
             label="Autonomy"
-            title={`${enabledCount(settings.autonomy)} / ${Object.keys(settings.autonomy).length} enabled`}
+            title={`Level ${settings.autonomy.level ?? 2} · ${enabledCount(settings.autonomy)} enabled`}
           >
             <ToggleList values={settings.autonomy} limit={8} />
           </SettingsCard>
@@ -423,8 +432,10 @@ export function SettingsView({
               />
               <Row
                 label="Memory global access"
-                value={settings.memory.coordinator_has_global_access ? "on" : "off"}
-                tone={settings.memory.coordinator_has_global_access ? "success" : "neutral"}
+                value={settings.memory.coordinator_has_global_access === true ? "on" : "off"}
+                tone={
+                  settings.memory.coordinator_has_global_access === true ? "success" : "neutral"
+                }
               />
             </div>
           </SettingsCard>
@@ -494,21 +505,23 @@ function SettingsCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-border/70 bg-surface-subtle/60 p-4">
-      <div className="flex items-center gap-2">
+    <div className="min-w-0 rounded-lg border border-border/70 bg-surface-subtle/60 p-4">
+      <div className="flex min-w-0 items-center gap-2">
         <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-        <span className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+        <span className="truncate text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
           {label}
         </span>
       </div>
-      <div className="mt-1 text-[13px] font-semibold text-foreground">{title}</div>
-      <div className="mt-3">{children}</div>
+      <div className="mt-1 truncate text-[13px] font-semibold text-foreground">{title}</div>
+      <div className="mt-3 min-w-0">{children}</div>
     </div>
   );
 }
 
 function Grid2({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">{children}</div>;
+  return (
+    <div className="grid grid-cols-1 gap-x-3 gap-y-1.5 text-[11px] sm:grid-cols-2">{children}</div>
+  );
 }
 
 function Cell({ label, value }: { label: string; value: string }) {
@@ -539,19 +552,26 @@ function Row({
   );
 }
 
-function ToggleList({ values, limit }: { values: Record<string, boolean>; limit: number }) {
+function ToggleList({
+  values,
+  limit,
+}: {
+  values: Record<string, boolean | number>;
+  limit: number;
+}) {
+  const entries = Object.entries(values).filter(
+    ([key, value]) => key !== "level" && typeof value === "boolean",
+  );
   return (
     <div className="space-y-1 text-[11px]">
-      {Object.entries(values)
-        .slice(0, limit)
-        .map(([key, value]) => (
-          <div key={key} className="flex items-center justify-between gap-2">
-            <span className="truncate text-muted-foreground">{formatLabel(key)}</span>
-            <span className={value ? "text-success" : "text-muted-foreground/60"}>
-              {value ? "on" : "off"}
-            </span>
-          </div>
-        ))}
+      {entries.slice(0, limit).map(([key, value]) => (
+        <div key={key} className="flex items-center justify-between gap-2">
+          <span className="truncate text-muted-foreground">{formatLabel(key)}</span>
+          <span className={value ? "text-success" : "text-muted-foreground/60"}>
+            {value ? "on" : "off"}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }

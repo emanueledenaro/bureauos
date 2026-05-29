@@ -9,7 +9,21 @@ declare global {
 
 let cachedBase: string | undefined;
 
+function browserConfiguredBase(): string | undefined {
+  if (typeof window === "undefined") return import.meta.env.VITE_BUREAUOS_API_BASE;
+  const urlBase = new URLSearchParams(window.location.search).get("apiBase")?.trim();
+  if (urlBase) return urlBase.replace(/\/+$/, "");
+  const storedBase = window.localStorage.getItem("bureauos.apiBase")?.trim();
+  if (storedBase) return storedBase.replace(/\/+$/, "");
+  return import.meta.env.VITE_BUREAUOS_API_BASE?.trim().replace(/\/+$/, "");
+}
+
 async function getBase(): Promise<string> {
+  const configuredBase = browserConfiguredBase();
+  if (configuredBase) {
+    cachedBase = configuredBase;
+    return configuredBase;
+  }
   if (cachedBase) return cachedBase;
   if (typeof window !== "undefined" && window.bureau) {
     cachedBase = await window.bureau.apiUrl();
@@ -27,7 +41,16 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
   });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (!res.ok) {
+    let error = `${res.status} ${res.statusText}`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body.error) error = `${res.status} ${body.error}`;
+    } catch {
+      // Keep the HTTP status when the server returns an empty or non-JSON error.
+    }
+    throw new Error(error);
+  }
   return (await res.json()) as T;
 }
 
@@ -67,9 +90,9 @@ export interface SettingsSummary {
     user_facing: boolean;
     always_on: boolean;
   };
-  autonomy: Record<string, boolean>;
+  autonomy: Record<string, boolean | number>;
   growth_autonomy: Record<string, boolean>;
-  memory: Record<string, boolean>;
+  memory: Record<string, boolean | Record<string, string | boolean | number>>;
   limits: Record<string, number | boolean>;
   github: Record<string, boolean>;
   triggers: {
@@ -233,6 +256,10 @@ export interface ApprovalRecord {
   actor: string;
   target: string;
   scope: string;
+  source?: string;
+  limit?: string;
+  run_id?: string;
+  risk_level?: string;
   status: string;
   expires_at?: string;
   one_off?: boolean;
@@ -249,17 +276,60 @@ export interface RunRecord {
   status: string;
   scope: string;
   created: string;
+  updated?: string;
+  completed?: string;
+  created_by?: string;
   trigger_type?: string;
   trigger_source?: string;
   project_id?: string;
   client_id?: string;
+  artifacts?: string[];
+  decisions?: string[];
+  dispatch_status?: string;
+  blockers?: string[] | string;
+  dispatch_blockers?: string[] | string;
+  blocking_reason?: string;
+  dispatch_error?: string;
+  error?: string;
+  next_action?: string;
+  retry_attempts?: number;
+  retry_child_runs?: string[];
+  retry_parent_run_id?: string;
+  retry_attempt?: number;
+  retry_max_attempts?: number;
+  retry_classification?: string;
+  retry_report_id?: string;
+  retry_blocker_reason?: string;
+  retry_blocker_approval_id?: string;
+  retry_escalation_reason?: string;
+  retry_escalated_at?: string;
+  last_retry_at?: string;
+  next_retry_at?: string;
+  source_work_item_type?: string;
+  source_work_item_id?: string;
+  source_work_item_url?: string;
+  linear_identifier?: string;
+  linear_url?: string;
+  branch_name?: string;
+  git_branch?: string;
+  commit_sha?: string;
+  head_sha?: string;
+  pull_request_url?: string;
+  github_pr_url?: string;
+  pr_url?: string;
+  pull_request_urls?: string[];
 }
 export interface AuditEvent {
   timestamp: string;
   actor: string;
   action: string;
   target?: string;
+  capability?: string;
+  policy_result?: "allow" | "deny" | "require_approval" | "escalate";
+  approval_id?: string;
+  artifact_id?: string;
   result: string;
+  error?: string;
 }
 export interface AgentDefinition {
   id: string;
@@ -286,7 +356,14 @@ export interface ArtifactRecord {
   type: string;
   status: string;
   created?: string;
+  run_id?: string;
   client_id?: string;
+  project_id?: string;
+  source_work_item_type?: string;
+  source_work_item_id?: string;
+  source_work_item_url?: string;
+  linear_identifier?: string;
+  linear_url?: string;
   client_name?: string;
   risk?: string;
   follow_up_due?: boolean;
@@ -304,12 +381,20 @@ export interface ArtifactRecord {
   repository?: string;
   github_event?: string;
   github_action?: string;
+  pull_request_refs?: string[];
+  pull_request_urls?: string[];
+  pull_request_check_summary?: string[];
   issues_count?: number;
   pull_requests_count?: number;
   checks_count?: number;
   failing_checks_count?: number;
+  failing_check_refs?: string[];
   stale_issues_count?: number;
   stale_pull_requests_count?: number;
+  branch_name?: string;
+  git_branch?: string;
+  commit_sha?: string;
+  head_sha?: string;
   generated_at?: string;
   memory_ready?: boolean;
   missing_sections?: string[];
@@ -363,13 +448,94 @@ export interface CoordinatorChatResult {
   memory: {
     generatedAt: string;
     hits: Array<{ path: string; snippet: string; score: number }>;
+    semanticHits?: Array<{ path: string; snippet: string; score: number }>;
   };
+}
+export type CoordinatorChatStreamEvent =
+  | { type: "status"; status: "started" | "provider_streaming" | "persisting" }
+  | { type: "delta"; text: string }
+  | { type: "final"; result: CoordinatorChatResult }
+  | { type: "error"; error: string };
+export interface CoordinatorChatStreamHandlers {
+  onStatus?: (status: Extract<CoordinatorChatStreamEvent, { type: "status" }>["status"]) => void;
+  onDelta?: (text: string) => void;
 }
 export interface CoordinatorGlobalMemoryPacket {
   rootMemory: string;
   generatedAt: string;
   topHits: Array<{ path: string; snippet: string; score: number }>;
+  semanticHits?: Array<{ path: string; snippet: string; score: number }>;
   audit: AuditEvent;
+}
+export type MemoryBrowserCategory = "client" | "project" | "daily" | "decision";
+export interface MemoryBrowserEntry {
+  path: string;
+  category: MemoryBrowserCategory;
+  title: string;
+  preview: string;
+  score?: number;
+  updated?: string;
+}
+export interface MemoryBrowserDetail extends MemoryBrowserEntry {
+  body: string;
+}
+export interface MemoryBrowserResult {
+  generated_at: string;
+  query: string;
+  semantic_index: {
+    enabled: boolean;
+    provider: "none" | "custom";
+    index_path: string;
+    min_score: number;
+  };
+  semantic_hits: Array<{ path: string; snippet: string; score: number }>;
+  categories: Array<{ id: MemoryBrowserCategory; label: string; count: number }>;
+  entries: MemoryBrowserEntry[];
+  selected?: MemoryBrowserDetail;
+}
+export type PolicyExplainOutcome = "allow" | "deny" | "require_approval" | "escalate";
+export interface PolicyExplainDecision {
+  id: string;
+  artifact_id: string;
+  created: string;
+  agent: string;
+  capability: string;
+  action: string;
+  policy_action: string;
+  target: string;
+  source_status: "allowed" | "blocked";
+  outcome: PolicyExplainOutcome;
+  allowed: boolean;
+  matched_rule: string;
+  risk_class: "low" | "medium" | "high" | "critical";
+  approval_required: boolean;
+  approval_id?: string;
+  reason: string;
+  required_gates: string[];
+  missing_gates: string[];
+}
+export interface PolicyExplainResult {
+  generated_at: string;
+  counts: Record<PolicyExplainOutcome, number>;
+  decisions: PolicyExplainDecision[];
+}
+export interface LocalNotificationRecord {
+  id: string;
+  type:
+    | "approval_needed"
+    | "high_risk_blocker"
+    | "client_issue"
+    | "revenue_opportunity"
+    | "daily_report";
+  title: string;
+  severity: "info" | "warning" | "critical";
+  status: "unread" | "read" | "dismissed";
+  source_type: string;
+  source_id: string;
+  target: string;
+  dedupe_key: string;
+  created: string;
+  updated: string;
 }
 export interface BusinessReportResult {
   generated_at: string;
@@ -418,8 +584,20 @@ export interface GrowthContentPipelineResult {
   pipeline_value: number;
   open_opportunities: number;
   drafts: GrowthContentPipelineDraft[];
+  compliance_review?: ArtifactRecord;
+  approvals: ApprovalRecord[];
   report: ArtifactRecord;
   next_actions: string[];
+}
+export interface GrowthReviewResult {
+  generated_at: string;
+  report: ArtifactRecord;
+  memory_ready: boolean;
+  missing_sections: string[];
+  recent_content_count: number;
+  pipeline_value: number;
+  follow_ups_due: number;
+  recommendations: string[];
 }
 export interface RevenuePipelineItem {
   opportunity: OpportunityRecord;
@@ -431,6 +609,7 @@ export interface RevenuePipelineItem {
   risks: string[];
   next_action: string;
   artifacts: ArtifactRecord[];
+  approvals: ApprovalRecord[];
 }
 export interface RevenuePipelineResult {
   generated_at: string;
@@ -507,7 +686,9 @@ export interface AutonomousRetryResult {
   escalated: Array<{
     run: RunRecord;
     attempts: number;
-    reason: "max_attempts_reached";
+    reason: "max_attempts_reached" | "non_retryable_failure";
+    blocker: string;
+    approval?: ApprovalRecord;
   }>;
   skipped: Array<{
     run: RunRecord;
@@ -639,6 +820,21 @@ export interface ProviderOAuthCallbackResult {
   providers?: ProviderConnection[];
 }
 
+function parseSseFrame(frame: string): { event: string; data: unknown } | undefined {
+  const lines = frame.split(/\r?\n/);
+  const event =
+    lines
+      .find((line) => line.startsWith("event:"))
+      ?.slice("event:".length)
+      .trim() ?? "message";
+  const data = lines
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice("data:".length).trimStart())
+    .join("\n");
+  if (!data) return undefined;
+  return { event, data: JSON.parse(data) as unknown };
+}
+
 export const Api = {
   pulse: () => api<CompanyPulse>("/company-pulse"),
   clients: () => api<ClientRecord[]>("/clients"),
@@ -667,8 +863,14 @@ export const Api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+  generateGrowthReview: (input: { recentDays?: number } = {}) =>
+    api<GrowthReviewResult>("/growth/review/generate", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   approvals: () => api<ApprovalRecord[]>("/approvals"),
   approvalsResolved: () => api<ApprovalRecord[]>("/approvals/resolved"),
+  notifications: () => api<LocalNotificationRecord[]>("/notifications"),
   runs: () => api<RunRecord[]>("/runs"),
   agents: () => api<AgentDefinition[]>("/agents"),
   capabilities: () => api<CapabilityDefinition[]>("/capabilities"),
@@ -685,10 +887,61 @@ export const Api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+  coordinatorChatStream: async (
+    input: { message: string; attachments?: CoordinatorAttachmentInput[] },
+    handlers: CoordinatorChatStreamHandlers = {},
+  ): Promise<CoordinatorChatResult> => {
+    const base = await getBase();
+    if (!base)
+      throw new Error("API server is not running. Run `bureau serve` or start the desktop app.");
+    const res = await fetch(`${base}/coordinator/messages/stream`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    if (!res.body) throw new Error("Coordinator stream did not return a readable body");
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finalResult: CoordinatorChatResult | undefined;
+
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
+      let boundary = buffer.indexOf("\n\n");
+      while (boundary >= 0) {
+        const frame = buffer.slice(0, boundary).trim();
+        buffer = buffer.slice(boundary + 2);
+        boundary = buffer.indexOf("\n\n");
+        if (!frame || frame.startsWith(":")) continue;
+        const parsed = parseSseFrame(frame);
+        if (!parsed) continue;
+        const event = parsed.data as CoordinatorChatStreamEvent;
+        if (event.type === "status") handlers.onStatus?.(event.status);
+        if (event.type === "delta") handlers.onDelta?.(event.text);
+        if (event.type === "final") finalResult = event.result;
+        if (event.type === "error") throw new Error(event.error);
+      }
+      if (done) break;
+    }
+
+    if (!finalResult) throw new Error("Coordinator stream ended before a final message");
+    return finalResult;
+  },
   coordinatorMemory: (query: string, limit = 12) =>
     api<CoordinatorGlobalMemoryPacket>(
       `/coordinator/memory?query=${encodeURIComponent(query)}&limit=${limit}`,
     ),
+  memoryBrowser: (input: { query?: string; path?: string; limit?: number } = {}) => {
+    const params = new URLSearchParams();
+    if (input.query) params.set("query", input.query);
+    if (input.path) params.set("path", input.path);
+    params.set("limit", String(input.limit ?? 80));
+    return api<MemoryBrowserResult>(`/memory/browser?${params.toString()}`);
+  },
+  policyExplain: (limit = 20) => api<PolicyExplainResult>(`/policy/explain?limit=${limit}`),
   audit: (n = 50) => api<AuditEvent[]>(`/audit?n=${n}`),
   coordinatorIntake: (input: {
     message: string;

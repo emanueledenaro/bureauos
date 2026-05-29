@@ -10,10 +10,7 @@ import type { CoordinatorIntakeResult } from "../../lib/api";
  */
 export function ResultCard({ result }: { result: CoordinatorIntakeResult }) {
   return (
-    <BaseCard
-      padding="compact"
-      className="mt-2 w-full max-w-md gap-2 bg-surface-raised"
-    >
+    <BaseCard padding="compact" className="mt-2 w-full max-w-md gap-2 bg-surface-raised">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-eyebrow font-mono uppercase">{result.opportunity.id}</div>

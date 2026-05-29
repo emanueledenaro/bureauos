@@ -4,13 +4,13 @@ import { cn } from "../../lib/utils";
 import type { Tone } from "../../lib/tone";
 
 const baseCardVariants = cva(
-  "group flex flex-col gap-3 rounded-lg border border-border bg-surface-subtle text-card-foreground transition-colors",
+  "group flex min-w-0 flex-col gap-3 rounded-lg border border-border/70 bg-surface-subtle/45 text-card-foreground transition-colors",
   {
     variants: {
       variant: {
         default: "",
         interactive:
-          "cursor-pointer hover:border-border hover:bg-surface-raised hover:shadow-[0_10px_30px_-18px_hsl(0_0%_0%/0.7)]",
+          "cursor-pointer hover:border-border hover:bg-surface-subtle/75 hover:shadow-[0_10px_30px_-20px_hsl(0_0%_0%/0.7)]",
         accent: "border-l-2",
       },
       padding: {
@@ -32,8 +32,7 @@ const accentBorderClass: Record<Tone, string> = {
 };
 
 export interface BaseCardProps
-  extends HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof baseCardVariants> {
+  extends HTMLAttributes<HTMLDivElement>, VariantProps<typeof baseCardVariants> {
   accentTone?: Tone;
 }
 
@@ -68,14 +67,12 @@ export function BaseCardHeader({
   className?: string;
 }) {
   return (
-    <div className={cn("flex items-start justify-between gap-3", className)}>
-      <div className="min-w-0">
+    <div className={cn("flex min-w-0 flex-wrap items-start justify-between gap-3", className)}>
+      <div className="min-w-0 flex-1 basis-40">
         <div className="text-card-title truncate">{title}</div>
-        {subtitle ? (
-          <div className="text-meta mt-1 line-clamp-2">{subtitle}</div>
-        ) : null}
+        {subtitle ? <div className="text-meta mt-1 line-clamp-2">{subtitle}</div> : null}
       </div>
-      {children ? <div className="flex shrink-0 items-center gap-2">{children}</div> : null}
+      {children ? <div className="flex min-w-0 shrink-0 items-center gap-2">{children}</div> : null}
     </div>
   );
 }
@@ -91,7 +88,12 @@ export function BaseCardFooter({
   className?: string;
 }) {
   return (
-    <div className={cn("mt-auto flex flex-wrap items-center gap-2 border-t border-border/60 pt-3 text-meta", className)}>
+    <div
+      className={cn(
+        "mt-auto flex flex-wrap items-center gap-2 border-t border-border/60 pt-3 text-meta",
+        className,
+      )}
+    >
       {children}
     </div>
   );

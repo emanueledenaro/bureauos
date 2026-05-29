@@ -70,7 +70,7 @@ function ToolbarButton({
       ) : Icon ? (
         <Icon className="h-3 w-3" />
       ) : null}
-      {busy ? action.busyLabel ?? `${action.label}…` : action.label}
+      {busy ? (action.busyLabel ?? `${action.label}…`) : action.label}
     </Button>
   );
 }

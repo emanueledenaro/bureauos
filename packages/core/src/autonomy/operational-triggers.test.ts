@@ -127,9 +127,9 @@ describe("OperationalSignalTriggerService", () => {
       expect(item.artifactIds.length).toBeGreaterThan(0);
       const storedRun = thresholdRunsById.get(item.run.id);
       expect(storedRun).toBeDefined();
-      expect(item.artifactIds.every((artifactId) => storedRun!.artifacts.includes(artifactId))).toBe(
-        true,
-      );
+      expect(
+        item.artifactIds.every((artifactId) => storedRun!.artifacts.includes(artifactId)),
+      ).toBe(true);
     }
 
     const reports = await artifacts.list({ type: "operational-signal-report" });

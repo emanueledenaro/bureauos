@@ -2,6 +2,11 @@
 
 This file maps the BureauOS documentation to runtime functionality.
 
+The release readiness source of truth is
+[`docs/v1-acceptance-checklist.md`](./v1-acceptance-checklist.md). Use this
+coverage file for capability status detail, and use the v1 checklist to decide
+whether a capability is required, deferred, or v1+.
+
 Every major capability described in the docs must become one of:
 
 - kernel module
@@ -31,7 +36,7 @@ Every major capability described in the docs must become one of:
 | Client account intelligence | `ClientIntelligenceService`, value score/classification, `/clients/intelligence`, `bureau client intelligence`, ElectronJS Clients page | implemented |
 | Project memory | `ProjectRegistry`, per-project memory files | implemented |
 | Opportunity pipeline | `OpportunityRegistry`, `RevenuePipelineService`, revenue pulse, `revenue-pipeline-report` | partial |
-| Run lifecycle | `RunEngine` | partial |
+| Run lifecycle | `RunEngine`, injected coordinator dispatcher, `bureau run new --stub` | partial |
 | Artifact store | `ArtifactStore` | partial |
 | Audit log | `AuditLog`, `/audit`, SSE events | implemented |
 | Approval gates | `ApprovalRegistry`, `PolicyEngine`, ElectronJS approvals | partial |
@@ -77,11 +82,11 @@ Every major capability described in the docs must become one of:
 | --- | --- | --- |
 | Agent role catalog | `AGENT_ROLES` | implemented |
 | PM agent per project | concrete PM agent with provider-backed drafting, per-project `OWNERSHIP.md`, and deterministic local template when selected route is unavailable | partial |
-| Delivery agents | concrete/template agents with provider-backed drafting and deterministic local template when selected route is unavailable | partial |
+| Delivery agents | concrete/template agents with provider-backed drafting, deterministic local template fallback, and Development Agent runtime execution when Codex runtime plus capability checker are supplied | partial |
 | Growth agents | template agents with provider-backed drafting and deterministic local template when selected route is unavailable | partial |
 | Compliance agent | concrete compliance agent with provider-backed drafting and deterministic local template when selected route is unavailable | partial |
 | Agent provider routing | `ProviderRouter`, `configureAgentProviderRouting`, dispatcher model capability, per-model capability metadata, budget-tier filtering, and no API fallback from `openai-codex` OAuth | implemented |
-| Codex runtime capability | capability registry boundary, `CapabilityUseService`, `capabilities check`, `/capabilities/check`, gate/audit artifacts before runtime execution | partial |
+| Codex runtime capability | capability registry boundary, `CapabilityUseService`, `CodexRuntimeAdapter` prepare/execute contract with injected runner, `capabilities check`, `/capabilities/check`, gate/audit artifacts before runtime execution, changed-file limit evidence for runtime-reported diffs | partial |
 | MCP capability bus | `CapabilityRegistry`, config parsing, `/capabilities`, `/capabilities/check`, `bureau capabilities list/check`, Electron Agents capability matrix, `capability-audit` artifacts | partial |
 
 ## Growth and Revenue
@@ -129,6 +134,10 @@ Every major capability described in the docs must become one of:
 | GitHub issue draft generation | `github draft-issues`, `/github/issue-drafts`, Electron project cards | implemented |
 | GitHub issue creation from drafts | `github create-issues`, `/github/create-issues`, Electron project cards | implemented |
 | GitHub PR creation | `GitHubPullRequestPublishService`, `github create-pr`, `/github/create-pr`, `github-pr-publish-report`, policy gates for linked issue and test evidence | partial |
+| Development branch creation | `DevelopmentBranchService`, deterministic `bureauos/...` branch naming, policy-gated `create_branches`, conflict fallback/blocking, and audit events | partial |
+| Project test evidence | `ProjectTestRunnerService`, structured/discovered test commands, subprocess execution boundary, `test-evidence-report` artifacts, and PR gate evidence only for passing tests | partial |
+| Linear work-item MCP | `linear` capability registry boundary, `CapabilityUseService` policy mappings for read/create/comment/update issue actions, `LinearIssueReaderService` adapter boundary for capability-gated read/list flows, and `LinearIssueActionService` for policy-gated comment/update/state actions with local evidence artifacts; runtime MCP calls are provided by the host assistant/client | partial |
+| Linear issue ingestion | `LinearIssueIngestionService`, `linearIssueToRunScope`, `project-dispatch-packet` artifacts, and Linear read capability checks | implemented |
 | OpenAI Codex OAuth provider | separate `openai-codex` provider, browser PKCE OAuth, ChatGPT Codex backend `generateText`/SSE `stream`, persisted token refresh, Codex-compatible `instructions`/`store=false` request body, no API fallback | implemented |
 | OpenAI API provider | separate `openai` provider, SDK-backed API-key adapter with `generateText`/`stream` | implemented |
 | Anthropic provider | SDK-backed API-key adapter with `generateText`/`stream` | implemented |

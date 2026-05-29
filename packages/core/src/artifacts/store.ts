@@ -9,6 +9,7 @@ import {
   writeDoc,
   type FrontMatter,
 } from "../registries/base.js";
+import { sourceWorkItemFrontMatter, type SourceWorkItemInput } from "../work-items/source.js";
 
 export type ArtifactType =
   | "project-brief"
@@ -17,12 +18,14 @@ export type ArtifactType =
   | "bug-report"
   | "technical-plan"
   | "test-plan"
+  | "test-evidence-report"
   | "security-review"
   | "pr-review"
   | "decision-record"
   | "run-report"
   | "project-dispatch-packet"
   | "agent-handoff"
+  | "agent-handoff-validation"
   | "executive-report"
   | "cross-project-executive-report"
   | "business-operating-report"
@@ -52,7 +55,9 @@ export type ArtifactType =
   | "github-issue-draft"
   | "github-issue-publish-report"
   | "github-pr-publish-report"
+  | "github-agent-evidence-comment-report"
   | "github-signal-report"
+  | "linear-issue-action-report"
   | "operational-signal-report"
   | "client-profile"
   | "owner-attachment";
@@ -66,6 +71,11 @@ export interface ArtifactRecord extends FrontMatter {
   project_id: string;
   status: "draft" | "submitted" | "accepted" | "rejected" | "superseded";
   created: string;
+  source_work_item_type: string;
+  source_work_item_id: string;
+  source_work_item_url: string;
+  linear_identifier: string;
+  linear_url: string;
 }
 
 export interface WriteArtifactInput {
@@ -77,6 +87,7 @@ export interface WriteArtifactInput {
   projectId?: string;
   status?: ArtifactRecord["status"];
   metadata?: FrontMatter;
+  sourceWorkItem?: SourceWorkItemInput;
 }
 
 export class ArtifactStore {
@@ -94,7 +105,13 @@ export class ArtifactStore {
     const id = newId("art");
     await ensureDir(this.paths().artifactsDir);
     const record: ArtifactRecord = {
+      source_work_item_type: "",
+      source_work_item_id: "",
+      source_work_item_url: "",
+      linear_identifier: "",
+      linear_url: "",
       ...(input.metadata ?? {}),
+      ...sourceWorkItemFrontMatter(input.sourceWorkItem),
       id,
       type: input.type,
       created_by: input.createdBy,

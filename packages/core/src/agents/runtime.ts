@@ -15,9 +15,11 @@ import { AGENT_INDEX, type AgentDefinition } from "./roles.js";
 export interface AgentContext {
   runId: string;
   scope: string;
+  workspaceRoot?: string;
   clientId?: string;
   projectId?: string;
   briefing?: string;
+  handoffArtifactId?: string;
 }
 
 export interface AgentRunInput {
@@ -33,6 +35,30 @@ export interface AgentRunOutput {
   notes: string;
 }
 
+export interface AgentCapabilityCheckInput {
+  agent: string;
+  capabilityId: string;
+  action: string;
+  target?: string;
+  policyAction?: string;
+  linkedIssueNumbers?: readonly number[];
+  testEvidence?: readonly string[];
+  changedFiles?: readonly string[];
+}
+
+export interface AgentCapabilityCheckResult {
+  status: "allowed" | "blocked";
+  artifact?: ArtifactRecord;
+  target?: string;
+  missing_gates?: readonly string[];
+  policy?: { reason: string };
+  capability?: { reason: string };
+}
+
+export interface AgentCapabilityChecker {
+  check(input: AgentCapabilityCheckInput): Promise<AgentCapabilityCheckResult>;
+}
+
 export interface AgentRuntime {
   readonly definition: AgentDefinition;
   execute(input: AgentRunInput): Promise<AgentRunOutput>;
@@ -42,6 +68,7 @@ export interface AgentDeps {
   artifacts: ArtifactStore;
   audit: AuditLog;
   policy: PolicyEngine;
+  capabilityUse?: AgentCapabilityChecker;
 }
 
 /**

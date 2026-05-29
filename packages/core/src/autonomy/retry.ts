@@ -1,10 +1,20 @@
 import { ArtifactStore, type ArtifactRecord } from "../artifacts/store.js";
 import { AuditLog } from "../audit/log.js";
 import type { PolicyDecision, PolicyEngine } from "../policy/engine.js";
+import { ApprovalRegistry, type ApprovalRecord } from "../registries/approval.js";
 import { dispatchRun, type CoordinatorDeps } from "../runs/coordinator.js";
 import { RunEngine, type RunRecord } from "../runs/engine.js";
 
 export type AutonomousRetryStatus = "blocked" | "failed";
+export type AutonomousRetryEscalationReason = "max_attempts_reached" | "non_retryable_failure";
+export type RetryClassificationReason =
+  | "retryable_failure"
+  | "retryable_blocker"
+  | "non_retryable_credentials"
+  | "non_retryable_owner_decision"
+  | "non_retryable_policy"
+  | "non_retryable_scope"
+  | "non_retryable_explicit";
 
 export interface AutonomousRetryInput {
   now?: Date;
@@ -22,7 +32,9 @@ export interface TriggeredAutonomousRetry {
 export interface EscalatedAutonomousRetry {
   run: RunRecord;
   attempts: number;
-  reason: "max_attempts_reached";
+  reason: AutonomousRetryEscalationReason;
+  blocker: string;
+  approval?: ApprovalRecord;
 }
 
 export interface SkippedAutonomousRetry {
@@ -48,6 +60,7 @@ export interface AutonomousRetryDeps {
   audit: AuditLog;
   policy: PolicyEngine;
   artifacts?: ArtifactStore;
+  approvals?: ApprovalRegistry;
   coordinator?: CoordinatorDeps;
 }
 
@@ -57,6 +70,15 @@ interface Candidate {
   nextAttempt: number;
   triggerSource: string;
   action: "retry" | "escalate";
+  nextRetryAt?: string;
+  classification: RetryClassification;
+  escalationReason?: AutonomousRetryEscalationReason;
+}
+
+interface RetryClassification {
+  retryable: boolean;
+  reason: RetryClassificationReason;
+  detail: string;
 }
 
 const DEFAULT_MAX_ATTEMPTS = 2;
@@ -86,6 +108,15 @@ function stringList(value: unknown): string[] {
   return [];
 }
 
+function booleanValue(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    if (value.toLowerCase() === "true") return true;
+    if (value.toLowerCase() === "false") return false;
+  }
+  return undefined;
+}
+
 function isRetryChild(run: RunRecord): boolean {
   return run.trigger_source.startsWith("bureauos.retry:");
 }
@@ -102,6 +133,97 @@ function retrySource(run: RunRecord, attempt: number): string {
   return `bureauos.retry:${run.id}:${attempt}`;
 }
 
+function nextRetryAt(now: Date, attempt: number): string {
+  const delayMs = Math.min(24 * 60 * 60 * 1000, Math.max(1, attempt) * 30 * 60 * 1000);
+  return new Date(now.getTime() + delayMs).toISOString();
+}
+
+function runFailureText(run: RunRecord): string {
+  return [
+    run.scope,
+    run.status,
+    run["dispatch_status"],
+    run["blocking_reason"],
+    run["dispatch_error"],
+    run["error"],
+    ...stringList(run["blockers"]),
+    ...stringList(run["dispatch_blockers"]),
+  ]
+    .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    .join(" ")
+    .toLowerCase();
+}
+
+function classifyRetry(run: RunRecord): RetryClassification {
+  const explicitRetryable = booleanValue(run["retryable"] ?? run["dispatch_retryable"]);
+  if (explicitRetryable === false) {
+    return {
+      retryable: false,
+      reason: "non_retryable_explicit",
+      detail: "Run metadata marks this failure as non-retryable.",
+    };
+  }
+  if (explicitRetryable === true) {
+    return {
+      retryable: true,
+      reason: run.status === "blocked" ? "retryable_blocker" : "retryable_failure",
+      detail: "Run metadata allows bounded retry.",
+    };
+  }
+
+  const text = runFailureText(run);
+  if (/\b(secret|credential|credentials|oauth|token|api key|forbidden|unauthorized)\b/.test(text)) {
+    return {
+      retryable: false,
+      reason: "non_retryable_credentials",
+      detail: "Failure needs credential or access intervention before retry.",
+    };
+  }
+  if (/\b(policy|approval|human|owner|needs_human|permission|client approval)\b/.test(text)) {
+    return {
+      retryable: false,
+      reason: "non_retryable_policy",
+      detail: "Failure is blocked by policy or owner approval.",
+    };
+  }
+  if (
+    /\b(ambiguous|clarification|acceptance criteria|missing context|scope unclear)\b/.test(text)
+  ) {
+    return {
+      retryable: false,
+      reason: "non_retryable_scope",
+      detail: "Failure needs clearer scope before another retry.",
+    };
+  }
+  if (
+    /\b(billing|payment|stripe|legal|delete|destructive|production deploy|deploy production)\b/.test(
+      text,
+    )
+  ) {
+    return {
+      retryable: false,
+      reason: "non_retryable_owner_decision",
+      detail: "Failure touches a sensitive decision that needs owner intervention.",
+    };
+  }
+
+  return {
+    retryable: true,
+    reason: run.status === "blocked" ? "retryable_blocker" : "retryable_failure",
+    detail:
+      run.status === "blocked"
+        ? "Blocked run can be retried once within policy."
+        : "Failed run can be retried once within policy.",
+  };
+}
+
+function escalationBlocker(candidate: Candidate): string {
+  if (candidate.escalationReason === "max_attempts_reached") {
+    return `Retry limit reached after ${candidate.attempts} attempt(s). Owner intervention required before another retry.`;
+  }
+  return candidate.classification.detail;
+}
+
 function reportBody(now: Date, maxAttempts: number, candidates: readonly Candidate[]): string {
   return `# Autonomous Retry Report
 
@@ -115,7 +237,11 @@ ${candidates
   .map((candidate) => {
     return `- ${candidate.action}: ${candidate.run.id} (${candidate.run.type})
   - Status: ${candidate.run.status}
-  - Attempt: ${candidate.nextAttempt}/${maxAttempts}
+  - Attempts used: ${candidate.attempts}/${maxAttempts}
+  - Next attempt: ${candidate.action === "retry" ? `${candidate.nextAttempt}/${maxAttempts}` : "(blocked)"}
+  - Classification: ${candidate.classification.reason}
+  - Retryable: ${candidate.classification.retryable ? "yes" : "no"}
+  - Blocker: ${candidate.action === "escalate" ? escalationBlocker(candidate) : "(none)"}
   - Scope: ${candidate.run.scope}
   - Trigger: ${candidate.triggerSource}`;
   })
@@ -131,12 +257,14 @@ ${candidates
 
 export class AutonomousRetryService {
   private readonly artifacts: ArtifactStore;
+  private readonly approvals: ApprovalRegistry;
 
   constructor(
     private readonly workspaceRoot: string,
     private readonly deps: AutonomousRetryDeps,
   ) {
     this.artifacts = deps.artifacts ?? new ArtifactStore(workspaceRoot);
+    this.approvals = deps.approvals ?? new ApprovalRegistry(workspaceRoot);
   }
 
   async scan(input: AutonomousRetryInput = {}): Promise<AutonomousRetryResult> {
@@ -172,12 +300,23 @@ export class AutonomousRetryService {
         skipped.push({ run, reason: "duplicate", triggerSource });
         continue;
       }
+      const classification = classifyRetry(run);
+      const overLimit = nextAttempt > maxAttempts;
       candidates.push({
         run,
         attempts,
         nextAttempt,
         triggerSource,
-        action: nextAttempt > maxAttempts ? "escalate" : "retry",
+        action: !classification.retryable || overLimit ? "escalate" : "retry",
+        ...(classification.retryable ? { nextRetryAt: nextRetryAt(now, nextAttempt) } : {}),
+        classification,
+        ...(!classification.retryable || overLimit
+          ? {
+              escalationReason: classification.retryable
+                ? "max_attempts_reached"
+                : "non_retryable_failure",
+            }
+          : {}),
       });
     }
 
@@ -201,21 +340,49 @@ export class AutonomousRetryService {
 
     for (const candidate of candidates) {
       if (candidate.action === "escalate") {
+        const blocker = escalationBlocker(candidate);
+        const approval = await this.approvals.request({
+          action: "resolve_retry_blocker",
+          actor: "supreme_coordinator",
+          target: candidate.run.id,
+          scope: `Resolve retry blocker for ${candidate.run.scope}`,
+          runId: candidate.run.id,
+          riskLevel: "medium",
+          body: `# Retry Blocker
+
+- Run: ${candidate.run.id}
+- Status: ${candidate.run.status}
+- Attempts used: ${candidate.attempts}/${maxAttempts}
+- Reason: ${candidate.escalationReason ?? "non_retryable_failure"}
+- Classification: ${candidate.classification.reason}
+- Blocker: ${blocker}
+${report ? `- Report: ${report.id}\n` : ""}
+Owner intervention is required before BureauOS should retry this run again.
+`,
+        });
         await this.deps.runs.patch(candidate.run.id, {
           retry_attempts: candidate.attempts,
+          next_retry_at: "",
           retry_escalated_at: now.toISOString(),
-          retry_escalation_reason: "max_attempts_reached",
+          retry_escalation_reason: candidate.escalationReason ?? "non_retryable_failure",
+          retry_classification: candidate.classification.reason,
+          retry_blocker_reason: blocker,
+          retry_blocker_approval_id: approval.id,
+          ...(report ? { retry_report_id: report.id } : {}),
         });
         escalated.push({
           run: candidate.run,
           attempts: candidate.attempts,
-          reason: "max_attempts_reached",
+          reason: candidate.escalationReason ?? "non_retryable_failure",
+          blocker,
+          approval,
         });
         await this.deps.audit.append({
           actor: "supreme_coordinator",
           action: "autonomy.retry.escalated",
           target: candidate.run.id,
           capability: "bureauos.retry",
+          approval_id: approval.id,
           ...(report ? { artifact_id: report.id } : {}),
           result: "ok",
         });
@@ -280,11 +447,18 @@ export class AutonomousRetryService {
       await this.deps.runs.patch(candidate.run.id, {
         retry_attempts: candidate.nextAttempt,
         last_retry_at: now.toISOString(),
+        next_retry_at: candidate.nextRetryAt ?? nextRetryAt(now, candidate.nextAttempt),
+        retry_classification: candidate.classification.reason,
+        ...(report ? { retry_report_id: report.id } : {}),
         ...(retryRun.status === "completed" ? { retry_recovered_at: now.toISOString() } : {}),
-        retry_child_runs: [
-          ...stringList(candidate.run["retry_child_runs"]),
-          retryRun.id,
-        ],
+        retry_child_runs: [...stringList(candidate.run["retry_child_runs"]), retryRun.id],
+      });
+      await this.deps.runs.patch(retryRun.id, {
+        retry_parent_run_id: candidate.run.id,
+        retry_attempt: candidate.nextAttempt,
+        retry_max_attempts: maxAttempts,
+        retry_classification: candidate.classification.reason,
+        ...(report ? { retry_report_id: report.id } : {}),
       });
       knownSources.add(candidate.triggerSource);
       triggered.push({

@@ -58,6 +58,13 @@ export interface CoordinatorIntakeResult {
   approvals: ApprovalRecord[];
 }
 
+export interface CoordinatorClientSaveResult {
+  summary: string;
+  next_actions: string[];
+  client: ClientRecord;
+  created: boolean;
+}
+
 export interface CoordinatorIntakeDeps {
   config?: BureauConfig;
   clients?: ClientRegistry;
@@ -82,10 +89,59 @@ function titleCase(input: string): string {
     .trim()
     .split(/\s+/)
     .map((part) => {
+      if (/[0-9]/.test(part) || (part === part.toUpperCase() && /[A-ZÀ-Ý]/.test(part))) {
+        return part;
+      }
       const [first = "", ...rest] = part;
       return `${first.toUpperCase()}${rest.join("").toLowerCase()}`;
     })
     .join(" ");
+}
+
+function cleanBusinessName(input: string): string {
+  let cleaned = input
+    .trim()
+    .replace(/^["'“”]+|["'“”]+$/g, "")
+    .replace(/[,.!?;:]+$/g, "")
+    .trim();
+
+  const stopPatterns = [
+    /\s+(?:lo|la|li|le)\s+(?:puoi|potresti|riesci)\b[\s\S]*$/i,
+    /\s+(?:puoi|potresti|riesci)\b[\s\S]*$/i,
+    /\s+(?:salvalo|salvala|salvali|salvale|salvare|registralo|registrala|registrare|memorizzalo|memorizzala|memorizzare|aggiungilo|aggiungila|aggiungere)\b[\s\S]*$/i,
+    /\s+(?:come|da)\s+(?:cliente|client|lead)\b[\s\S]*$/i,
+    /\s+(?:vuole|vorrebbe|vogliono|vorrebbero|serve|servono|ha|hanno|chiede|chiedono|richiede|richiedono|mi\s+ha|mi\s+hanno)\b[\s\S]*$/i,
+    /\s+(?:che|e)\s+(?:vuole|vorrebbe|vogliono|vorrebbero|serve|servono|ha|hanno|chiede|chiedono|richiede|richiedono|mi\s+ha|mi\s+hanno)\b[\s\S]*$/i,
+  ];
+  for (const pattern of stopPatterns) {
+    cleaned = cleaned.replace(pattern, "").trim();
+  }
+
+  return cleaned.replace(/[,.!?;:]+$/g, "").trim();
+}
+
+function normalizeLookupText(input: string): string {
+  return input
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+async function findExistingClientMention(
+  registry: ClientRegistry,
+  message: string,
+): Promise<ClientRecord | undefined> {
+  const normalizedMessage = ` ${normalizeLookupText(message)} `;
+  if (!normalizedMessage.trim()) return undefined;
+  const clients = await registry.list();
+  return clients
+    .map((client) => ({ client, normalizedName: normalizeLookupText(client.name) }))
+    .filter(({ normalizedName }) => normalizedName.length >= 3)
+    .filter(({ normalizedName }) => normalizedMessage.includes(` ${normalizedName} `))
+    .sort((a, b) => b.normalizedName.length - a.normalizedName.length)[0]?.client;
 }
 
 function sanitizeAttachmentName(input: string): string {
@@ -123,17 +179,86 @@ function attachmentSummary(attachments: readonly CoordinatorAttachmentInput[]): 
 
 function extractNamedBusiness(message: string): string | undefined {
   const patterns = [
+    /\b(?:salva|salvare|salvami|registra|registrare|aggiungi|aggiungere|memorizza|memorizzare)\s+(?:il\s+|la\s+|lo\s+|un\s+|una\s+)?(?:cliente|client|azienda|business|brand)?\s*["']?([A-Za-z0-9À-ÿ&'. -]{2,60})["']?/i,
     /\b(?:ho parlato con|parlato con|cliente incontrato)\s+(?:la\s+|il\s+|lo\s+|l')?([A-ZÀ-Ý][A-Za-z0-9À-ÿ&'. -]{2,60}?)(?=[:;,]|\s+(?:vuole|vogliono|mi|ha|hanno|chiede|chiedono)\b|$)/,
     /\b(?:cliente|client|azienda|business|brand|ristorante|pizzeria|salone|studio)\s+(?:si chiama|chiamata|chiamato|called|named)\s+["']?([A-Za-z0-9À-ÿ&'. -]{2,60})["']?/i,
+    /\b(?:[Cc]liente|[Cc]lient|[Aa]zienda|[Bb]usiness|[Bb]rand)\s+(?!(?:vuole|vorrebbe|vogliono|vorrebbero|serve|servono|ha|hanno|chiede|chiedono|richiede|richiedono)\b)([A-ZÀ-Ý][A-Za-z0-9À-ÿ&'. -]{1,60}?)(?=[:;,]|\s+(?:vuole|vorrebbe|vogliono|vorrebbero|mi|ha|hanno|chiede|chiedono|richiede|richiedono|serve|servono)\b|$)/,
+    /\b((?:pizzeria|ristorante|salone|studio)\s+(?!(?:vuole|vorrebbe|vogliono|vorrebbero|serve|servono|ha|hanno|chiede|chiedono|richiede|richiedono)\b)[A-Za-z0-9À-ÿ&'. -]{2,60}?)(?=[:;,]|\s+(?:vuole|vorrebbe|vogliono|vorrebbero|mi|ha|hanno|chiede|chiedono|richiede|richiedono|serve|servono)\b|$)/i,
     /\b(?:cliente|client|azienda|business|brand|ristorante|pizzeria|salone|studio)\s+["']([A-Za-z0-9À-ÿ&'. -]{2,60})["']/i,
     /\b(?:per|for)\s+["']([A-Za-z0-9À-ÿ&'. -]{2,60})["']/i,
   ];
   for (const pattern of patterns) {
     const match = pattern.exec(message);
-    const raw = match?.[1]?.replace(/[,.!?;:]+$/g, "").trim();
+    const raw = cleanBusinessName(match?.[1] ?? "");
     if (raw) return titleCase(raw);
   }
   return undefined;
+}
+
+function hasProjectScopeIntent(message: string): boolean {
+  return includesAny(message, [
+    "app",
+    "automazione",
+    "automation",
+    "budget",
+    "booking",
+    "campagna",
+    "crm",
+    "deadline",
+    "ecommerce",
+    "e-commerce",
+    "gestionale",
+    "landing",
+    "marketing",
+    "opportunit",
+    "prenot",
+    "preventivo",
+    "progetto",
+    "proposal",
+    "proposta",
+    "pubblicit",
+    "pubblicità",
+    "scope",
+    "shopify",
+    "sito",
+    "social",
+    "software",
+    "svilupp",
+    "website",
+  ]);
+}
+
+export function isClientOnlySaveRequest(input: {
+  message: string;
+  attachments?: readonly CoordinatorAttachmentInput[];
+  clientName?: string;
+}): boolean {
+  if (input.attachments?.length) return false;
+  const lower = input.message.toLowerCase();
+  const clientName = input.clientName ?? extractNamedBusiness(input.message);
+  if (!clientName) return false;
+  if (hasProjectScopeIntent(lower)) return false;
+
+  return includesAny(lower, [
+    "abbiamo un cliente",
+    "aggiungi cliente",
+    "aggiungere cliente",
+    "cliente si chiama",
+    "crea cliente",
+    "creare cliente",
+    "ho un cliente",
+    "memorizza cliente",
+    "memorizzare cliente",
+    "nuovo cliente",
+    "salva ",
+    "registra cliente",
+    "registrare cliente",
+    "salva cliente",
+    "salvare cliente",
+    "salvami ",
+    "lo puoi salvare",
+    "la puoi salvare",
+  ]);
 }
 
 function classify(input: CoordinatorIntakeInput): IntakeClassification {
@@ -488,44 +613,6 @@ Generate similar qualified leads for software projects once the owner approves o
   ];
 }
 
-function approvalRequests(args: {
-  classification: IntakeClassification;
-  project: ProjectRecord;
-  opportunity: OpportunityRecord;
-}): Array<{ action: string; target: string; scope: string; body: string }> {
-  const { classification, project, opportunity } = args;
-  return [
-    {
-      action: "send_final_proposals",
-      target: opportunity.id,
-      scope: `Send final proposal for ${opportunity.title}`,
-      body: "The coordinator can draft the proposal, but final send requires owner approval.",
-    },
-    {
-      action: "accept_projects",
-      target: project.id,
-      scope: `Accept client scope for ${project.name}`,
-      body: "Project acceptance commits delivery capacity and must be approved by the owner.",
-    },
-    {
-      action: "publish_public_content",
-      target: project.id,
-      scope: `Publish public content about ${project.name}`,
-      body: "Publishing public proof requires client permission and owner approval.",
-    },
-    ...(classification.requested_growth
-      ? [
-          {
-            action: "launch_ad_campaigns",
-            target: project.id,
-            scope: `Launch ads for ${project.name}`,
-            body: "Paid advertising requires owner approval for campaign, claims, and budget.",
-          },
-        ]
-      : []),
-  ];
-}
-
 export class CoordinatorIntakeService {
   private readonly config: BureauConfig;
   private readonly clients: ClientRegistry;
@@ -563,7 +650,14 @@ export class CoordinatorIntakeService {
     if (!message) throw new Error("coordinator intake requires a message");
     const attachments = input.attachments ?? [];
 
-    const classification = classify({ ...input, message });
+    const existingClient = await findExistingClientMention(this.clients, message);
+    const classification = classify({
+      ...input,
+      message,
+      ...(existingClient ? { clientName: existingClient.name } : {}),
+    });
+    const clientBeforeIntake =
+      existingClient ?? (await this.clients.get(slugify(classification.client_name)));
     const client = await getOrCreateClient(this.clients, { ...input, message }, classification);
     const project = await getOrCreateProject(
       this.projects,
@@ -625,18 +719,6 @@ export class CoordinatorIntakeService {
     );
 
     const approvals: ApprovalRecord[] = [];
-    for (const request of approvalRequests({ classification, project, opportunity })) {
-      approvals.push(
-        await this.approvals.request({
-          action: request.action,
-          actor: "supreme_coordinator",
-          target: request.target,
-          scope: request.scope,
-          oneOff: true,
-          body: request.body,
-        }),
-      );
-    }
 
     const paths = workspacePaths(this.workspaceRoot);
     const now = new Date().toISOString();
@@ -672,11 +754,11 @@ export class CoordinatorIntakeService {
     await appendDailyNote(
       this.workspaceRoot,
       "Events",
-      `Coordinator intake created ${client.name}, ${project.name}, and ${opportunity.title}.`,
+      `Coordinator intake opened ${project.name} for ${client.name} and ${opportunity.title}.`,
     );
     await appendDecision(this.workspaceRoot, {
       actor: "supreme_coordinator",
-      what: `Created project team for ${project.name}`,
+      what: `Opened project team for ${project.name}`,
       why: "Owner intake described a client opportunity that should move into structured delivery.",
       runId: run.id,
       affects: [client.id, project.id, opportunity.id],
@@ -690,12 +772,14 @@ export class CoordinatorIntakeService {
     });
 
     return {
-      summary: `Created client ${client.name}, project ${project.name}, opportunity ${opportunity.title}, ${artifacts.length} artifacts, and ${approvals.length} approval gates.`,
+      summary: `${
+        clientBeforeIntake ? "Ho preso in carico" : "Ho aperto il lavoro per"
+      } ${client.name}: progetto ${project.name}, opportunità ${opportunity.title}, ${artifacts.length} artifact interni pronti.`,
       next_actions: [
-        "Review pending approvals before any external commitment.",
-        "Use generated proposal and pricing briefs as draft-only assets.",
-        "Provision the repository only after owner approval or project policy.",
-        "Continue delivery through project manager and specialist agents.",
+        "Avvio la delivery interna con project manager e agenti specialisti.",
+        "Uso proposta, pricing e contenuti come bozze operative finché non serve un invio esterno.",
+        "Ti porto in approvazione solo soldi, cancellazioni, legale, produzione, segreti o impegni finali verso cliente/pubblico.",
+        "Tengo stato, artifact e decisioni tracciati nel kernel.",
       ],
       classification,
       client,
@@ -704,6 +788,50 @@ export class CoordinatorIntakeService {
       run: updatedRun,
       artifacts,
       approvals,
+    };
+  }
+
+  async saveClientOnly(input: CoordinatorIntakeInput): Promise<CoordinatorClientSaveResult> {
+    const message = input.message.trim();
+    if (!message) throw new Error("coordinator client save requires a message");
+    const clientName = input.clientName ?? extractNamedBusiness(message);
+    if (!clientName) throw new Error("client-only save requires a client name");
+
+    const classification = classify({ ...input, message, clientName });
+    const existed = Boolean(await this.clients.get(slugify(classification.client_name)));
+    const client = await getOrCreateClient(this.clients, { ...input, message }, classification);
+
+    const paths = workspacePaths(this.workspaceRoot);
+    const now = new Date().toISOString();
+    await appendMemory(
+      join(paths.clientsDir, client.slug, "COMMUNICATION.md"),
+      `Client saved ${now}`,
+      `${message}\n\nCoordinator action: saved client identity only. No project, opportunity, artifact, or approval was created from this request.`,
+    );
+    await appendDailyNote(
+      this.workspaceRoot,
+      "Events",
+      `Coordinator saved client ${client.name} without creating project scope.`,
+    );
+    await this.audit.append({
+      actor: "supreme_coordinator",
+      action: existed ? "coordinator.client_updated" : "coordinator.client_saved",
+      target: client.id,
+      result: "ok",
+    });
+
+    const summary = existed
+      ? `Cliente ${client.name} già presente. Anagrafica aggiornata.`
+      : `Ho salvato il cliente ${client.name}.`;
+
+    return {
+      summary,
+      next_actions: [
+        "Quando mi dai uno scope operativo, apro progetto/opportunità e preparo i materiali interni.",
+        "Tengo l'anagrafica separata dalla delivery finché non c'è una richiesta concreta.",
+      ],
+      client,
+      created: !existed,
     };
   }
 
@@ -751,7 +879,7 @@ export class CoordinatorIntakeService {
 
 ## Coordinator Usage
 
-Treat this file as owner-provided client/project context. It can inform product scope, design direction, compliance review, pricing, proposal drafts, and delivery planning. External use still requires the normal approval gates.
+Treat this file as owner-provided client/project context. It can inform product scope, design direction, compliance review, pricing, proposal drafts, and delivery planning. External use still requires owner approval when policy classifies the action as serious risk.
 `;
 
     return this.artifacts.write({

@@ -33,6 +33,16 @@ describe("ClientRegistry", () => {
     expect(all.length).toBe(2);
   });
 
+  it("hides archived clients from operational lists by default", async () => {
+    const r = new ClientRegistry(dir);
+    await r.create({ name: "Canonical Client" });
+    await r.create({ name: "Polluted Duplicate" });
+    await r.update("polluted-duplicate", { status: "archived" });
+
+    await expect(r.list()).resolves.toMatchObject([{ name: "Canonical Client" }]);
+    await expect(r.list({ includeArchived: true })).resolves.toHaveLength(2);
+  });
+
   it("refuses duplicate slugs", async () => {
     const r = new ClientRegistry(dir);
     await r.create({ name: "Same Name" });

@@ -1,4 +1,4 @@
-import { Check, ChevronRight, ShieldCheck, X } from "lucide-react";
+import { ChevronRight, ShieldCheck } from "lucide-react";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -8,11 +8,9 @@ import type { ApprovalRecord } from "../lib/api";
 
 export function PendingApprovalsView({
   approvals,
-  onResolve,
   onOpen,
 }: {
   approvals: ApprovalRecord[];
-  onResolve: (id: string, status: "approved" | "rejected") => Promise<void>;
   onOpen: () => void;
 }) {
   const visible = approvals.slice(0, 3);
@@ -55,23 +53,9 @@ export function PendingApprovalsView({
                   </span>
                 </div>
                 <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="success"
-                    className="flex-1"
-                    onClick={() => void onResolve(approval.id, "approved")}
-                  >
-                    <Check className="h-3 w-3" />
-                    Approve
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => void onResolve(approval.id, "rejected")}
-                  >
-                    <X className="h-3 w-3" />
-                    Reject
+                  <Button size="sm" variant="outline" className="flex-1" onClick={onOpen}>
+                    Review
+                    <ChevronRight className="h-3 w-3" />
                   </Button>
                 </div>
               </div>
@@ -90,10 +74,8 @@ export function PendingApprovalsView({
       <div className="flex items-center gap-2 border-t border-border/60 px-5 py-3 text-[11px] text-muted-foreground">
         <span className="h-1.5 w-1.5 rounded-full bg-success" />
         Autonomous mode is handling{" "}
-        <span className="text-foreground">
-          {Math.max(0, 100 - approvals.length * 5)}%
-        </span>{" "}
-        of operations.
+        <span className="text-foreground">{Math.max(0, 100 - approvals.length * 5)}%</span> of
+        operations.
       </div>
     </Card>
   );

@@ -9,19 +9,26 @@ import { workspacePaths } from "../paths.js";
 import { ClientRegistry } from "../registries/client.js";
 import { ProjectRegistry } from "../registries/project.js";
 import { OpportunityRegistry } from "../registries/opportunity.js";
-import { ApprovalRegistry } from "../registries/approval.js";
+import {
+  ApprovalRegistry,
+  approvalRequiresDecisionNote,
+  approvalRiskLevel,
+} from "../registries/approval.js";
+import { LocalNotificationCenter } from "../notifications/local.js";
 import { ArtifactStore } from "../artifacts/store.js";
 import { AuditLog } from "../audit/log.js";
 import { PolicyEngine } from "../policy/engine.js";
+import { PolicyExplainService } from "../policy/explain.js";
 import { RunEngine } from "../runs/engine.js";
 import { AGENT_ROLES } from "../agents/roles.js";
-import {
-  CoordinatorIntakeService,
-  type CoordinatorAttachmentInput,
-} from "../coordinator/intake.js";
+import type { CoordinatorAttachmentInput } from "../coordinator/intake.js";
 import { CoordinatorChatService } from "../coordinator/chat.js";
 import { CoordinatorMessageStore } from "../coordinator/messages.js";
+import { CoordinatorToolRuntime } from "../coordinator/tool-runtime.js";
+import { MemoryBrowserService } from "../memory/browser.js";
 import { CoordinatorGlobalMemoryService } from "../memory/global.js";
+import { appendDailyNote, type DailyNoteSection } from "../memory/daily.js";
+import { recordDecision } from "../memory/decisions.js";
 import { ProjectDispatchService } from "../dispatch/project-dispatch.js";
 import { GitHubIssueDraftService } from "../github/issue-drafts.js";
 import {
@@ -48,6 +55,12 @@ import { ProjectHealthReviewService } from "../autonomy/project-health.js";
 import { ProjectRepositoryVerificationService } from "../autonomy/repository-verification.js";
 import { AutonomousRetryService } from "../autonomy/retry.js";
 import { MemoryTriggerService } from "../autonomy/memory-triggers.js";
+import type { DaemonStatusSnapshot } from "../daemon/state.js";
+import {
+  DaemonLifecycleSupervisor,
+  type DaemonStartResult,
+  type DaemonStopResult,
+} from "../daemon/supervisor.js";
 import { GitHubWebhookIngestionService } from "../github/webhook-ingestion.js";
 import { GitHubSignalTriggerService } from "../github/signal-triggers.js";
 import type { GitHubSignalClient } from "../github/signal-sync.js";
@@ -80,6 +93,7 @@ export interface ApiServerOptions {
   config: BureauConfig;
   port?: number;
   token?: string;
+  daemonSupervisor?: DaemonApiSupervisor;
   githubClient?: GitHubIssuePublishClient &
     Partial<GitHubPullRequestPublishClient> &
     Partial<GitHubRepositoryProvisionClient> &
@@ -104,6 +118,12 @@ interface RouteContext {
 }
 
 type RouteHandler = (ctx: RouteContext) => Promise<void> | void;
+
+interface DaemonApiSupervisor {
+  status(): Promise<DaemonStatusSnapshot>;
+  start(input?: { port?: number }): Promise<DaemonStartResult>;
+  stop(): Promise<DaemonStopResult>;
+}
 
 type ProviderStatus = ProviderConnection & {
   status: "ok" | "missing";
@@ -155,6 +175,33 @@ const PROVIDER_TYPES: ReadonlySet<ProviderType> = new Set([
   "custom",
 ]);
 
+const SECRET_PATTERNS: Array<[RegExp, string]> = [
+  [/\b(sk-[A-Za-z0-9_-]{8,})\b/g, "[redacted]"],
+  [/\b(xox[baprs]-[A-Za-z0-9-]{8,})\b/g, "[redacted]"],
+  [
+    /\b((?:api[_-]?key|access[_-]?token|refresh[_-]?token|secret|password|authorization)\s*[:=]\s*)([^\s"'`]+)/gi,
+    "$1[redacted]",
+  ],
+  [/\b(Bearer\s+)([A-Za-z0-9._-]{12,})\b/gi, "$1[redacted]"],
+];
+
+function redactSecretLookingText(input: string): string {
+  return SECRET_PATTERNS.reduce((text, [pattern, replacement]) => {
+    return text.replace(pattern, replacement);
+  }, input);
+}
+
+function redactAuditPayload(payload: unknown): unknown {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
+  const event = payload as Record<string, unknown>;
+  return Object.fromEntries(
+    Object.entries(event).map(([key, value]) => [
+      key,
+      typeof value === "string" ? redactSecretLookingText(value) : value,
+    ]),
+  );
+}
+
 function ok(res: ServerResponse, payload: unknown, status = 200): void {
   res.statusCode = status;
   res.setHeader("Content-Type", "application/json");
@@ -162,6 +209,19 @@ function ok(res: ServerResponse, payload: unknown, status = 200): void {
   res.setHeader("Access-Control-Allow-Headers", "content-type, authorization");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.end(JSON.stringify(payload));
+}
+
+function startSse(res: ServerResponse): void {
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.write("retry: 5000\n\n");
+}
+
+function writeSse(res: ServerResponse, event: string, payload: unknown): void {
+  res.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`);
 }
 
 function notFound(res: ServerResponse): void {
@@ -214,6 +274,7 @@ function deps(options: ApiServerOptions) {
   const policy = new PolicyEngine(options.config, approvals);
   const audit = new AuditLog(workspacePaths(options.workspaceRoot).auditLog);
   const artifacts = new ArtifactStore(options.workspaceRoot);
+  const notifications = new LocalNotificationCenter(options.workspaceRoot);
   return {
     clients: new ClientRegistry(options.workspaceRoot),
     projects: new ProjectRegistry(options.workspaceRoot),
@@ -221,6 +282,7 @@ function deps(options: ApiServerOptions) {
     approvals,
     audit,
     artifacts,
+    notifications,
     policy,
     runs: new RunEngine(options.workspaceRoot, { audit, artifacts, policy }),
   };
@@ -264,7 +326,9 @@ function attachmentMetadata(
   }));
 }
 
-function githubSignalClient(client: ApiServerOptions["githubClient"]): GitHubSignalClient | undefined {
+function githubSignalClient(
+  client: ApiServerOptions["githubClient"],
+): GitHubSignalClient | undefined {
   if (
     client &&
     typeof client.listIssues === "function" &&
@@ -373,8 +437,73 @@ function settingsSummary(options: ApiServerOptions): SettingsSummary {
   };
 }
 
+function daemonSupervisor(options: ApiServerOptions): DaemonApiSupervisor {
+  return (
+    options.daemonSupervisor ??
+    new DaemonLifecycleSupervisor({
+      workspaceRoot: options.workspaceRoot,
+      scriptPath: process.argv[1],
+    })
+  );
+}
+
+function parseDailyNoteSection(value: string | undefined): DailyNoteSection | undefined {
+  const section = value ?? "Follow-ups";
+  if (
+    section === "Events" ||
+    section === "Runs" ||
+    section === "Decisions" ||
+    section === "Follow-ups"
+  ) {
+    return section;
+  }
+  return undefined;
+}
+
+function arrayField<const K extends string>(key: K, value: unknown): Partial<Record<K, string[]>> {
+  if (!Array.isArray(value)) return {};
+  return {
+    [key]: value.filter((item): item is string => typeof item === "string"),
+  } as Partial<Record<K, string[]>>;
+}
+
 const ROUTES: Record<string, RouteHandler> = {
-  "GET /health": ({ res }) => ok(res, { ok: true }),
+  "GET /health": async ({ res, options }) =>
+    ok(res, { ok: true, daemon: await daemonSupervisor(options).status() }),
+
+  "GET /daemon/status": async ({ res, options }) => {
+    ok(res, await daemonSupervisor(options).status());
+  },
+
+  "POST /daemon/start": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as { port?: number };
+    const supervisor = daemonSupervisor(options);
+    const result = await supervisor.start({
+      ...(typeof body.port === "number" ? { port: body.port } : {}),
+    });
+    ok(res, result, result.ok ? 202 : result.status === "already_running" ? 409 : 500);
+  },
+
+  "POST /daemon/stop": async ({ res, options }) => {
+    const supervisor = daemonSupervisor(options);
+    const snapshot = await supervisor.status();
+    if (snapshot.state?.pid === process.pid && snapshot.alive) {
+      ok(
+        res,
+        {
+          ok: true,
+          status: "stopping",
+          message: `stop signal scheduled for pid ${process.pid}`,
+          snapshot,
+        },
+        202,
+      );
+      setTimeout(() => void supervisor.stop(), 10);
+      return;
+    }
+    const result = await supervisor.stop();
+    ok(res, result, result.ok ? 200 : 500);
+  },
 
   "GET /settings": ({ res, options }) => {
     ok(res, settingsSummary(options));
@@ -583,6 +712,8 @@ const ROUTES: Record<string, RouteHandler> = {
     ok(res, await deps(options).approvals.listPending()),
   "GET /approvals/resolved": async ({ res, options }) =>
     ok(res, await deps(options).approvals.listResolved()),
+  "GET /notifications": async ({ res, options }) =>
+    ok(res, await deps(options).notifications.list()),
   "GET /runs": async ({ res, options }) => ok(res, await deps(options).runs.list()),
   "GET /artifacts": async ({ res, options }) => ok(res, await deps(options).artifacts.list()),
   "GET /agents": ({ res }) => ok(res, AGENT_ROLES),
@@ -623,6 +754,14 @@ const ROUTES: Record<string, RouteHandler> = {
     ok(res, result, result.status === "allowed" ? 200 : 202);
   },
 
+  "GET /policy/explain": async ({ res, options, url }) => {
+    const requestedLimit = Number(url.searchParams.get("limit") ?? "20");
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 100)
+      : 20;
+    ok(res, await new PolicyExplainService(options.workspaceRoot).list({ limit }));
+  },
+
   "GET /coordinator/messages": async ({ res, options, url }) => {
     const requestedLimit = Number(url.searchParams.get("limit") ?? "50");
     const limit = Number.isFinite(requestedLimit)
@@ -647,6 +786,81 @@ const ROUTES: Record<string, RouteHandler> = {
     );
   },
 
+  "GET /memory/browser": async ({ res, options, url }) => {
+    const requestedLimit = Number(url.searchParams.get("limit") ?? "80");
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 200)
+      : 80;
+    ok(
+      res,
+      await new MemoryBrowserService(options.workspaceRoot, options.config).browse({
+        query: url.searchParams.get("query") ?? "",
+        path: url.searchParams.get("path") ?? undefined,
+        limit,
+      }),
+    );
+  },
+
+  "POST /memory/daily-note": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as {
+      section?: string;
+      line?: string;
+    };
+    if (!body.line || !body.line.trim()) {
+      ok(res, { error: "line required" }, 400);
+      return;
+    }
+    const section = parseDailyNoteSection(body.section);
+    if (!section) {
+      ok(res, { error: "section must be Events, Runs, Decisions, or Follow-ups" }, 400);
+      return;
+    }
+    const path = await appendDailyNote(options.workspaceRoot, section, body.line);
+    await deps(options).audit.append({
+      actor: "api",
+      action: "memory.daily_note_appended",
+      target: section,
+      result: "ok",
+    });
+    ok(res, { path, section }, 201);
+  },
+
+  "POST /memory/decisions": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as {
+      what?: string;
+      why?: string;
+      actor?: string;
+      runId?: string;
+      clientId?: string;
+      projectId?: string;
+      alternativesRejected?: unknown;
+      evidence?: unknown;
+      affects?: unknown;
+      revisitWhen?: string;
+    };
+    if (!body.what || !body.what.trim()) {
+      ok(res, { error: "what required" }, 400);
+      return;
+    }
+    if (!body.why || !body.why.trim()) {
+      ok(res, { error: "why required" }, 400);
+      return;
+    }
+    const result = await recordDecision(options.workspaceRoot, {
+      actor: body.actor?.trim() || "owner",
+      what: body.what,
+      why: body.why,
+      ...(typeof body.runId === "string" ? { runId: body.runId } : {}),
+      ...(typeof body.clientId === "string" ? { clientId: body.clientId } : {}),
+      ...(typeof body.projectId === "string" ? { projectId: body.projectId } : {}),
+      ...(typeof body.revisitWhen === "string" ? { revisitWhen: body.revisitWhen } : {}),
+      ...arrayField("alternativesRejected", body.alternativesRejected),
+      ...arrayField("evidence", body.evidence),
+      ...arrayField("affects", body.affects),
+    });
+    ok(res, result, 201);
+  },
+
   "POST /coordinator/messages": async ({ res, options, req }) => {
     const body = (await readJson(req)) as {
       message?: string;
@@ -669,6 +883,38 @@ const ROUTES: Record<string, RouteHandler> = {
       }),
       201,
     );
+  },
+
+  "POST /coordinator/messages/stream": async ({ res, options, req }) => {
+    const body = (await readJson(req)) as {
+      message?: string;
+      source?: string;
+      attachments?: unknown;
+    };
+    if (!body.message || !body.message.trim()) {
+      ok(res, { error: "message required" }, 400);
+      return;
+    }
+    const service = new CoordinatorChatService(options.workspaceRoot, {
+      config: options.config,
+    });
+    startSse(res);
+    try {
+      for await (const event of service.stream({
+        message: body.message,
+        source: body.source ?? "electron",
+        attachments: parseAttachments(body.attachments),
+      })) {
+        writeSse(res, event.type, event);
+      }
+    } catch (error) {
+      writeSse(res, "error", {
+        type: "error",
+        error: error instanceof Error ? error.message : "coordinator stream failed",
+      });
+    } finally {
+      res.end();
+    }
   },
 
   "GET /providers": async ({ res, options }) => {
@@ -986,7 +1232,9 @@ const ROUTES: Record<string, RouteHandler> = {
       projectSlug: body.projectSlug,
       owner: body.owner,
       ...(typeof body.repo === "string" ? { repo: body.repo } : {}),
-      ...(body.ownerType === "org" || body.ownerType === "user" ? { ownerType: body.ownerType } : {}),
+      ...(body.ownerType === "org" || body.ownerType === "user"
+        ? { ownerType: body.ownerType }
+        : {}),
       ...(typeof body.private === "boolean" ? { private: body.private } : {}),
       ...(typeof body.description === "string" ? { description: body.description } : {}),
       ...(typeof body.autoInit === "boolean" ? { autoInit: body.autoInit } : {}),
@@ -1056,10 +1304,10 @@ const ROUTES: Record<string, RouteHandler> = {
       return;
     }
     const attachments = parseAttachments(body.attachments);
-    const service = new CoordinatorIntakeService(options.workspaceRoot, {
+    const runtime = new CoordinatorToolRuntime(options.workspaceRoot, {
       config: options.config,
     });
-    const result = await service.process({
+    const execution = await runtime.executeCreateIntake({
       message: body.message,
       source: body.source ?? "electron",
       ...(body.clientName ? { clientName: body.clientName } : {}),
@@ -1068,17 +1316,28 @@ const ROUTES: Record<string, RouteHandler> = {
       ...(typeof body.expectedValue === "number" ? { expectedValue: body.expectedValue } : {}),
       ...(typeof body.expectedMargin === "number" ? { expectedMargin: body.expectedMargin } : {}),
       attachments,
+      toolSource: "api_endpoint",
     });
+    const result = execution.result;
     await new CoordinatorMessageStore(options.workspaceRoot).appendMany([
       {
         role: "owner",
         text: body.message,
         attachments: attachmentMetadata(attachments),
+        meta: { mode: "intake" },
       },
       {
         role: "coordinator",
         text: result.summary,
         result,
+        meta: {
+          mode: "intake",
+          provider: {
+            status: "unavailable",
+            reason: "api_explicit_create_intake_tool",
+          },
+          tool: execution.tool,
+        },
       },
     ]);
     ok(res, result, 201);
@@ -1118,9 +1377,9 @@ const ROUTES: Record<string, RouteHandler> = {
         res,
         lines.map((l) => {
           try {
-            return JSON.parse(l);
+            return redactAuditPayload(JSON.parse(l));
           } catch {
-            return { raw: l };
+            return { raw: redactSecretLookingText(l) };
           }
         }),
       );
@@ -1170,9 +1429,11 @@ const ROUTES: Record<string, RouteHandler> = {
           if (!line) continue;
           try {
             const parsed = JSON.parse(line);
-            res.write(`event: audit\ndata: ${JSON.stringify(parsed)}\n\n`);
+            res.write(`event: audit\ndata: ${JSON.stringify(redactAuditPayload(parsed))}\n\n`);
           } catch {
-            res.write(`event: raw\ndata: ${JSON.stringify({ raw: line })}\n\n`);
+            res.write(
+              `event: raw\ndata: ${JSON.stringify({ raw: redactSecretLookingText(line) })}\n\n`,
+            );
           }
         }
       } catch {
@@ -1191,16 +1452,35 @@ const ROUTES: Record<string, RouteHandler> = {
   "POST /approvals/resolve": async ({ res, options, req }) => {
     const body = (await readJson(req)) as {
       id?: string;
-      status?: "approved" | "rejected";
+      status?: string;
       reason?: string;
     };
     if (!body.id || !body.status) {
-      res.statusCode = 400;
       ok(res, { error: "id and status required" }, 400);
       return;
     }
+    if (body.status !== "approved" && body.status !== "rejected") {
+      ok(res, { error: "status must be approved or rejected" }, 400);
+      return;
+    }
     const d = deps(options);
-    const updated = await d.approvals.resolve(body.id, body.status, "owner", body.reason ?? "");
+    const pending = await d.approvals.getPending(body.id);
+    if (!pending) {
+      ok(res, { error: "approval is no longer pending" }, 409);
+      return;
+    }
+    const reason = (body.reason ?? "").trim();
+    if (approvalRequiresDecisionNote(pending) && !reason) {
+      ok(
+        res,
+        {
+          error: `decision note required for ${approvalRiskLevel(pending)}-risk approvals`,
+        },
+        400,
+      );
+      return;
+    }
+    const updated = await d.approvals.resolve(body.id, body.status, "owner", reason);
     await d.audit.append({
       actor: "owner",
       action: `approval.${body.status}`,

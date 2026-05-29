@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ArtifactStore } from "../artifacts/store.js";
 import { initWorkspace } from "../init/initializer.js";
 import { workspacePaths } from "../paths.js";
+import { ApprovalRegistry } from "../registries/approval.js";
 import { ClientRegistry } from "../registries/client.js";
 import { OpportunityRegistry } from "../registries/opportunity.js";
 import { GrowthContentPipelineService } from "./content-pipeline.js";
@@ -67,6 +68,17 @@ describe("GrowthContentPipelineService", () => {
     ]);
     expect(result.drafts.every((draft) => draft.approval_required)).toBe(true);
     expect(result.drafts.every((draft) => draft.opportunity_id === opportunity.id)).toBe(true);
+    expect(result.compliance_review).toMatchObject({
+      type: "compliance-review",
+      approval_required: true,
+      source: "growth.content_pipeline",
+    });
+    expect(result.approvals.map((approval) => approval.action).sort()).toEqual([
+      "launch_ad_campaigns",
+      "publish_public_content",
+      "publish_social_posts",
+      "run_paid_ads",
+    ]);
 
     const draft = await new ArtifactStore(dir).read(result.drafts[0]?.artifact.id ?? "");
     expect(draft?.record).toMatchObject({
@@ -82,9 +94,19 @@ describe("GrowthContentPipelineService", () => {
     const report = await new ArtifactStore(dir).read(result.report.id);
     expect(report?.body).toContain("# Content Pipeline Report");
     expect(report?.body).toContain("Open pipeline: $12,000");
+    expect(report?.record.approval_ids).toEqual(result.approvals.map((approval) => approval.id));
+
+    const approvals = await new ApprovalRegistry(dir).listPending();
+    expect(approvals).toHaveLength(4);
+    expect(approvals[0]).toMatchObject({
+      source: expect.stringContaining("growth.content_pipeline:"),
+      limit: expect.stringContaining("paid spend 0"),
+      expires_at: "2026-06-01T10:00:00.000Z",
+    });
 
     const log = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(log).toContain("growth.content_pipeline.generated");
+    expect(log).toContain("external_commitment.approval_requested");
   });
 
   it("writes a blocked report when growth memory is incomplete", async () => {

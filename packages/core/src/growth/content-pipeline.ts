@@ -5,11 +5,13 @@ import {
   type ClientIntelligenceItem,
   type ClientIntelligenceSummary,
 } from "../clients/intelligence.js";
-import { workspacePaths } from "../paths.js";
 import {
-  OpportunityRegistry,
-  type OpportunityRecord,
-} from "../registries/opportunity.js";
+  requestExternalCommitmentGate,
+  type ExternalCommitmentAction,
+} from "../compliance/external-commitments.js";
+import { workspacePaths } from "../paths.js";
+import { ApprovalRegistry, type ApprovalRecord } from "../registries/approval.js";
+import { OpportunityRegistry, type OpportunityRecord } from "../registries/opportunity.js";
 import { GrowthMemoryService, type GrowthMemorySummary } from "./memory.js";
 
 export type GrowthContentDraftKind = "social" | "campaign" | "creative" | "ads";
@@ -38,6 +40,8 @@ export interface GrowthContentPipelineResult {
   pipeline_value: number;
   open_opportunities: number;
   drafts: GrowthContentPipelineDraft[];
+  compliance_review?: ArtifactRecord;
+  approvals: ApprovalRecord[];
   report: ArtifactRecord;
   next_actions: string[];
 }
@@ -47,6 +51,7 @@ export interface GrowthContentPipelineDeps {
   clientIntelligence?: ClientIntelligenceService;
   opportunities?: OpportunityRegistry;
   artifacts?: ArtifactStore;
+  approvals?: ApprovalRegistry;
   audit?: AuditLog;
 }
 
@@ -170,7 +175,7 @@ function contextBlock(args: {
 - Brand memory: ${oneLine(args.brand, "not configured")}
 - Offer memory: ${oneLine(args.offer, "not configured")}
 - Channel memory: ${oneLine(args.channels, "not configured")}
-- Focus: ${args.focus ? args.focus : args.opportunity?.title ?? "general visibility"}
+- Focus: ${args.focus ? args.focus : (args.opportunity?.title ?? "general visibility")}
 - Opportunity: ${args.opportunity ? `${args.opportunity.title} (${formatMoney(args.opportunity.expected_value || 0)} pipeline)` : "(none)"}
 - Client memory: ${args.client ? `${args.client.client.name} (${args.client.risk}, value score ${args.client.value_score.score})` : "(none)"}
 `;
@@ -369,8 +374,7 @@ ${
   args.drafts.length
     ? args.drafts
         .map(
-          (draft) =>
-            `- ${draft.kind}: ${draft.title} (${draft.channel}) -> ${draft.artifact.id}`,
+          (draft) => `- ${draft.kind}: ${draft.title} (${draft.channel}) -> ${draft.artifact.id}`,
         )
         .join("\n")
     : "- No drafts created."
@@ -392,6 +396,7 @@ export class GrowthContentPipelineService {
   private readonly clientIntelligence: ClientIntelligenceService;
   private readonly opportunities: OpportunityRegistry;
   private readonly artifacts: ArtifactStore;
+  private readonly approvals: ApprovalRegistry;
   private readonly audit: AuditLog;
 
   constructor(
@@ -403,6 +408,7 @@ export class GrowthContentPipelineService {
       deps.clientIntelligence ?? new ClientIntelligenceService(workspaceRoot);
     this.opportunities = deps.opportunities ?? new OpportunityRegistry(workspaceRoot);
     this.artifacts = deps.artifacts ?? new ArtifactStore(workspaceRoot);
+    this.approvals = deps.approvals ?? new ApprovalRegistry(workspaceRoot);
     this.audit = deps.audit ?? new AuditLog(workspacePaths(workspaceRoot).auditLog);
   }
 
@@ -459,6 +465,7 @@ export class GrowthContentPipelineService {
         pipeline_value: pipelineValue,
         open_opportunities: openOpportunities.length,
         drafts: [],
+        approvals: [],
         report,
         next_actions: nextActions,
       };
@@ -490,7 +497,14 @@ export class GrowthContentPipelineService {
     ].slice(0, maxDrafts);
 
     const drafts: GrowthContentPipelineDraft[] = [];
+    const approvalActions = new Set<ExternalCommitmentAction>();
     for (const plan of plans) {
+      if (plan.kind === "social") approvalActions.add("publish_social_posts");
+      if (plan.kind === "ads") {
+        approvalActions.add("run_paid_ads");
+        approvalActions.add("launch_ad_campaigns");
+      }
+      approvalActions.add("publish_public_content");
       const artifact = await this.artifacts.write({
         type: plan.type,
         createdBy: "growth",
@@ -518,6 +532,29 @@ export class GrowthContentPipelineService {
       });
     }
 
+    const gate =
+      drafts.length > 0
+        ? await requestExternalCommitmentGate(
+            {
+              artifacts: this.artifacts,
+              approvals: this.approvals,
+              audit: this.audit,
+            },
+            {
+              generatedAt,
+              source: "growth.content_pipeline",
+              target: input.focus ?? opportunity?.id ?? "growth",
+              scope: `Publish or launch generated growth drafts${input.focus ? ` for ${input.focus}` : ""}`,
+              limit: `Draft count ${drafts.length}; paid spend 0; no client names, logos, public claims, or client contact without separate approval`,
+              actions: [...approvalActions],
+              sourceArtifactIds: drafts.map((draft) => draft.artifact.id),
+              ...(input.runId ? { runId: input.runId } : {}),
+              ...(opportunity?.client_id ? { clientId: opportunity.client_id } : {}),
+              ...(opportunity?.id ? { opportunityId: opportunity.id } : {}),
+            },
+          )
+        : undefined;
+
     const nextActions = [
       drafts.length
         ? "Review generated drafts and approve only the assets that should become public."
@@ -539,6 +576,8 @@ export class GrowthContentPipelineService {
         open_opportunities: openOpportunities.length,
         draft_count: drafts.length,
         draft_artifacts: drafts.map((draft) => draft.artifact.id),
+        ...(gate ? { compliance_review_id: gate.complianceReview.id } : {}),
+        ...(gate ? { approval_ids: gate.approvals.map((approval) => approval.id) } : {}),
       },
       body: reportBody({
         generatedAt,
@@ -563,6 +602,8 @@ export class GrowthContentPipelineService {
       pipeline_value: pipelineValue,
       open_opportunities: openOpportunities.length,
       drafts,
+      ...(gate ? { compliance_review: gate.complianceReview } : {}),
+      approvals: gate?.approvals ?? [],
       report,
       next_actions: nextActions,
     };

@@ -1,5 +1,5 @@
 import { useRef, type FormEvent, type KeyboardEvent } from "react";
-import { Loader2, Paperclip, Send } from "lucide-react";
+import { Loader2, Paperclip, SendHorizontal } from "lucide-react";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { AttachmentChip } from "./AttachmentChip";
@@ -8,9 +8,8 @@ import type { ChatAttachment } from "../../lib/types";
 import { cn } from "../../lib/utils";
 
 /**
- * Composer della chat del coordinator. Textarea auto-espandente (1-12 righe),
- * attachment row con tooltip e remove, hint ⌘+↵ sul tooltip del Send.
- * Submit con onSubmit (Form) o Cmd/Ctrl+Enter.
+ * Composer della chat del coordinator. Textarea auto-espandente, attachment
+ * row e submit via form/Cmd+Enter.
  */
 export function Composer({
   value,
@@ -50,10 +49,7 @@ export function Composer({
   };
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="border-t border-border bg-surface-subtle/40 p-3"
-    >
+    <form onSubmit={handleSubmit} className="border-t border-border/60 bg-surface-subtle/25 p-3">
       {attachments.length > 0 ? (
         <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
           {attachments.map((attachment) => (
@@ -70,7 +66,7 @@ export function Composer({
 
       <div
         className={cn(
-          "flex flex-col rounded-lg border border-border bg-surface-raised transition-colors",
+          "flex flex-col rounded-lg border border-border/70 bg-background/45 transition-colors",
           "focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/30",
         )}
       >
@@ -101,26 +97,24 @@ export function Composer({
                 <Button
                   type="button"
                   variant="ghost"
-                  size="sm"
+                  size="icon-sm"
                   onClick={() => fileInputRef.current?.click()}
                   aria-label="Attach files"
                 >
                   <Paperclip className="h-3.5 w-3.5" />
-                  Attach
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Images, PDF, docs (≤ 10 MB)</TooltipContent>
+              <TooltipContent>Attach files</TooltipContent>
             </Tooltip>
           </div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button type="submit" size="sm" disabled={!canSend}>
-                {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
-                {busy ? "Sending" : "Send"}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Send · ⌘ + ↵</TooltipContent>
-          </Tooltip>
+          <Button type="submit" size="sm" disabled={!canSend}>
+            {busy ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <SendHorizontal className="h-3 w-3" />
+            )}
+            {busy ? "Sending" : "Send"}
+          </Button>
         </div>
       </div>
     </form>

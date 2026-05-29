@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createHmac } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,12 +6,38 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { defaultConfig } from "../config/loader.js";
 import { initWorkspace } from "../init/initializer.js";
 import { workspacePaths } from "../paths.js";
+import { ApprovalRegistry } from "../registries/approval.js";
+import { ArtifactStore } from "../artifacts/store.js";
+import { AuditLog } from "../audit/log.js";
+import { PolicyEngine } from "../policy/engine.js";
+import { RunEngine } from "../runs/engine.js";
+import type { DaemonStatusSnapshot } from "../daemon/state.js";
+import type { DaemonStartResult, DaemonStopResult } from "../daemon/supervisor.js";
 import type {
   GitHubIssuePublishClient,
   GitHubIssuePublishClientIssue,
 } from "../github/issue-publisher.js";
 import { startApiServer, type ApiServer } from "./server.js";
 import type { OpenAICodexOAuthFetch } from "@bureauos/providers";
+
+function parseSseEvents(raw: string): Array<{ event: string; data: unknown }> {
+  return raw
+    .split("\n\n")
+    .map((frame) => frame.trim())
+    .filter((frame) => frame.startsWith("event:"))
+    .map((frame) => {
+      const lines = frame.split(/\r?\n/);
+      const event = lines
+        .find((line) => line.startsWith("event:"))
+        ?.slice("event:".length)
+        .trim();
+      const data = lines
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice("data:".length).trimStart())
+        .join("\n");
+      return { event: event ?? "message", data: JSON.parse(data) as unknown };
+    });
+}
 
 class TestGitHubClient implements GitHubIssuePublishClient {
   created: GitHubIssuePublishClientIssue[] = [];
@@ -136,31 +162,29 @@ describe("API server", () => {
     };
     expect(result.client.slug).toBe("pizzeria-aurora");
     expect(result.project.slug).toBe("pizzeria-aurora-booking-website");
-    expect(result.approvals.length).toBeGreaterThanOrEqual(3);
+    expect(result.approvals).toEqual([]);
+    await expect(new ApprovalRegistry(dir).listPending()).resolves.toEqual([]);
 
     const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(audit).toContain("coordinator.intake.completed");
+    expect(audit).toContain("coordinator_tool.create_intake");
   });
 
   it("moves resolved approvals into history for the ElectronJS approvals page", async () => {
     server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
 
-    const intake = await fetch(`${server.url}/coordinator/intake`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        clientName: "Pizzeria Aurora",
-        message: "Ho parlato con una pizzeria: vuole sito con prenotazioni.",
-      }),
+    const first = await new ApprovalRegistry(dir).request({
+      action: "send_final_proposals",
+      actor: "supreme_coordinator",
+      target: "opp_aurora",
+      scope: "Send final proposal for Pizzeria Aurora",
+      riskLevel: "high",
     });
-    const created = (await intake.json()) as { approvals: Array<{ id: string }> };
-    const first = created.approvals[0];
-    expect(first?.id).toBeTruthy();
 
     const resolved = await fetch(`${server.url}/approvals/resolve`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ id: first?.id, status: "approved", reason: "Scope approved" }),
+      body: JSON.stringify({ id: first.id, status: "approved", reason: "Scope approved" }),
     });
     expect(resolved.status).toBe(200);
 
@@ -175,7 +199,7 @@ describe("API server", () => {
     expect(body).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: first?.id,
+          id: first.id,
           status: "approved",
           reason: "Scope approved",
           resolved_by: "owner",
@@ -186,7 +210,153 @@ describe("API server", () => {
     const pending = (await (await fetch(`${server.url}/approvals`)).json()) as Array<{
       id: string;
     }>;
-    expect(pending.map((approval) => approval.id)).not.toContain(first?.id);
+    expect(pending.map((approval) => approval.id)).not.toContain(first.id);
+  });
+
+  it("exposes local notifications for approval-required work", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const approval = await new ApprovalRegistry(dir).request({
+      action: "open_pull_requests",
+      actor: "supreme_coordinator",
+      target: "github.com/acme/web",
+      scope: "SER-90 API notification fixture",
+      riskLevel: "medium",
+    });
+
+    const response = await fetch(`${server.url}/notifications`);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "approval_needed",
+          source_id: approval.id,
+          dedupe_key: `approval:${approval.id}`,
+        }),
+      ]),
+    );
+  });
+
+  it("requires a decision note before approving high-risk approvals", async () => {
+    const approval = await new ApprovalRegistry(dir).request({
+      action: "deploy_production",
+      actor: "supreme_coordinator",
+      target: "bureauos.app",
+      scope: "Deploy production release",
+      riskLevel: "critical",
+    });
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const withoutNote = await fetch(`${server.url}/approvals/resolve`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: approval.id, status: "approved" }),
+    });
+    expect(withoutNote.status).toBe(400);
+    expect(await withoutNote.json()).toMatchObject({
+      error: "decision note required for critical-risk approvals",
+    });
+
+    const pending = await new ApprovalRegistry(dir).listPending();
+    expect(pending.map((item) => item.id)).toContain(approval.id);
+
+    const approved = await fetch(`${server.url}/approvals/resolve`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        id: approval.id,
+        status: "approved",
+        reason: "Release verified by owner.",
+      }),
+    });
+    expect(approved.status).toBe(200);
+    await expect(approved.json()).resolves.toMatchObject({
+      id: approval.id,
+      status: "approved",
+      reason: "Release verified by owner.",
+      risk_level: "critical",
+    });
+  });
+
+  it("records deny decisions and rejects stale approval resolutions", async () => {
+    const approval = await new ApprovalRegistry(dir).request({
+      action: "send_final_proposals",
+      actor: "supreme_coordinator",
+      target: "opp_123",
+      scope: "Send final proposal to client",
+      riskLevel: "high",
+    });
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const rejected = await fetch(`${server.url}/approvals/resolve`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        id: approval.id,
+        status: "rejected",
+        reason: "Pricing not approved.",
+      }),
+    });
+    expect(rejected.status).toBe(200);
+    await expect(rejected.json()).resolves.toMatchObject({
+      id: approval.id,
+      status: "rejected",
+      reason: "Pricing not approved.",
+    });
+
+    const stale = await fetch(`${server.url}/approvals/resolve`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        id: approval.id,
+        status: "approved",
+        reason: "Retry from stale UI.",
+      }),
+    });
+    expect(stale.status).toBe(409);
+    await expect(stale.json()).resolves.toMatchObject({
+      error: "approval is no longer pending",
+    });
+  });
+
+  it("writes daily notes and decision records through the memory API", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const noteResponse = await fetch(`${server.url}/memory/daily-note`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        section: "Events",
+        line: "Owner asked for durable memory write-back.",
+      }),
+    });
+    expect(noteResponse.status).toBe(201);
+    const note = (await noteResponse.json()) as { path: string; section: string };
+    expect(note.section).toBe("Events");
+    await expect(readFile(note.path, "utf8")).resolves.toContain(
+      "Owner asked for durable memory write-back.",
+    );
+
+    const decisionResponse = await fetch(`${server.url}/memory/decisions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        actor: "supreme_coordinator",
+        what: "Keep owner-visible decisions durable",
+        why: "Coordinator should remember important operating choices.",
+        evidence: ["SER-42"],
+      }),
+    });
+    expect(decisionResponse.status).toBe(201);
+    const decision = (await decisionResponse.json()) as { id: string; globalPath: string };
+    expect(decision.id).toMatch(/^decision_/);
+    await expect(readFile(decision.globalPath, "utf8")).resolves.toContain(
+      "Keep owner-visible decisions durable",
+    );
+
+    const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(audit).toContain("memory.daily_note_appended");
+    expect(audit).toContain("memory.decision_recorded");
   });
 
   it("exposes safe workspace settings for the ElectronJS settings page", async () => {
@@ -219,6 +389,221 @@ describe("API server", () => {
     expect(body.agents.roles).toBeGreaterThan(0);
     expect(body.capabilities.catalog).toBeGreaterThan(0);
     expect(JSON.stringify(body)).not.toContain("must-not-leak");
+  });
+
+  it("surfaces Linear source work item metadata through runs and artifacts", async () => {
+    const config = defaultConfig("agency");
+    const approvals = new ApprovalRegistry(dir);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const policy = new PolicyEngine(config, approvals);
+    const run = await new RunEngine(dir, { audit, artifacts, policy }).start({
+      type: "feature",
+      triggerType: "external_signal",
+      triggerSource: "linear://issue/SER-34",
+      sourceWorkItem: {
+        type: "linear_issue",
+        identifier: "SER-34",
+        url: "https://linear.app/serium/issue/SER-34/link-linear-issue-metadata-to-bureauos-runs-and-artifacts",
+      },
+      scope: "SER-34: Link Linear issue metadata to BureauOS runs and artifacts",
+    });
+    server = await startApiServer({ workspaceRoot: dir, config });
+
+    const runs = (await (await fetch(`${server.url}/runs`)).json()) as Array<{
+      id: string;
+      source_work_item_id?: string;
+      source_work_item_url?: string;
+      linear_identifier?: string;
+    }>;
+    const apiRun = runs.find((item) => item.id === run.id);
+    expect(apiRun?.source_work_item_id).toBe("SER-34");
+    expect(apiRun?.linear_identifier).toBe("SER-34");
+    expect(apiRun?.source_work_item_url).toContain("https://linear.app/serium/issue/SER-34");
+
+    const listedArtifacts = (await (await fetch(`${server.url}/artifacts`)).json()) as Array<{
+      run_id: string;
+      source_work_item_id?: string;
+      linear_url?: string;
+    }>;
+    const apiArtifact = listedArtifacts.find((item) => item.run_id === run.id);
+    expect(apiArtifact?.source_work_item_id).toBe("SER-34");
+    expect(apiArtifact?.linear_url).toContain("https://linear.app/serium/issue/SER-34");
+  });
+
+  it("exposes daemon status through the API", async () => {
+    const snapshot: DaemonStatusSnapshot = {
+      path: join(dir, ".bureauos", "daemon", "status.json"),
+      alive: false,
+      status: "stopped",
+      heartbeat: {
+        scheduler_active: false,
+        scheduler_status: "inactive",
+        updated_at: "2026-05-26T10:00:00.000Z",
+      },
+      diagnostics_path: join(dir, ".bureauos", "daemon", "daemon.log"),
+    };
+    server = await startApiServer({
+      workspaceRoot: dir,
+      config: defaultConfig("agency"),
+      daemonSupervisor: {
+        status: async () => snapshot,
+        start: async () => {
+          throw new Error("unexpected daemon start");
+        },
+        stop: async () => {
+          throw new Error("unexpected daemon stop");
+        },
+      },
+    });
+
+    const response = await fetch(`${server.url}/daemon/status`);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      status: "stopped",
+      alive: false,
+    });
+
+    const health = await fetch(`${server.url}/health`);
+    expect(health.status).toBe(200);
+    await expect(health.json()).resolves.toMatchObject({
+      ok: true,
+      daemon: {
+        status: "stopped",
+        heartbeat: { scheduler_status: "inactive" },
+      },
+    });
+  });
+
+  it("starts the daemon through the API without bypassing the supervisor", async () => {
+    let requestedPort: number | undefined;
+    const snapshot: DaemonStatusSnapshot = {
+      path: join(dir, ".bureauos", "daemon", "status.json"),
+      alive: true,
+      status: "starting",
+      heartbeat: {
+        process_id: 4567,
+        scheduler_active: false,
+        scheduler_status: "inactive",
+        updated_at: "2026-05-26T10:00:00.000Z",
+      },
+      diagnostics_path: join(dir, ".bureauos", "daemon", "daemon.log"),
+      state: {
+        status: "starting",
+        workspace_root: dir,
+        pid: 4567,
+        api_url: "http://127.0.0.1:4848",
+        port: 4848,
+        scheduler_active: false,
+        started_at: "2026-05-26T10:00:00.000Z",
+        updated_at: "2026-05-26T10:00:00.000Z",
+      },
+    };
+    const startResult: DaemonStartResult = {
+      ok: true,
+      status: "started",
+      message: "daemon started pid 4567",
+      pid: 4567,
+      snapshot,
+    };
+    server = await startApiServer({
+      workspaceRoot: dir,
+      config: defaultConfig("agency"),
+      daemonSupervisor: {
+        status: async () => snapshot,
+        start: async (input = {}) => {
+          requestedPort = input.port;
+          return startResult;
+        },
+        stop: async () => {
+          throw new Error("unexpected daemon stop");
+        },
+      },
+    });
+
+    const response = await fetch(`${server.url}/daemon/start`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ port: 4848 }),
+    });
+
+    expect(response.status).toBe(202);
+    expect(requestedPort).toBe(4848);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      status: "started",
+      pid: 4567,
+    });
+  });
+
+  it("stops the daemon through the API without killing the API process", async () => {
+    let stopped = false;
+    const snapshot: DaemonStatusSnapshot = {
+      path: join(dir, ".bureauos", "daemon", "status.json"),
+      alive: true,
+      status: "running",
+      heartbeat: {
+        process_id: 5678,
+        scheduler_active: true,
+        scheduler_status: "active",
+        updated_at: "2026-05-26T10:00:00.000Z",
+      },
+      diagnostics_path: join(dir, ".bureauos", "daemon", "daemon.log"),
+      state: {
+        status: "running",
+        workspace_root: dir,
+        pid: 5678,
+        api_url: "http://127.0.0.1:3737",
+        port: 3737,
+        scheduler_active: true,
+        started_at: "2026-05-26T10:00:00.000Z",
+        updated_at: "2026-05-26T10:00:00.000Z",
+      },
+    };
+    const stopResult: DaemonStopResult = {
+      ok: true,
+      status: "stopped",
+      message: "stop signal sent to pid 5678",
+      pid: 5678,
+      snapshot: {
+        ...snapshot,
+        alive: false,
+        status: "stopped",
+        heartbeat: {
+          ...snapshot.heartbeat,
+          scheduler_active: false,
+          scheduler_status: "inactive",
+        },
+        ...(snapshot.state
+          ? { state: { ...snapshot.state, status: "stopped" as const, scheduler_active: false } }
+          : {}),
+      },
+    };
+    server = await startApiServer({
+      workspaceRoot: dir,
+      config: defaultConfig("agency"),
+      daemonSupervisor: {
+        status: async () => snapshot,
+        start: async () => {
+          throw new Error("unexpected daemon start");
+        },
+        stop: async () => {
+          stopped = true;
+          return stopResult;
+        },
+      },
+    });
+
+    const response = await fetch(`${server.url}/daemon/stop`, { method: "POST" });
+
+    expect(response.status).toBe(200);
+    expect(stopped).toBe(true);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      status: "stopped",
+      pid: 5678,
+    });
   });
 
   it("reads and updates growth memory for the ElectronJS growth page", async () => {
@@ -343,11 +728,7 @@ describe("API server", () => {
         expectedMargin: 40,
       }),
     });
-    const clientPath = join(
-      workspacePaths(dir).clientsDir,
-      "pizzeria-aurora",
-      "CLIENT.md",
-    );
+    const clientPath = join(workspacePaths(dir).clientsDir, "pizzeria-aurora", "CLIENT.md");
     const clientDoc = await readFile(clientPath, "utf8");
     await writeFile(
       clientPath,
@@ -388,9 +769,7 @@ describe("API server", () => {
     expect(listed.status).toBe(200);
     const reports = (await listed.json()) as Array<{ type: string }>;
     expect(reports).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ type: "client-success-status-report" }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ type: "client-success-status-report" })]),
     );
 
     const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
@@ -543,6 +922,7 @@ describe("API server", () => {
       "lead-qualification-report",
       "pricing-brief",
       "proposal-brief",
+      "compliance-review",
     ]);
 
     const reports = (await (await fetch(`${server.url}/revenue/pipeline`)).json()) as Array<{
@@ -590,6 +970,7 @@ describe("API server", () => {
       text: string;
       attachments?: Array<{ name: string; type: string; size: number }>;
       result?: { project: { slug: string } };
+      meta?: Record<string, unknown>;
     }>;
     expect(messages).toHaveLength(2);
     expect(messages[0]).toMatchObject({
@@ -600,13 +981,25 @@ describe("API server", () => {
     expect(messages[1]).toMatchObject({
       role: "coordinator",
       result: { project: { slug: "pizzeria-aurora-booking-website" } },
+      meta: {
+        mode: "intake",
+        provider: {
+          status: "unavailable",
+          reason: "api_explicit_create_intake_tool",
+        },
+        tool: {
+          name: "create_intake",
+          source: "api_endpoint",
+        },
+      },
     });
 
     const rawHistory = await readFile(workspacePaths(dir).coordinatorMessages, "utf8");
     expect(rawHistory).toContain("pizzeria-aurora-booking-website");
+    expect(rawHistory).toContain("api_endpoint");
   });
 
-  it("answers general coordinator chat messages from memory without creating an intake", async () => {
+  it("answers client registry coordinator chat messages without creating an intake", async () => {
     server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
 
     const response = await fetch(`${server.url}/coordinator/messages`, {
@@ -629,7 +1022,11 @@ describe("API server", () => {
       text: "Che clienti abbiamo attivi oggi?",
     });
     expect(body.coordinatorMessage.role).toBe("coordinator");
-    expect(body.coordinatorMessage.text).toContain("memoria locale");
+    expect(body.coordinatorMessage.text).toBe("Non ci sono clienti salvati nel registry locale.");
+    expect(body.coordinatorMessage.meta?.tool).toMatchObject({
+      name: "list_clients",
+      source: "safety_fallback",
+    });
     expect(body.provider.status).toBe("unavailable");
 
     const clients = await fetch(`${server.url}/clients`);
@@ -642,6 +1039,38 @@ describe("API server", () => {
 
     const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(audit).toContain("memory.global.search");
+  });
+
+  it("streams coordinator chat messages through SSE and persists the final pair once", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const response = await fetch(`${server.url}/coordinator/messages/stream`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: "Che clienti abbiamo attivi oggi?" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+    const events = parseSseEvents(await response.text());
+    expect(events.map((event) => event.event)).toEqual(
+      expect.arrayContaining(["status", "delta", "final"]),
+    );
+    const deltas = events
+      .filter((event) => event.event === "delta")
+      .map((event) => (event.data as { text: string }).text)
+      .join("");
+    const final = events.find((event) => event.event === "final")?.data as
+      | { result: { coordinatorMessage: { text: string }; provider: { status: string } } }
+      | undefined;
+    expect(final?.result.provider.status).toBe("unavailable");
+    expect(deltas).toBe(final?.result.coordinatorMessage.text);
+    expect(deltas).toBe("Non ci sono clienti salvati nel registry locale.");
+
+    const messages = (await (await fetch(`${server.url}/coordinator/messages`)).json()) as Array<{
+      role: string;
+    }>;
+    expect(messages.map((message) => message.role)).toEqual(["owner", "coordinator"]);
   });
 
   it("does not answer low-context coordinator chat from historical client context", async () => {
@@ -672,7 +1101,9 @@ describe("API server", () => {
       status: "unavailable",
       reason: "low_context_current_message",
     });
-    expect(body.coordinatorMessage.text).toContain("Sono operativo");
+    expect(body.coordinatorMessage.text).toBe("Ciao Emanuele, ci sono.");
+    expect(body.coordinatorMessage.text.toLowerCase()).not.toContain("postura attiva");
+    expect(body.coordinatorMessage.text.toLowerCase()).not.toContain("memoria storica");
     expect(body.coordinatorMessage.text.toLowerCase()).not.toContain("pizzeria");
     expect(body.coordinatorMessage.text.toLowerCase()).not.toContain("prenotazioni");
 
@@ -711,6 +1142,82 @@ describe("API server", () => {
 
     const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(audit).toContain("memory.global.search");
+  });
+
+  it("browses client, project, daily, and decision memory with redacted detail bodies", async () => {
+    const paths = workspacePaths(dir);
+    await mkdir(join(paths.clientsDir, "acme-labs"), { recursive: true });
+    await mkdir(join(paths.projectsDir, "acme-site"), { recursive: true });
+    await writeFile(
+      join(paths.clientsDir, "acme-labs", "CLIENT.md"),
+      [
+        "---",
+        "id: client_acme",
+        "slug: acme-labs",
+        "---",
+        "# Acme Labs",
+        "",
+        "api_key: sk-testsecret123456",
+        "Active client for a website refresh.",
+      ].join("\n"),
+      "utf8",
+    );
+    await writeFile(
+      join(paths.projectsDir, "acme-site", "PROJECT.md"),
+      "# Acme Site\n\nProject context for Acme Labs.\n",
+      "utf8",
+    );
+    await writeFile(
+      join(paths.dailyDir, "2026-05-26.md"),
+      "# Daily Note\n\nAcme Labs status reviewed.\n",
+      "utf8",
+    );
+    await writeFile(
+      paths.decisionsLog,
+      "# Decisions\n\nAcme Labs proposal remains draft-only.\n",
+      "utf8",
+    );
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const listResponse = await fetch(`${server.url}/memory/browser`);
+    expect(listResponse.status).toBe(200);
+    const listBody = (await listResponse.json()) as {
+      categories: Array<{ id: string; count: number }>;
+      entries: Array<{ path: string; category: string; preview: string }>;
+    };
+
+    expect(listBody.categories.find((category) => category.id === "client")?.count).toBeGreaterThan(
+      0,
+    );
+    expect(
+      listBody.categories.find((category) => category.id === "project")?.count,
+    ).toBeGreaterThan(0);
+    expect(listBody.categories.find((category) => category.id === "daily")?.count).toBeGreaterThan(
+      0,
+    );
+    expect(
+      listBody.categories.find((category) => category.id === "decision")?.count,
+    ).toBeGreaterThan(0);
+
+    const searchResponse = await fetch(`${server.url}/memory/browser?query=Acme`);
+    expect(searchResponse.status).toBe(200);
+    const searchBody = (await searchResponse.json()) as {
+      entries: Array<{ path: string; category: string; score?: number }>;
+    };
+    expect(searchBody.entries.some((entry) => entry.path === "clients/acme-labs/CLIENT.md")).toBe(
+      true,
+    );
+    expect(searchBody.entries.some((entry) => entry.path === "projects/acme-site/PROJECT.md")).toBe(
+      true,
+    );
+
+    const detailResponse = await fetch(
+      `${server.url}/memory/browser?path=${encodeURIComponent("clients/acme-labs/CLIENT.md")}`,
+    );
+    expect(detailResponse.status).toBe(200);
+    const detailBody = (await detailResponse.json()) as { selected?: { body: string } };
+    expect(detailBody.selected?.body).toContain("[redacted]");
+    expect(detailBody.selected?.body).not.toContain("sk-testsecret123456");
   });
 
   it("routes opportunity-like coordinator chat messages into intake", async () => {
@@ -1356,7 +1863,7 @@ describe("API server", () => {
         agent: "development",
         capabilityId: "codex",
         action: "read_repo",
-        target: "github.com/acme/web",
+        target: "github.com/acme/web?api_key=sk-apitestsecret123456",
       }),
     });
 
@@ -1369,6 +1876,25 @@ describe("API server", () => {
     expect(body.status).toBe("allowed");
     expect(body.artifact.type).toBe("capability-audit");
     expect(body.policy.action).toBe("observe_signals");
+
+    const explain = await fetch(`${server.url}/policy/explain`);
+    expect(explain.status).toBe(200);
+    const explainBody = (await explain.json()) as {
+      decisions: Array<{ outcome: string; matched_rule: string; capability: string }>;
+    };
+    expect(explainBody.decisions).toEqual([
+      expect.objectContaining({
+        outcome: "allow",
+        matched_rule: "autonomy.observe_signals",
+        capability: "codex",
+      }),
+    ]);
+
+    const auditResponse = await fetch(`${server.url}/audit`);
+    expect(auditResponse.status).toBe(200);
+    const auditBody = JSON.stringify(await auditResponse.json());
+    expect(auditBody).toContain("[redacted]");
+    expect(auditBody).not.toContain("sk-apitestsecret123456");
   });
 
   it("connects OpenAI Codex with the browser OAuth callback flow", async () => {

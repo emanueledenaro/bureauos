@@ -56,6 +56,21 @@ describe("ProjectHealthReviewService", () => {
     const artifacts = new ArtifactStore(dir);
     const policy = new PolicyEngine(defaultConfig("agency"), new ApprovalRegistry(dir));
     const runs = new RunEngine(dir, { audit, artifacts, policy });
+    await artifacts.write({
+      type: "github-signal-report",
+      createdBy: "supreme_coordinator",
+      projectId: project.id,
+      clientId: client.id,
+      status: "submitted",
+      metadata: {
+        repository: "example/miraglia",
+        pull_requests_count: 1,
+        failing_checks_count: 2,
+        stale_issues_count: 1,
+        stale_pull_requests_count: 1,
+      },
+      body: "# GitHub Signal Report",
+    });
 
     const result = await new ProjectHealthReviewService(dir, { audit, artifacts, runs }).generate({
       runId: "run_project_health",
@@ -74,6 +89,9 @@ describe("ProjectHealthReviewService", () => {
       client: { id: client.id, name: "Miraglia Pizza" },
       risk: "blocked",
       pending_approvals: 1,
+      github_failing_checks: 2,
+      github_stale_items: 2,
+      github_open_pull_requests: 1,
       open_pipeline_value: 5000,
     });
 
@@ -81,6 +99,8 @@ describe("ProjectHealthReviewService", () => {
     expect(written?.body).toContain("# Project Health Review");
     expect(written?.body).toContain("Miraglia Booking Website");
     expect(written?.body).toContain("project is blocked");
+    expect(written?.body).toContain("GitHub failing checks 2");
+    expect(written?.body).toContain("2 stale GitHub issue/PR signal(s)");
     expect(written?.body).toContain("Owner approval is still required");
 
     const log = await readFile(workspacePaths(dir).auditLog, "utf8");
