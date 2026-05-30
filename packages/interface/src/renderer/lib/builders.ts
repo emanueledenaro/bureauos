@@ -723,3 +723,38 @@ export function adaptiveDefaultMode(state: DashboardState): AdaptiveMode {
   if (state.loading) return "portfolio";
   return buildTodayActions(state).length > 0 ? "today" : "portfolio";
 }
+
+/** The view BureauOS opens on for a fresh session. */
+export function resolveAutoMode(state: DashboardState, isSmallScreen: boolean): AdaptiveMode {
+  return isSmallScreen ? "coordinator" : adaptiveDefaultMode(state);
+}
+
+export interface AutoSelectionInput {
+  /** The owner has explicitly navigated at least once. */
+  modeTouched: boolean;
+  /** A default view has already been auto-selected this session. */
+  autoSelected: boolean;
+  /** Dashboard state is still loading its first batch. */
+  loading: boolean;
+  isSmallScreen: boolean;
+  state: DashboardState;
+}
+
+/**
+ * Decide the auto-selected default view (SER-223).
+ *
+ * Auto-selection runs **once**, on the first successful load. After that — or
+ * once the owner has navigated — a background refresh or SSE event (which
+ * arrives roughly every minute as the daemon generates artifacts) must NOT
+ * re-derive the active view, or it yanks the owner off whatever screen they
+ * were using. A `null` mode means "leave the current view untouched".
+ */
+export function nextAutoSelection(input: AutoSelectionInput): {
+  mode: AdaptiveMode | null;
+  autoSelected: boolean;
+} {
+  if (input.modeTouched || input.autoSelected || input.loading) {
+    return { mode: null, autoSelected: input.autoSelected };
+  }
+  return { mode: resolveAutoMode(input.state, input.isSmallScreen), autoSelected: true };
+}

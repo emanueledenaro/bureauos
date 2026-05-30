@@ -33,25 +33,68 @@ async function getBase(): Promise<string> {
   return cachedBase;
 }
 
-export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+/**
+ * Default client-side request timeout (SER-221). Without it, a stalled request
+ * never settles, so the triggering control's loading state (useAsyncAction
+ * `busy`, the dashboard "Loading…") sticks forever and the open socket leaks —
+ * which under Chrome's 6-connections-per-host cap eventually exhausts the budget
+ * and silently freezes every later fetch (SER-222). Bounding each request makes
+ * a stalled call fail fast and visibly, and frees the socket within the window.
+ */
+const DEFAULT_TIMEOUT_MS = 30_000;
+
+export type ApiInit = RequestInit & { timeoutMs?: number };
+
+export async function api<T>(path: string, init?: ApiInit): Promise<T> {
   const base = await getBase();
   if (!base)
     throw new Error("API server is not running. Run `bureau serve` or start the desktop app.");
-  const res = await fetch(`${base}${path}`, {
-    ...init,
-    headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
-  });
-  if (!res.ok) {
-    let error = `${res.status} ${res.statusText}`;
-    try {
-      const body = (await res.json()) as { error?: string };
-      if (body.error) error = `${res.status} ${body.error}`;
-    } catch {
-      // Keep the HTTP status when the server returns an empty or non-JSON error.
-    }
-    throw new Error(error);
+
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, signal: callerSignal, ...rest } = init ?? {};
+
+  // One controller drives both the timeout and any caller-provided cancellation
+  // (e.g. the dashboard aborting its in-flight fan-out on unmount), so the fetch
+  // is torn down — and its socket released — on whichever fires first.
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  const onCallerAbort = (): void => controller.abort();
+  if (callerSignal) {
+    if (callerSignal.aborted) controller.abort();
+    else callerSignal.addEventListener("abort", onCallerAbort, { once: true });
   }
-  return (await res.json()) as T;
+
+  try {
+    const res = await fetch(`${base}${path}`, {
+      ...rest,
+      signal: controller.signal,
+      headers: { "content-type": "application/json", ...(rest.headers ?? {}) },
+    });
+    if (!res.ok) {
+      let error = `${res.status} ${res.statusText}`;
+      try {
+        const body = (await res.json()) as { error?: string };
+        if (body.error) error = `${res.status} ${body.error}`;
+      } catch {
+        // Keep the HTTP status when the server returns an empty or non-JSON error.
+      }
+      throw new Error(error);
+    }
+    return (await res.json()) as T;
+  } catch (err) {
+    if (timedOut) {
+      throw new Error(
+        `Request to ${path} timed out after ${Math.round(timeoutMs / 1000)}s. The API server may be busy or unreachable.`,
+      );
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+    if (callerSignal) callerSignal.removeEventListener("abort", onCallerAbort);
+  }
 }
 
 export interface CompanyPulse {
@@ -848,23 +891,25 @@ function parseSseFrame(frame: string): { event: string; data: unknown } | undefi
 }
 
 export const Api = {
-  pulse: () => api<CompanyPulse>("/company-pulse"),
-  clients: () => api<ClientRecord[]>("/clients"),
-  clientIntelligence: () => api<ClientIntelligenceSummary>("/clients/intelligence"),
+  pulse: (signal?: AbortSignal) => api<CompanyPulse>("/company-pulse", { signal }),
+  clients: (signal?: AbortSignal) => api<ClientRecord[]>("/clients", { signal }),
+  clientIntelligence: (signal?: AbortSignal) =>
+    api<ClientIntelligenceSummary>("/clients/intelligence", { signal }),
   generateClientSuccessStatus: (input: { clientSlug?: string; clientId?: string } = {}) =>
     api<ClientSuccessStatusResult>("/client-success-status/generate", {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  projects: () => api<ProjectRecord[]>("/projects"),
-  projectOwnership: () => api<ProjectOwnershipRecord[]>("/project-ownership"),
-  opportunities: () => api<OpportunityRecord[]>("/opportunities"),
+  projects: (signal?: AbortSignal) => api<ProjectRecord[]>("/projects", { signal }),
+  projectOwnership: (signal?: AbortSignal) =>
+    api<ProjectOwnershipRecord[]>("/project-ownership", { signal }),
+  opportunities: (signal?: AbortSignal) => api<OpportunityRecord[]>("/opportunities", { signal }),
   generateRevenuePipeline: (input: { maxOpportunities?: number; opportunityId?: string } = {}) =>
     api<RevenuePipelineResult>("/revenue/pipeline/generate", {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  growthMemory: () => api<GrowthMemorySummary>("/growth/memory"),
+  growthMemory: (signal?: AbortSignal) => api<GrowthMemorySummary>("/growth/memory", { signal }),
   updateGrowthMemory: (input: { brand?: string; offers?: string; channels?: string }) =>
     api<GrowthMemorySummary>("/growth/memory", {
       method: "POST",
@@ -880,15 +925,17 @@ export const Api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  approvals: () => api<ApprovalRecord[]>("/approvals"),
-  approvalsResolved: () => api<ApprovalRecord[]>("/approvals/resolved"),
-  notifications: () => api<LocalNotificationRecord[]>("/notifications"),
-  runs: () => api<RunRecord[]>("/runs"),
-  agents: () => api<AgentDefinition[]>("/agents"),
-  capabilities: () => api<CapabilityDefinition[]>("/capabilities"),
-  artifacts: () => api<ArtifactRecord[]>("/artifacts"),
-  providers: () => api<ProviderConnection[]>("/providers"),
-  settings: () => api<SettingsSummary>("/settings"),
+  approvals: (signal?: AbortSignal) => api<ApprovalRecord[]>("/approvals", { signal }),
+  approvalsResolved: (signal?: AbortSignal) =>
+    api<ApprovalRecord[]>("/approvals/resolved", { signal }),
+  notifications: (signal?: AbortSignal) =>
+    api<LocalNotificationRecord[]>("/notifications", { signal }),
+  runs: (signal?: AbortSignal) => api<RunRecord[]>("/runs", { signal }),
+  agents: (signal?: AbortSignal) => api<AgentDefinition[]>("/agents", { signal }),
+  capabilities: (signal?: AbortSignal) => api<CapabilityDefinition[]>("/capabilities", { signal }),
+  artifacts: (signal?: AbortSignal) => api<ArtifactRecord[]>("/artifacts", { signal }),
+  providers: (signal?: AbortSignal) => api<ProviderConnection[]>("/providers", { signal }),
+  settings: (signal?: AbortSignal) => api<SettingsSummary>("/settings", { signal }),
   updateSettings: (input: {
     autonomy?: Record<string, boolean>;
     growth_autonomy?: Record<string, boolean>;
@@ -898,7 +945,8 @@ export const Api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  providerConnectors: () => api<ProviderConnector[]>("/provider/connectors"),
+  providerConnectors: (signal?: AbortSignal) =>
+    api<ProviderConnector[]>("/provider/connectors", { signal }),
   providerModels: (provider: string) =>
     api<ProviderModelList>(`/provider/models?provider=${encodeURIComponent(provider)}`),
   coordinatorMessages: (limit = 50) =>
@@ -915,41 +963,73 @@ export const Api = {
     const base = await getBase();
     if (!base)
       throw new Error("API server is not running. Run `bureau serve` or start the desktop app.");
-    const res = await fetch(`${base}/coordinator/messages/stream`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input),
-    });
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-    if (!res.body) throw new Error("Coordinator stream did not return a readable body");
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let finalResult: CoordinatorChatResult | undefined;
+    // Streaming replies can legitimately pause between chunks while the provider
+    // thinks, so a single hard deadline would kill long-but-healthy generations.
+    // Instead bound *inactivity*: abort only if no byte arrives for this long, so
+    // a dead stream surfaces a visible error (and clears the "Sending…" state,
+    // SER-221) while a slow-but-progressing one keeps going.
+    const STREAM_INACTIVITY_MS = 90_000;
+    const controller = new AbortController();
+    let timedOut = false;
+    let inactivityTimer: ReturnType<typeof setTimeout> | undefined;
+    const armInactivityTimer = (): void => {
+      if (inactivityTimer) clearTimeout(inactivityTimer);
+      inactivityTimer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, STREAM_INACTIVITY_MS);
+    };
 
-    while (true) {
-      const { value, done } = await reader.read();
-      buffer += decoder.decode(value, { stream: !done });
-      let boundary = buffer.indexOf("\n\n");
-      while (boundary >= 0) {
-        const frame = buffer.slice(0, boundary).trim();
-        buffer = buffer.slice(boundary + 2);
-        boundary = buffer.indexOf("\n\n");
-        if (!frame || frame.startsWith(":")) continue;
-        const parsed = parseSseFrame(frame);
-        if (!parsed) continue;
-        const event = parsed.data as CoordinatorChatStreamEvent;
-        if (event.type === "status") handlers.onStatus?.(event.status);
-        if (event.type === "delta") handlers.onDelta?.(event.text);
-        if (event.type === "final") finalResult = event.result;
-        if (event.type === "error") throw new Error(event.error);
+    armInactivityTimer();
+    try {
+      const res = await fetch(`${base}/coordinator/messages/stream`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input),
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      if (!res.body) throw new Error("Coordinator stream did not return a readable body");
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalResult: CoordinatorChatResult | undefined;
+
+      while (true) {
+        const { value, done } = await reader.read();
+        armInactivityTimer();
+        buffer += decoder.decode(value, { stream: !done });
+        let boundary = buffer.indexOf("\n\n");
+        while (boundary >= 0) {
+          const frame = buffer.slice(0, boundary).trim();
+          buffer = buffer.slice(boundary + 2);
+          boundary = buffer.indexOf("\n\n");
+          if (!frame || frame.startsWith(":")) continue;
+          const parsed = parseSseFrame(frame);
+          if (!parsed) continue;
+          const event = parsed.data as CoordinatorChatStreamEvent;
+          if (event.type === "status") handlers.onStatus?.(event.status);
+          if (event.type === "delta") handlers.onDelta?.(event.text);
+          if (event.type === "final") finalResult = event.result;
+          if (event.type === "error") throw new Error(event.error);
+        }
+        if (done) break;
       }
-      if (done) break;
-    }
 
-    if (!finalResult) throw new Error("Coordinator stream ended before a final message");
-    return finalResult;
+      if (!finalResult) throw new Error("Coordinator stream ended before a final message");
+      return finalResult;
+    } catch (err) {
+      if (timedOut) {
+        throw new Error(
+          `Coordinator stream timed out after ${Math.round(STREAM_INACTIVITY_MS / 1000)}s with no response. The provider may be unreachable.`,
+        );
+      }
+      throw err;
+    } finally {
+      if (inactivityTimer) clearTimeout(inactivityTimer);
+    }
   },
   coordinatorMemory: (query: string, limit = 12) =>
     api<CoordinatorGlobalMemoryPacket>(
@@ -962,8 +1042,9 @@ export const Api = {
     params.set("limit", String(input.limit ?? 80));
     return api<MemoryBrowserResult>(`/memory/browser?${params.toString()}`);
   },
-  policyExplain: (limit = 20) => api<PolicyExplainResult>(`/policy/explain?limit=${limit}`),
-  audit: (n = 50) => api<AuditEvent[]>(`/audit?n=${n}`),
+  policyExplain: (limit = 20, signal?: AbortSignal) =>
+    api<PolicyExplainResult>(`/policy/explain?limit=${limit}`, { signal }),
+  audit: (n = 50, signal?: AbortSignal) => api<AuditEvent[]>(`/audit?n=${n}`, { signal }),
   coordinatorIntake: (input: {
     message: string;
     clientName?: string;

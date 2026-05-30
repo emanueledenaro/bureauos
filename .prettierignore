@@ -4,6 +4,7 @@ out
 out-main
 out-renderer
 .bureauos
+.claude
 pnpm-lock.yaml
 coverage
 *.webp

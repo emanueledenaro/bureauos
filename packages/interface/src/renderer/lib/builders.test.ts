@@ -3,8 +3,10 @@ import type { ArtifactRecord, OpportunityRecord } from "./api";
 import {
   buildLinkedWorkItems,
   buildPortfolioLanes,
+  nextAutoSelection,
   normalizeRepositoryReference,
   pipelineValue,
+  resolveAutoMode,
 } from "./builders";
 import type { DashboardState } from "./types";
 
@@ -392,5 +394,51 @@ describe("buildLinkedWorkItems", () => {
       failingChecks: 1,
       prDetail: "2 stale GitHub items",
     });
+  });
+});
+
+describe("nextAutoSelection (SER-223)", () => {
+  const base = {
+    modeTouched: false,
+    autoSelected: false,
+    loading: false,
+    isSmallScreen: false,
+    state: emptyDashboardState,
+  };
+
+  it("auto-selects a default view on first load", () => {
+    const result = nextAutoSelection(base);
+    expect(result.mode).toBe(resolveAutoMode(emptyDashboardState, false));
+    expect(result.autoSelected).toBe(true);
+  });
+
+  it("prefers the coordinator view on a small screen at first load", () => {
+    expect(nextAutoSelection({ ...base, isSmallScreen: true }).mode).toBe("coordinator");
+  });
+
+  it("does not auto-select while the dashboard is still loading", () => {
+    const result = nextAutoSelection({ ...base, loading: true });
+    expect(result.mode).toBeNull();
+    expect(result.autoSelected).toBe(false);
+  });
+
+  it("never changes the view once a default has been auto-selected", () => {
+    // A background refresh / SSE event arrives with new state, but the owner is
+    // already looking at their auto-selected screen — it must stay put.
+    const result = nextAutoSelection({
+      ...base,
+      autoSelected: true,
+      state: {
+        ...emptyDashboardState,
+        artifacts: [{ id: "report_1", type: "report", status: "ok" }],
+      },
+    });
+    expect(result.mode).toBeNull();
+    expect(result.autoSelected).toBe(true);
+  });
+
+  it("never overrides the owner's explicit navigation", () => {
+    const result = nextAutoSelection({ ...base, modeTouched: true });
+    expect(result.mode).toBeNull();
   });
 });
