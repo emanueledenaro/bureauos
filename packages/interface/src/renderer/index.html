@@ -1,8 +1,17 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" translate="no">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Opt out of browser auto-translation. Google Translate (and similar
+      extensions) reparent text nodes into <font> wrappers; React then crashes
+      with "Failed to execute 'insertBefore' on 'Node'" when it inserts a
+      sibling (e.g. a post-action success banner) next to a node Translate moved,
+      blanking the whole SPA. This is a real failure for users with auto-translate
+      on, so the document declares itself non-translatable. (SER-215)
+    -->
+    <meta name="google" content="notranslate" />
     <meta
       http-equiv="Content-Security-Policy"
       content="default-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data: https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; connect-src http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*;"
