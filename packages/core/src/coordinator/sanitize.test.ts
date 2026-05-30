@@ -58,4 +58,21 @@ Prossima mossa: preparo lo scope operativo.
     expect(sanitized).not.toContain("Non ho creato");
     expect(sanitized).not.toContain("ho solo letto");
   });
+
+  it("strips a leading model reasoning header but keeps the answer (SER-219)", () => {
+    const sanitized = sanitizeCoordinatorVisibleText(
+      "**Deciding on response language**\nFocus today on one thing: create commercial momentum.\nNext move: qualify the open opportunities.",
+    );
+    expect(sanitized).toBe(
+      "Focus today on one thing: create commercial momentum.\nNext move: qualify the open opportunities.",
+    );
+    expect(sanitized.toLowerCase()).not.toContain("deciding on response language");
+  });
+
+  it("keeps a legitimate answer that merely starts with a reasoning-like word", () => {
+    const sanitized = sanitizeCoordinatorVisibleText(
+      "Considering the open pipeline of 27.000 EUR, the next move is to qualify Acme before sending a proposal so we do not commit prematurely.",
+    );
+    expect(sanitized).toContain("the next move is to qualify Acme");
+  });
 });

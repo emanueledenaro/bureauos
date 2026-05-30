@@ -1226,7 +1226,9 @@ describe("API server", () => {
       status: "unavailable",
       reason: "low_context_current_message",
     });
-    expect(body.coordinatorMessage.text).toBe("Ciao Emanuele, ci sono.");
+    expect(body.coordinatorMessage.text).toBe(
+      "Ciao! Sono operativo — dimmi da dove partiamo: priorità di oggi, un cliente o una proposta.",
+    );
     expect(body.coordinatorMessage.text.toLowerCase()).not.toContain("postura attiva");
     expect(body.coordinatorMessage.text.toLowerCase()).not.toContain("memoria storica");
     expect(body.coordinatorMessage.text.toLowerCase()).not.toContain("pizzeria");

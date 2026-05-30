@@ -643,7 +643,9 @@ describe("CoordinatorChatService", () => {
     expect(result.mode).toBe("answer");
     expect(providerWasAsked).toBe(false);
     expect(result.provider.reason).toBe("low_context_current_message");
-    expect(result.coordinatorMessage.text).toBe("Ciao Emanuele, ci sono.");
+    expect(result.coordinatorMessage.text).toBe(
+      "Ciao! Sono operativo — dimmi da dove partiamo: priorità di oggi, un cliente o una proposta.",
+    );
     expect(result.coordinatorMessage.text.toLowerCase()).not.toContain("pizzeria");
     expect(result.coordinatorMessage.text.toLowerCase()).not.toContain("prenotazioni");
   });
@@ -684,7 +686,9 @@ describe("CoordinatorChatService", () => {
 
     expect(result.provider.reason).toBe("low_context_current_message");
     expect(providerWasAsked).toBe(false);
-    expect(result.coordinatorMessage.text).toBe("Ciao Emanuele, ci sono.");
+    expect(result.coordinatorMessage.text).toBe(
+      "Tutto operativo da questa parte. Su cosa vuoi che mi concentri?",
+    );
     expect(result.coordinatorMessage.text.toLowerCase()).not.toContain("postura attiva");
     expect(result.coordinatorMessage.text.toLowerCase()).not.toContain("memoria storica");
     expect(result.coordinatorMessage.text.toLowerCase()).not.toContain("i need to");
@@ -707,7 +711,7 @@ describe("CoordinatorChatService", () => {
 
       expect(result.provider.reason).toBe("low_context_current_message");
       expect(result.coordinatorMessage.text).toBe(
-        "Ciao Emanuele, sono il Supreme Coordinator di BureauOS. Tengo insieme clienti, progetti, consegne, priorita e rischi; quando mi dai un obiettivo operativo, lo trasformo in prossimi passi verificabili.",
+        "Sono il Supreme Coordinator di BureauOS: tengo insieme clienti, progetti, consegne, priorità e rischi, e trasformo i tuoi obiettivi in prossimi passi verificabili.",
       );
       expect(result.coordinatorMessage.text.toLowerCase()).not.toContain("provider");
       expect(result.coordinatorMessage.text.toLowerCase()).not.toContain("memoria locale");
