@@ -4,7 +4,7 @@ import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { defaultConfig } from "../config/loader.js";
+import { defaultConfig, loadConfig } from "../config/loader.js";
 import { initWorkspace } from "../init/initializer.js";
 import { workspacePaths } from "../paths.js";
 import { ApprovalRegistry } from "../registries/approval.js";
@@ -429,6 +429,91 @@ describe("API server", () => {
     expect(body.agents.roles).toBeGreaterThan(0);
     expect(body.capabilities.catalog).toBeGreaterThan(0);
     expect(JSON.stringify(body)).not.toContain("must-not-leak");
+  });
+
+  it("persists autonomy, growth policy, and limit edits with an audit trail", async () => {
+    const config = await loadConfig(workspacePaths(dir).configFile);
+    server = await startApiServer({ workspaceRoot: dir, config });
+
+    const response = await fetch(`${server.url}/settings/autonomy`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        autonomy: { merge_pull_requests: true },
+        growth_autonomy: { publish_public_content: true },
+        limits: { max_retries_per_task: 5 },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      autonomy: Record<string, boolean | number>;
+      growth_autonomy: Record<string, boolean>;
+      limits: Record<string, number | boolean>;
+    };
+    expect(body.autonomy.merge_pull_requests).toBe(true);
+    expect(body.growth_autonomy.publish_public_content).toBe(true);
+    expect(body.limits.max_retries_per_task).toBe(5);
+
+    // The change is durable: re-reading the file reflects the patched values
+    // while untouched leaves are preserved.
+    const persisted = await loadConfig(workspacePaths(dir).configFile);
+    expect(persisted.autonomy.merge_pull_requests).toBe(true);
+    expect(persisted.growth_autonomy.publish_public_content).toBe(true);
+    expect(persisted.limits.max_retries_per_task).toBe(5);
+    expect(persisted.organization.name).toBe("API Test Agency");
+
+    // A fresh GET reflects the live in-memory config without a restart.
+    const refreshed = (await (await fetch(`${server.url}/settings`)).json()) as {
+      autonomy: Record<string, boolean | number>;
+    };
+    expect(refreshed.autonomy.merge_pull_requests).toBe(true);
+
+    const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(audit).toContain("settings.updated");
+    expect(audit).toContain("autonomy.merge_pull_requests=true");
+    expect(audit).toContain("growth_autonomy.publish_public_content=true");
+    expect(audit).toContain("limits.max_retries_per_task=5");
+  });
+
+  it("rejects invalid or non-editable settings without touching the config", async () => {
+    const config = await loadConfig(workspacePaths(dir).configFile);
+    server = await startApiServer({ workspaceRoot: dir, config });
+    const before = await readFile(workspacePaths(dir).configFile, "utf8");
+
+    const unknownKey = await fetch(`${server.url}/settings/autonomy`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ autonomy: { delete_everything: true } }),
+    });
+    expect(unknownKey.status).toBe(400);
+
+    const wrongType = await fetch(`${server.url}/settings/autonomy`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ autonomy: { merge_pull_requests: "yes" } }),
+    });
+    expect(wrongType.status).toBe(400);
+
+    const badLimit = await fetch(`${server.url}/settings/policy`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ limits: { max_retries_per_task: 0 } }),
+    });
+    expect(badLimit.status).toBe(400);
+
+    const unknownGroup = await fetch(`${server.url}/settings/policy`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ providers: { openai: "leak" } }),
+    });
+    expect(unknownGroup.status).toBe(400);
+
+    // No rejected request altered the file or wrote an audit record.
+    const after = await readFile(workspacePaths(dir).configFile, "utf8");
+    expect(after).toBe(before);
+    const audit = await readFile(workspacePaths(dir).auditLog, "utf8").catch(() => "");
+    expect(audit).not.toContain("settings.updated");
   });
 
   it("surfaces Linear source work item metadata through runs and artifacts", async () => {

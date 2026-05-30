@@ -889,6 +889,15 @@ export const Api = {
   artifacts: () => api<ArtifactRecord[]>("/artifacts"),
   providers: () => api<ProviderConnection[]>("/providers"),
   settings: () => api<SettingsSummary>("/settings"),
+  updateSettings: (input: {
+    autonomy?: Record<string, boolean>;
+    growth_autonomy?: Record<string, boolean>;
+    limits?: Record<string, number | boolean>;
+  }) =>
+    api<SettingsSummary>("/settings/autonomy", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   providerConnectors: () => api<ProviderConnector[]>("/provider/connectors"),
   providerModels: (provider: string) =>
     api<ProviderModelList>(`/provider/models?provider=${encodeURIComponent(provider)}`),
