@@ -238,6 +238,17 @@ export class OpenAICodexOAuthAdapter implements ProviderAdapter {
   public readonly name = "OpenAI Codex OAuth";
   public readonly defaultModel?: string;
 
+  /**
+   * In-flight token refresh shared across concurrent callers.
+   *
+   * OpenAI rotates the refresh token on every exchange, so a second concurrent
+   * refresh would replay an already-consumed refresh token and brick the saved
+   * credential. Single-flight ensures one refresh runs at a time; concurrent
+   * callers reuse its result. Cleared on success and failure so a failed
+   * refresh never wedges later calls.
+   */
+  private refreshInFlight?: Promise<string>;
+
   constructor(
     id: string,
     private readonly options: OpenAICodexOAuthOptions = {},
@@ -264,8 +275,20 @@ export class OpenAICodexOAuthAdapter implements ProviderAdapter {
     if (!this.options.refreshToken) {
       throw new OpenAICodexOAuthError("OpenAI Codex OAuth refresh token is not connected");
     }
+    // Single-flight: if a refresh is already running, reuse it instead of
+    // starting a second one with a rotating refresh token that the provider
+    // will reject.
+    if (!this.refreshInFlight) {
+      this.refreshInFlight = this.refreshAccessToken(this.options.refreshToken).finally(() => {
+        this.refreshInFlight = undefined;
+      });
+    }
+    return this.refreshInFlight;
+  }
+
+  private async refreshAccessToken(refreshToken: string): Promise<string> {
     const token = await refreshOpenAICodexToken({
-      refreshToken: this.options.refreshToken,
+      refreshToken,
       ...(this.options.fetch ? { fetch: this.options.fetch } : {}),
     });
     this.options.accessToken = token.accessToken;
