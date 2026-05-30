@@ -61,8 +61,8 @@ exception.
 | Security baseline | Secrets are not stored in repo; destructive shell/file/git actions are blocked by default; provider auth is kept in local workspace auth files. | partial | runtime boundary, auth store, security docs, `docs/security-and-policy-model.md`, `docs/secrets.md`, audit gate |
 | Local API safety | Local API exposes only workspace state needed by the interface and must document trust assumptions before v1. | partial | API routes, settings summary |
 | Tests | Core behavior has automated coverage and v1 release must pass build, typecheck, test, lint, and targeted smoke checks. | partial | workspace scripts and CI |
-| Documentation | README, roadmap, implementation coverage, policy docs, security docs, and this checklist accurately describe shipped vs. future behavior. | partial | public docs |
-| Release process | v1 release notes, changelog entry, version tag, verification evidence, and known limitations are prepared before tagging. | partial | `docs/release-process.md`, `CHANGELOG.md`, `release:check` |
+| Documentation | README, roadmap, implementation coverage, CLI reference, owner-interface tour, policy docs, security docs, and this checklist accurately describe shipped vs. future behavior. | partial | public docs, `docs/cli.md`, `docs/owner-interface.md` |
+| Release process | v1 release notes, changelog entry, version tag, verification evidence, packaging decision, and known limitations are prepared before tagging. | partial | `docs/release-process.md`, `CHANGELOG.md`, `release:check`, `packages/interface/electron-builder.yml` |
 
 ## Deferred From v1
 
@@ -104,7 +104,7 @@ be considered complete.
 | --- | --- | --- |
 | Codex runtime host | A real host-backed subprocess runner (`HostCodexRuntimeRunner`) now executes an owner-configured, allow-listed command sequence behind the safety boundary, wired through `runtime.codex` config and the CLI dispatcher. Remaining decision: how the host drives actual model-driven code generation (Codex CLI vs API vs agent loop) into that command/edit cycle, and whether the Electron host injects its own executor. | partial |
 | Local API trust model | Document whether API access is loopback-only, token-protected, or process-private for v1. | partial | `docs/secrets.md` |
-| Release packaging | Decide whether v1 ships as source-only, CLI package, unsigned desktop build, or signed desktop app. | designed |
+| Release packaging | Decided: v1 ships source-only; an unsigned opt-in desktop build is configured by `packages/interface/electron-builder.yml`. Signed distribution is post-v1. | implemented |
 | GitHub verification workspace | Provide a safe test repository for live issue, branch, test, and draft PR smoke checks. | blocked |
 | Linear verification workspace | Use host MCP access only; repository runtime should keep Linear as a capability boundary, not embed credentials. | blocked |
 | Public positioning | Keep public copy accurate: BureauOS is a local-first, policy-driven foundation, not a fully autonomous agency today. | implemented |

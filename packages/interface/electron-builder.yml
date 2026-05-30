@@ -1,0 +1,51 @@
+# electron-builder configuration for the BureauOS Operating Room.
+#
+# v1 packaging decision (SER-173): BureauOS v1 ships source-only. An UNSIGNED,
+# local desktop build is available opt-in for owners who want a runnable app.
+# This config does NOT enable code signing, notarization, an auto-updater, or
+# any publish target. See docs/release-process.md for the full release flow.
+#
+# Prerequisite: electron-builder is not a committed dependency. Install it in
+# this package before running `pnpm --filter @bureauos/interface run pack`
+# (directory build) or `run dist` (installer):
+#
+#   pnpm --filter @bureauos/interface add -D electron-builder
+#
+# The renderer/main/preload bundles must be built first via
+# `pnpm --filter @bureauos/interface run build` (electron-vite -> out/).
+
+appId: com.bureauos.operating-room
+productName: BureauOS Operating Room
+copyright: BureauOS contributors
+
+# electron-vite emits main, preload, and renderer bundles into out/.
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - out/**/*
+  - package.json
+
+# Unsigned by default. Do not enable signing/notarization for v1.
+afterSign: null
+
+mac:
+  target:
+    - dir
+  category: public.app-category.productivity
+  identity: null # unsigned; no notarization
+  gatekeeperAssess: false
+
+win:
+  target:
+    - dir
+  signAndEditExecutable: false
+
+linux:
+  target:
+    - dir
+  category: Office
+
+# No publish target: v1 distribution is source-only.
+publish: null

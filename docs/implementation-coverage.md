@@ -69,9 +69,9 @@ Every major capability described in the docs must become one of:
 | Clients view | `ClientIntelligenceService` backed account cards with pipeline, won value, delivery risk, follow-ups, and memory paths | implemented |
 | Today view | React renderer action queue from approvals, blocked projects, problematic runs, client follow-ups, stalled opportunities, provider status, and growth memory readiness | implemented |
 | Goals view | React renderer OKR board derived from revenue, delivery, client success, growth, autonomy, and execution registries | implemented |
-| Revenue pulse | React renderer + `/company-pulse` | partial |
-| Live operations timeline | SSE `/events` + audit log | implemented |
-| Supreme Coordinator chat | React renderer + `/coordinator/messages`, workspace-backed chat history, memory packet assembly, provider-router-backed answer path with deterministic local fallback | partial |
+| Revenue pulse | React renderer + `/company-pulse`, KPI sparklines and delta vs last report, Top Clients by LTV from client intelligence | partial |
+| Live operations timeline | SSE `/events` + audit log, typed per-event icons | implemented |
+| Supreme Coordinator chat | React renderer + `/coordinator/messages`, SSE token streaming (`POST /coordinator/messages/stream`), workspace-backed chat history, memory packet assembly, provider-router-backed answer path with deterministic local fallback | partial |
 | Memory view | React renderer + `GET /coordinator/memory`, audited global-memory packet, query hits, root memory preview, and relative memory paths | implemented |
 | Approvals panel and page | React renderer + `/approvals`, `/approvals/resolved`, `/approvals/resolve`, pending rail, filtered history page | implemented |
 | Reports generation | `BusinessReportService`, `bureau report generate`, `/reports/generate` | implemented |
@@ -124,7 +124,7 @@ Every major capability described in the docs must become one of:
 | Client account review | scheduler creates account review runs and real client-account-plan artifacts from client intelligence | partial |
 | Threshold triggers | `GitHubSignalTriggerService` and `OperationalSignalTriggerService` start idempotent runs from failing/stale GitHub work, blocked internal work, unanswered client messages, and empty content pipeline signals; internal signals now attach `project-health-report`, `client-account-plan`, or `content-pipeline-report` artifacts before specialist dispatch | implemented |
 | Memory triggers | `MemoryTriggerService`, `memory_due` client-success runs from due `next_follow_up_at` client memory, `client-success-status-report` artifacts, `bureau autonomy memory-scan`, `/autonomy/memory-triggers/scan`, scheduler memory scan | implemented |
-| Bounded retry system | `AutonomousRetryService`, `autonomy-retry-report`, `bureau autonomy retry-scan`, `/autonomy/retries/scan`, scheduler retry scan, max attempts from `limits.max_retries_per_task` | partial |
+| Bounded retry system | `AutonomousRetryService`, `autonomy-retry-report`, `bureau autonomy retry-scan`, `/autonomy/retries/scan`, scheduler retry scan, max attempts from `limits.max_retries_per_task`, policy escalation to approval; covered by `retry.test.ts` | implemented |
 | Failing check detection | `GitHubSignalSyncService`, `GitHubWebhookIngestionService`, `github sync`, `/github/webhook`, `github-signal-report` | partial |
 | Stale PR/issue detection | `GitHubSignalSyncService`, `github sync --stale-days` | partial |
 
@@ -169,8 +169,11 @@ Every major capability described in the docs must become one of:
 
 ## Current Priority Order
 
-1. Add ElectronJS pages for clients, projects, approvals, reports, memory, settings.
-2. Expand always-on scheduler execution from review artifacts into retry loops and repository verification.
-3. Add connector adapters behind draft-first policy gates.
-4. Wire Codex runtime execution for development/reviewer/QA under policy.
-5. Add OS notifications/tray/autostart for long-running daemon mode.
+The ElectronJS pages (clients, projects, approvals, reports, memory, settings),
+the bounded retry loop, and repository verification have shipped. Remaining
+priority order:
+
+1. Add connector adapters behind draft-first policy gates.
+2. Wire Codex runtime execution for development/reviewer/QA under policy.
+3. Add OS notifications/tray/autostart for long-running daemon mode.
+4. Promote partial memory/run/artifact surfaces toward full v1 acceptance.
