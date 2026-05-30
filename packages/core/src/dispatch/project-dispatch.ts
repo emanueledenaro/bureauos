@@ -192,12 +192,24 @@ Specialist agents may use only the project memory, linked client memory, run con
 `;
 }
 
-function pendingProjectApprovals(
+/**
+ * Select the pending approvals that belong to a project by **structured fields
+ * only** — the approval's `target` (or a `project_id` front-matter field) equal
+ * to the project id.
+ *
+ * The previous implementation also matched `approval.scope.includes(project.name)`.
+ * Scope is arbitrary owner free text and project names are frequently prefixes
+ * of one another ("CRM" vs "CRM Redesign", "Acme App" vs "Acme App Redesign"),
+ * so the substring test leaked one project's approvals into another's dispatch
+ * packet and specialist handoffs (SER-179). Genuine project approvals are
+ * created with `target: project.id`, so structured matching keeps them.
+ */
+export function pendingProjectApprovals(
   approvals: readonly ApprovalRecord[],
   project: ProjectRecord,
 ): ApprovalRecord[] {
   return approvals.filter(
-    (approval) => approval.target === project.id || approval.scope.includes(project.name),
+    (approval) => approval.target === project.id || approval["project_id"] === project.id,
   );
 }
 
