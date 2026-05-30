@@ -36,6 +36,7 @@ import {
   Scheduler,
   VERSION,
   appendDailyNote,
+  buildCodexRuntimeFromConfig,
   createCoordinatorRunDispatcher,
   autonomyLevelName,
   defaultConfig,
@@ -899,10 +900,21 @@ const handleRunNew: Handler = async (args) => {
   const audit = new AuditLog(workspacePaths(process.cwd()).auditLog);
   const policy = new PolicyEngine(config, approvals);
   const artifacts = new ArtifactStore(process.cwd());
+  const developmentRuntime = buildCodexRuntimeFromConfig(config);
+  const capabilityUse = developmentRuntime
+    ? new CapabilityUseService(process.cwd(), { config, artifacts, approvals, policy, audit })
+    : undefined;
   const dispatcher =
     flags.stub === true
       ? undefined
-      : createCoordinatorRunDispatcher({ audit, artifacts, policy, config });
+      : createCoordinatorRunDispatcher({
+          audit,
+          artifacts,
+          policy,
+          config,
+          ...(developmentRuntime ? { developmentRuntime } : {}),
+          ...(capabilityUse ? { capabilityUse } : {}),
+        });
   const engine = new RunEngine(process.cwd(), {
     audit,
     artifacts,

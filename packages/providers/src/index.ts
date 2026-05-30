@@ -92,3 +92,17 @@ export type {
   CodexRuntimeRunnerInput,
   CodexRuntimeRunnerResult,
 } from "./adapters/codex.js";
+export {
+  HostCodexRuntimeRunner,
+  SubprocessHostCommandExecutor,
+  GitStatusDiffInspector,
+  parseGitPorcelain,
+} from "./adapters/codex-host-runner.js";
+export type {
+  HostCodexRuntimeRunnerOptions,
+  HostCodexCommand,
+  HostCommandExecutor,
+  HostCommandExecution,
+  HostCommandResult,
+  WorkspaceDiffInspector,
+} from "./adapters/codex-host-runner.js";

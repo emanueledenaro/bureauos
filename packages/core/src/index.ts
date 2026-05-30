@@ -440,6 +440,8 @@ export type {
   ProjectTestRunnerResult,
   ResolvedProjectTestCommand,
 } from "./execution/project-test-runner.js";
+export { buildCodexRuntimeFromConfig } from "./execution/codex-runtime.js";
+export type { BuildCodexRuntimeOptions } from "./execution/codex-runtime.js";
 
 // Provider auth
 export {
