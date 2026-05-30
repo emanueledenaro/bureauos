@@ -366,4 +366,86 @@ describe("RunEngine", () => {
     });
     expect(run.status).toBe("needs_human");
   });
+
+  it("records a terminal decision when a dispatched run ends blocked (SER-192)", async () => {
+    const config = defaultConfig("freelancer");
+    const approvals = new ApprovalRegistry(dir);
+    const policy = new PolicyEngine(config, approvals);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const engine = new RunEngine(dir, {
+      audit,
+      artifacts,
+      policy,
+      recordDecisions: true,
+      dispatcher: async () => ({
+        status: "blocked",
+        blockers: ["missing final scope approval"],
+      }),
+    });
+
+    const run = await engine.start({
+      type: "planning",
+      triggerType: "owner_request",
+      triggerSource: "ser-192-blocked",
+      scope: "Draft proposal",
+    });
+    expect(run.status).toBe("blocked");
+
+    const decisions = await readFile(workspacePaths(dir).decisionsLog, "utf8");
+    expect(decisions).toContain(`Run ${run.id} blocked: Draft proposal`);
+    expect(decisions).toContain("missing final scope approval");
+    const runFile = await readFile(join(workspacePaths(dir).runsDir, `${run.id}.md`), "utf8");
+    expect(runFile).toContain("## Decision Records");
+  });
+
+  it("records a terminal decision when a dispatched run fails (SER-192)", async () => {
+    const config = defaultConfig("freelancer");
+    const approvals = new ApprovalRegistry(dir);
+    const policy = new PolicyEngine(config, approvals);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const engine = new RunEngine(dir, {
+      audit,
+      artifacts,
+      policy,
+      recordDecisions: true,
+      dispatcher: async () => {
+        throw new Error("runtime exploded");
+      },
+    });
+
+    const run = await engine.start({
+      type: "planning",
+      triggerType: "owner_request",
+      triggerSource: "ser-192-failed",
+      scope: "Generate report",
+    });
+    expect(run.status).toBe("failed");
+
+    const decisions = await readFile(workspacePaths(dir).decisionsLog, "utf8");
+    expect(decisions).toContain(`Run ${run.id} failed: Generate report`);
+    expect(decisions).toContain("runtime exploded");
+  });
+
+  it("records a terminal decision when policy blocks a run at start (SER-192)", async () => {
+    const config = defaultConfig("freelancer");
+    config.autonomy.open_pull_requests = false;
+    const approvals = new ApprovalRegistry(dir);
+    const policy = new PolicyEngine(config, approvals);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const engine = new RunEngine(dir, { audit, artifacts, policy, recordDecisions: true });
+
+    const run = await engine.start({
+      type: "feature",
+      triggerType: "owner_request",
+      triggerSource: "ser-192-policy",
+      scope: "implement X",
+    });
+    expect(run.status).toBe("needs_human");
+
+    const decisions = await readFile(workspacePaths(dir).decisionsLog, "utf8");
+    expect(decisions).toContain(`Run ${run.id} needs_human: implement X`);
+  });
 });

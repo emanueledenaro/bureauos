@@ -211,6 +211,10 @@ export class RunEngine {
                 : "require_approval",
         result: "ok",
       });
+      await this.recordTerminalDecision(record, {
+        status: "needs_human",
+        reason: `Policy outcome ${policyDecision.outcome} blocked run start.`,
+      });
       return record;
     }
 
@@ -329,6 +333,11 @@ export class RunEngine {
         ...(result.error ? { error: result.error } : {}),
       });
       await writeRunOutcomeMemory(this.workspaceRoot, record, { audit: this.deps.audit });
+      await this.recordTerminalDecision(record, {
+        status: result.status,
+        ...(result.blockers?.length ? { blockers: [...result.blockers] } : {}),
+        ...(result.error ? { reason: result.error } : {}),
+      });
       return record;
     }
 
@@ -369,6 +378,49 @@ export class RunEngine {
         ...(record.client_id ? { clientId: record.client_id } : {}),
         ...(record.project_id ? { projectId: record.project_id } : {}),
         ...(record.artifacts.length ? { evidence: [...record.artifacts] } : {}),
+      });
+    } catch (error) {
+      await this.deps.audit.append({
+        actor: record.created_by,
+        action: "memory.decision_record_failed",
+        target: record.id,
+        result: "error",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
+   * Append a structured decision record on a non-completed terminal transition
+   * (blocked, failed, needs_human, cancelled) so the durable ledger is symmetric
+   * — the blocked/failed outcomes an owner most needs logged (what was blocked,
+   * why, evidence) are no longer silently omitted (SER-192). Like completion
+   * decisions, this honors `recordDecisions` and never fails the run on a
+   * decision-write error.
+   */
+  private async recordTerminalDecision(
+    record: RunRecord,
+    outcome: { status: string; blockers?: string[]; reason?: string },
+  ): Promise<void> {
+    if (!this.deps.recordDecisions) return;
+    const blockers = (outcome.blockers ?? []).filter(Boolean);
+    const reason = outcome.reason?.trim();
+    const why = [
+      `Run type ${record.type} triggered by ${record.trigger_type} (${record.trigger_source}) ended ${outcome.status}.`,
+      blockers.length ? `Blockers: ${blockers.join("; ")}.` : "",
+      reason ? `Reason: ${reason}.` : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    try {
+      await recordDecision(this.workspaceRoot, {
+        what: `Run ${record.id} ${outcome.status}: ${record.scope}`,
+        why,
+        actor: record.created_by,
+        runId: record.id,
+        ...(record.client_id ? { clientId: record.client_id } : {}),
+        ...(record.project_id ? { projectId: record.project_id } : {}),
+        ...(blockers.length ? { evidence: blockers } : {}),
       });
     } catch (error) {
       await this.deps.audit.append({
