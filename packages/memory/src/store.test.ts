@@ -238,4 +238,24 @@ describe("LocalMemoryStore", () => {
     expect(s.canAccess("../outside.md")).toBe(false);
     await expect(s.read("../outside.md")).rejects.toBeInstanceOf(MemoryAccessDeniedError);
   });
+
+  it("does not walk the indexes/ storage directory as memory (SER-198)", async () => {
+    await writeFile(join(dir, "ROOT.md"), "# Root\nPizzeria booking project.\n", "utf8");
+    // A sidecar a custom semantic provider might drop under index storage.
+    await mkdir(join(dir, "indexes", "semantic"), { recursive: true });
+    await writeFile(
+      join(dir, "indexes", "semantic", "shard.md"),
+      "# Shard\nPizzeria booking index sidecar.\n",
+      "utf8",
+    );
+
+    const s = new LocalMemoryStore(dir);
+    const listed = await s.list();
+    expect(listed.some((file) => file.includes("indexes/"))).toBe(false);
+
+    const hits = await s.search("pizzeria");
+    expect(hits.some((hit) => hit.path.includes("indexes/"))).toBe(false);
+    // The real memory file is still found.
+    expect(hits.some((hit) => hit.path.endsWith("ROOT.md"))).toBe(true);
+  });
 });

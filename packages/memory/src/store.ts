@@ -53,7 +53,9 @@ export class MemoryAccessDeniedError extends Error {
   }
 }
 
-const IGNORED_MEMORY_DIRS = new Set([".index", ".git", "node_modules"]);
+// Keep in sync with sqlite-index.ts and semantic.ts: `indexes` is index storage
+// inside the memory root and must not be walked as memory content (SER-198).
+const IGNORED_MEMORY_DIRS = new Set([".index", ".git", "node_modules", "indexes"]);
 
 function toPortablePath(path: string): string {
   return path.split(sep).join("/");
