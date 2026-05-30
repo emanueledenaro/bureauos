@@ -133,7 +133,10 @@ export class PolicyEngine {
         reason: "action requires explicit human approval",
         matched_rule: `policy.always_human.${input.action}`,
         approval_required: true,
-        required_gates: ["human_approval"],
+        // Surface the owner-configured security/human gates (SER-181) alongside
+        // the baseline human-approval requirement so toggling those flags is
+        // visible in policy output. The action escalates either way.
+        required_gates: [...new Set(["human_approval", ...this.gatesFor(input)])],
       };
     }
 
@@ -228,8 +231,9 @@ export class PolicyEngine {
 
   private gatesFor(input: PolicyInput): string[] {
     const gates: string[] = [];
+    const limits = this.config.limits;
     if (input.action === "open_pull_requests" || input.action === "push_commits") {
-      if (this.config.limits.require_tests_for_code_changes) gates.push("tests_required");
+      if (limits.require_tests_for_code_changes) gates.push("tests_required");
       gates.push("linked_issue");
     }
     if (input.action === "merge_pull_requests") {
@@ -238,6 +242,27 @@ export class PolicyEngine {
     }
     if (input.action === "deploy_production") {
       gates.push("release_readiness_review");
+    }
+    // Owner-configured safety controls (SER-181). These flags were previously
+    // dead config — rendered into bureauos.yaml and editable in Settings but
+    // never consulted by any policy decision. Each now adds a real gate that the
+    // capability layer treats as blocking until a matching approval is granted.
+    if (input.action === "auth_policy_change" && limits.require_security_review_for_auth_changes) {
+      gates.push("security_review");
+    }
+    if (
+      (input.action === "change_pricing" ||
+        input.action === "change_billing" ||
+        input.action === "change_ad_budget") &&
+      limits.require_security_review_for_payment_changes
+    ) {
+      gates.push("security_review");
+    }
+    if (
+      (input.action === "delete_data" || input.action === "destructive_db_change") &&
+      limits.require_human_for_destructive_actions
+    ) {
+      gates.push("human_review");
     }
     return gates;
   }

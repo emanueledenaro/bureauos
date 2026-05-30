@@ -364,4 +364,38 @@ describe("CapabilityUseService", () => {
     const approvals = await new ApprovalRegistry(dir).listPending();
     expect(approvals.map((approval) => approval.action)).toContain("open_pull_requests");
   });
+
+  it("blocks a payment-review-gated capability until an approval is granted (SER-181)", async () => {
+    const config = defaultConfig("agency");
+    config.growth_autonomy.change_pricing = true;
+    config.limits.require_security_review_for_payment_changes = true;
+    const approvals = new ApprovalRegistry(dir);
+    const service = new CapabilityUseService(dir, { config, approvals });
+
+    // codex.read_repo is an assigned, allowed capability; the policyAction
+    // override points policy at the payment action so the security_review gate
+    // applies.
+    const blocked = await service.check({
+      agent: "development",
+      capabilityId: "codex",
+      action: "read_repo",
+      policyAction: "change_pricing",
+      target: "pricing://acme",
+    });
+    expect(blocked.status).toBe("blocked");
+    expect(blocked.missing_gates).toContain("security_review");
+    expect(blocked.approval?.id).toBeTruthy();
+
+    // Grant the requested approval; the gate is now satisfied and use proceeds.
+    await approvals.resolve(blocked.approval!.id, "approved", "owner", "reviewed");
+    const allowed = await service.check({
+      agent: "development",
+      capabilityId: "codex",
+      action: "read_repo",
+      policyAction: "change_pricing",
+      target: "pricing://acme",
+    });
+    expect(allowed.status).toBe("allowed");
+    expect(allowed.missing_gates).not.toContain("security_review");
+  });
 });
