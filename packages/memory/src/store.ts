@@ -59,9 +59,44 @@ function toPortablePath(path: string): string {
   return path.split(sep).join("/");
 }
 
+/**
+ * Normalize a relative memory path to a portable, canonical form.
+ *
+ * Backslashes become `/`, leading/trailing slashes are stripped, and `.`/`..`
+ * segments are collapsed with posix semantics so the textual access checks
+ * agree with what the filesystem would resolve. A path that walks above its own
+ * root (a leftover leading `..`) is rejected, so traversal can never bypass
+ * scope isolation such as `clients/acme/../bravo/secret.md`.
+ */
 function normalizeRelativePath(path: string): string {
   const portable = path.replace(/\\/g, "/").replace(/^\/+/, "");
-  return portable === "." ? "" : portable.replace(/\/+$/, "");
+  const segments: string[] = [];
+  for (const segment of portable.split("/")) {
+    if (segment === "" || segment === ".") continue;
+    if (segment === "..") {
+      if (segments.length === 0) {
+        throw new MemoryAccessDeniedError(`memory path escapes root: ${path}`);
+      }
+      segments.pop();
+      continue;
+    }
+    segments.push(segment);
+  }
+  return segments.join("/");
+}
+
+/**
+ * Like {@link normalizeRelativePath} but returns `null` instead of throwing when
+ * the path escapes its root. Used by boolean access predicates that must report
+ * "no access" rather than surfacing an error.
+ */
+function tryNormalizeRelativePath(path: string): string | null {
+  try {
+    return normalizeRelativePath(path);
+  } catch (error) {
+    if (error instanceof MemoryAccessDeniedError) return null;
+    throw error;
+  }
 }
 
 function normalizeRule(rule: string | MemoryAccessRule): MemoryAccessRule {
@@ -201,7 +236,8 @@ export class ScopedMemoryStore extends LocalMemoryStore {
   }
 
   canAccess(relativePath: string): boolean {
-    const normalized = normalizeRelativePath(relativePath);
+    const normalized = tryNormalizeRelativePath(relativePath);
+    if (normalized === null) return false;
     return this.allowed.some((rule) => this.matchesRule(normalized, rule));
   }
 

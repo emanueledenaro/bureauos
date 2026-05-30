@@ -193,4 +193,35 @@ describe("LocalMemoryStore", () => {
     const hits = await s.search("secret");
     expect(hits).toEqual([]);
   });
+
+  it("denies cross-scope access via .. path traversal", async () => {
+    await mkdir(join(dir, "clients", "acme"), { recursive: true });
+    await mkdir(join(dir, "clients", "bravo"), { recursive: true });
+    await writeFile(join(dir, "clients", "acme", "CLIENT.md"), "Acme scoped notes.\n", "utf8");
+    await writeFile(
+      join(dir, "clients", "bravo", "secret.md"),
+      "Bravo confidential secret.\n",
+      "utf8",
+    );
+
+    const s = new ScopedMemoryStore(dir, [{ path: "clients/acme", kind: "directory" }]);
+
+    // Sanity: the in-scope client file is reachable.
+    await expect(s.read("clients/acme/CLIENT.md")).resolves.toContain("Acme");
+
+    // Traversal that textually starts with the allowed prefix but resolves into
+    // a sibling scope must be denied for canAccess, read, and list.
+    const traversal = "clients/acme/../bravo/secret.md";
+    expect(s.canAccess(traversal)).toBe(false);
+    await expect(s.read(traversal)).rejects.toBeInstanceOf(MemoryAccessDeniedError);
+    await expect(s.list("clients/acme/../bravo")).rejects.toBeInstanceOf(MemoryAccessDeniedError);
+
+    // The escaped file must never appear in a scoped listing of the allowed dir.
+    const listed = await s.list("clients/acme");
+    expect(listed.some((file) => file.endsWith("clients/bravo/secret.md"))).toBe(false);
+
+    // A traversal that climbs above the memory root is rejected outright.
+    expect(s.canAccess("../outside.md")).toBe(false);
+    await expect(s.read("../outside.md")).rejects.toBeInstanceOf(MemoryAccessDeniedError);
+  });
 });
