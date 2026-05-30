@@ -94,6 +94,17 @@ Search executive and project memory and print ranked hits with score, path, and
 a snippet. Uses the SQLite FTS5 index when the Node runtime exposes `node:sqlite`
 and falls back to a Markdown scan otherwise.
 
+### `bureau memory consolidate`
+
+Regenerate `ROOT.md` — the Supreme Coordinator's always-loaded executive index —
+from current workspace state. Its managed sections (clients in play, active
+projects, priorities, blockers, recent decisions, risk register, topics) are
+rebuilt deterministically from the registries and `DECISIONS.md`; the static
+Retrieval Map and Standing Policies scaffolding is preserved. No model is used,
+so it never invents facts. The write is atomic and every run is audited
+(`memory.root.consolidated`). The daemon also runs this daily when
+`memory.promote_daily_notes_to_durable_memory` is enabled.
+
 ### `bureau decision`
 
 Append a decision record to `DECISIONS.md` (and cross-link a run when given).

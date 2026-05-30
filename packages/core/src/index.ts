@@ -109,6 +109,18 @@ export { appendDailyNote } from "./memory/daily.js";
 export type { DailyNoteSection } from "./memory/daily.js";
 export { appendDecision, recordDecision } from "./memory/decisions.js";
 export type { DecisionInput, DecisionWriteResult } from "./memory/decisions.js";
+export {
+  RootMemoryConsolidationService,
+  buildRootMemoryView,
+  renderRootMemory,
+  ROOT_CONSOLIDATION_ACTOR,
+} from "./memory/consolidation.js";
+export type {
+  RootMemoryView,
+  RootConsolidationInputs,
+  RootConsolidationResult,
+  RootMemoryConsolidationDeps,
+} from "./memory/consolidation.js";
 export { writeRunOutcomeMemory } from "./memory/run-outcomes.js";
 export type { RunOutcomeWritebackDeps, RunOutcomeWritebackResult } from "./memory/run-outcomes.js";
 export {

@@ -46,6 +46,7 @@ import {
   memoryIndexForConfig,
   memoryStoreForConfig,
   recordDecision,
+  RootMemoryConsolidationService,
   startApiServer,
   sourceWorkItemFromTriggerSource,
   sourceWorkItemLabel,
@@ -83,6 +84,7 @@ Memory:
   memory search <query>                     Search executive and project memory
   memory index status                       Show the FTS5 search index status (path, count, staleness)
   memory index rebuild                      Rebuild the FTS5 search index from Markdown memory
+  memory consolidate                        Regenerate ROOT.md (always-loaded index) from live workspace state
 
 Registries:
   client create --name <n> [--status s] [--industry i]
@@ -453,6 +455,19 @@ const handleMemoryIndex: Handler = async (args) => {
     );
   }
   process.stdout.write(`  path: ${status.path}\n`);
+  return 0;
+};
+
+const handleMemoryConsolidate: Handler = async () => {
+  const result = await new RootMemoryConsolidationService(process.cwd()).consolidate();
+  const c = result.counts;
+  process.stdout.write(`memory: consolidated ROOT.md\n`);
+  process.stdout.write(`  path: ${result.rootPath}\n`);
+  process.stdout.write(
+    `  ${c.activeClients} client(s) in play, ${c.activeProjects} active project(s), ` +
+      `${c.openOpportunities} open opportunity(ies), ${c.blockers} blocker(s), ` +
+      `${c.pendingApprovals} pending approval(s), ${c.recentDecisions} recent decision(s)\n`,
+  );
   return 0;
 };
 
@@ -1808,7 +1823,11 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
   status: handleStatus,
   intake: handleIntake,
   config: { validate: handleConfigValidate },
-  memory: { search: handleMemorySearch, index: handleMemoryIndex },
+  memory: {
+    search: handleMemorySearch,
+    index: handleMemoryIndex,
+    consolidate: handleMemoryConsolidate,
+  },
   client: {
     create: handleClientCreate,
     list: handleClientList,

@@ -32,6 +32,7 @@ Every major capability described in the docs must become one of:
 | --- | --- | --- |
 | Supreme Coordinator as only owner-facing agent | `CoordinatorIntakeService`, `CoordinatorChatService`, `CoordinatorGlobalMemoryService`, ElectronJS Coordinator panel, `bureau intake`, `POST /coordinator/intake`, `GET/POST /coordinator/messages`, `GET /coordinator/memory` | partial |
 | Company memory | `.bureauos/memory/COMPANY.md`, `ROOT.md`, daily notes, decisions | partial |
+| Durable memory consolidation | `RootMemoryConsolidationService` regenerates `ROOT.md`'s managed sections (clients in play, active projects, priorities, blockers, recent decisions, risk register, topics) deterministically from live state; `bureau memory consolidate`, daily scheduler `consolidate_root_memory` tick gated by `memory.promote_daily_notes_to_durable_memory`, audited `memory.root.consolidated` | implemented |
 | Client memory | `ClientRegistry`, per-client memory files | implemented |
 | Client account intelligence | `ClientIntelligenceService`, value score/classification, `/clients/intelligence`, `bureau client intelligence`, ElectronJS Clients page | implemented |
 | Project memory | `ProjectRegistry`, per-project memory files | implemented |
