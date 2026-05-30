@@ -112,4 +112,38 @@ describe("MemoryBrowserService", () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  it("returns topical semantic hits at the default config min_score (SER-195)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-memory-browser-"));
+    try {
+      const paths = workspacePaths(dir);
+      await mkdir(join(paths.clientsDir, "acme-labs"), { recursive: true });
+      await writeFile(
+        join(paths.clientsDir, "acme-labs", "CLIENT.md"),
+        "# Acme Labs\n\nFrontend retention support. Frontend retention engagement and frontend support retention roadmap.\n",
+        "utf8",
+      );
+      await mkdir(join(paths.clientsDir, "other-co"), { recursive: true });
+      await writeFile(
+        join(paths.clientsDir, "other-co", "CLIENT.md"),
+        "# Other Co\n\nKitchen plumbing invoice schedule and warehouse logistics.\n",
+        "utf8",
+      );
+      const config = defaultConfig("agency");
+      config.memory.semantic_index.enabled = true;
+      config.memory.semantic_index.provider = "local";
+      // Exercise the shipped default threshold, not the min_score = 0 workaround:
+      // a topical query must still surface the on-topic document (SER-195).
+      expect(config.memory.semantic_index.min_score).toBeGreaterThan(0);
+
+      const result = await new MemoryBrowserService(dir, config).browse({
+        query: "frontend retention support",
+      });
+
+      expect(result.semantic_hits.length).toBeGreaterThan(0);
+      expect(result.semantic_hits[0]?.path).toBe("clients/acme-labs/CLIENT.md");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });

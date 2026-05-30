@@ -29,7 +29,7 @@ describe("loadConfig", () => {
       enabled: false,
       provider: "none",
       index_path: ".bureauos/memory/indexes/semantic",
-      min_score: 0.72,
+      min_score: 0.1,
     });
     expect(config.provider).toEqual({});
     expect(config.disabled_providers).toEqual([]);
