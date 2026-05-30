@@ -17,6 +17,7 @@ import {
   fileExists,
   listDocs,
   readDoc,
+  withFileLock,
   writeDoc,
   type FrontMatter,
 } from "../registries/base.js";
@@ -362,18 +363,24 @@ export class RunEngine {
   }
 
   async attachArtifacts(id: string, artifactIds: readonly string[]): Promise<RunRecord> {
-    const current = await this.get(id);
-    if (!current) throw new Error(`run not found: ${id}`);
-    const artifacts = Array.from(new Set([...current.artifacts, ...artifactIds]));
-    const updated: RunRecord = {
-      ...current,
-      artifacts,
-      updated: new Date().toISOString(),
-    };
-    await this.persist(
-      updated,
-      `# Run ${id}\n\nScope: ${updated.scope}\nStatus: ${updated.status}\n\nArtifacts: ${artifacts.join(", ")}\nCompleted: ${updated.completed}\n`,
-    );
+    // Serialize the read-modify-write so concurrent callers (e.g. several
+    // scheduler jobs attaching artifacts to the same run) don't clobber each
+    // other's updates.
+    const updated = await withFileLock(this.file(id), async () => {
+      const current = await this.get(id);
+      if (!current) throw new Error(`run not found: ${id}`);
+      const artifacts = Array.from(new Set([...current.artifacts, ...artifactIds]));
+      const next: RunRecord = {
+        ...current,
+        artifacts,
+        updated: new Date().toISOString(),
+      };
+      await this.persist(
+        next,
+        `# Run ${id}\n\nScope: ${next.scope}\nStatus: ${next.status}\n\nArtifacts: ${artifacts.join(", ")}\nCompleted: ${next.completed}\n`,
+      );
+      return next;
+    });
     await this.deps.audit.append({
       actor: updated.created_by,
       action: "run.artifacts_attached",
@@ -384,15 +391,19 @@ export class RunEngine {
   }
 
   async patch(id: string, patch: FrontMatter): Promise<RunRecord> {
-    const path = this.file(id);
-    if (!(await fileExists(path))) throw new Error(`run not found: ${id}`);
-    const doc = await readDoc<RunRecord>(path);
-    const updated = {
-      ...doc.front,
-      ...patch,
-      updated: new Date().toISOString(),
-    } as RunRecord;
-    await writeDoc(path, updated, doc.body);
+    // Serialize the read-modify-write so overlapping patches don't lose fields.
+    const updated = await withFileLock(this.file(id), async () => {
+      const path = this.file(id);
+      if (!(await fileExists(path))) throw new Error(`run not found: ${id}`);
+      const doc = await readDoc<RunRecord>(path);
+      const next = {
+        ...doc.front,
+        ...patch,
+        updated: new Date().toISOString(),
+      } as RunRecord;
+      await writeDoc(path, next, doc.body);
+      return next;
+    });
     await this.deps.audit.append({
       actor: updated.created_by,
       action: "run.metadata_updated",

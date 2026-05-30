@@ -1,5 +1,6 @@
-import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { randomBytes } from "node:crypto";
 import {
   defaultProviderAuthMode,
   defaultProviderCredentialId,
@@ -246,10 +247,21 @@ export class ProviderAuthStore {
 
   private async save(file: ProviderAuthFile): Promise<void> {
     await mkdir(dirname(this.file), { recursive: true });
-    await writeFile(this.file, `${JSON.stringify(file, null, 2)}\n`, {
-      encoding: "utf8",
-      mode: 0o600,
-    });
+    // Write to a sibling temp file (with the same 0o600 permissions) and
+    // atomically rename it into place, so a concurrent reader never sees a
+    // truncated credentials file and a crash mid-write cannot corrupt it.
+    const tmp = `${this.file}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
+    try {
+      await writeFile(tmp, `${JSON.stringify(file, null, 2)}\n`, {
+        encoding: "utf8",
+        mode: 0o600,
+      });
+      await chmod(tmp, 0o600);
+      await rename(tmp, this.file);
+    } catch (error) {
+      await rm(tmp, { force: true }).catch(() => undefined);
+      throw error;
+    }
     await chmod(this.file, 0o600);
   }
 }

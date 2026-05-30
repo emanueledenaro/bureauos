@@ -1,7 +1,7 @@
-import { access, mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { access, mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { constants as FS } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ProviderAuthStore, maskSecret, providerAuthPath } from "./auth-store.js";
 
@@ -120,5 +120,21 @@ describe("ProviderAuthStore", () => {
     const result = await store.setDefaultModel("anthropic", "claude-x");
     expect(result).toBeUndefined();
     expect(await store.list()).toHaveLength(0);
+  });
+
+  it("writes the credentials file atomically without leaving temp files (SER-163)", async () => {
+    const store = ProviderAuthStore.forWorkspace(dir);
+    await store.upsert({ provider: "openai", apiKey: "sk-openai-1234567890" });
+    await store.upsert({ provider: "anthropic", apiKey: "sk-ant-1234567890" });
+
+    const path = providerAuthPath(dir);
+    // A full read always parses cleanly (no truncated/partial JSON).
+    const parsed = JSON.parse(await readFile(path, "utf8")) as { credentials: unknown[] };
+    expect(parsed.credentials).toHaveLength(2);
+    // Permissions are preserved by the atomic temp-file + rename.
+    expect((await stat(path)).mode & 0o777).toBe(0o600);
+    // No leftover *.tmp files from the atomic write.
+    const siblings = await readdir(dirname(path));
+    expect(siblings.filter((name) => name.endsWith(".tmp"))).toHaveLength(0);
   });
 });
