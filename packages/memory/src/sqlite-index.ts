@@ -42,7 +42,11 @@ export interface SqliteFtsMemoryIndexStatus {
 
 const INDEX_SCHEMA_VERSION = 1;
 const DEFAULT_INDEX_FILE = ".index/memory-fts5.sqlite";
-const IGNORED_MEMORY_DIRS = new Set([".index", ".git", "node_modules"]);
+// `indexes` holds the FTS5 + semantic index storage (default
+// `.bureauos/memory/indexes/...`, inside the memory root). All three memory
+// walkers must skip it so index sidecars are never indexed as memory; the
+// semantic walker already did, the FTS5/scan walkers did not (SER-198).
+const IGNORED_MEMORY_DIRS = new Set([".index", ".git", "node_modules", "indexes"]);
 
 let sqliteModulePromise: Promise<SqliteModule | undefined> | undefined;
 
