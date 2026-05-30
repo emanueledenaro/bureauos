@@ -1646,7 +1646,11 @@ const ROUTES: Record<string, RouteHandler> = {
   },
 
   "GET /audit": async ({ res, options, url }) => {
-    const n = Number(url.searchParams.get("n") ?? "100");
+    // Validate + clamp the tail size like the other limit endpoints. Without
+    // this, `?n=abc` (NaN) / `?n=0` / negative slice(-n) collapses to slice(0)
+    // and dumps the entire (sensitive, unbounded) audit log (SER-229).
+    const requested = Number(url.searchParams.get("n") ?? "100");
+    const n = Number.isFinite(requested) ? Math.min(Math.max(Math.trunc(requested), 1), 1000) : 100;
     try {
       const content = await readFile(workspacePaths(options.workspaceRoot).auditLog, "utf8");
       const lines = content.trim().split("\n").filter(Boolean).slice(-n);
