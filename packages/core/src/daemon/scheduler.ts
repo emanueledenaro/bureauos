@@ -12,6 +12,7 @@ import { GitHubSignalTriggerService } from "../github/signal-triggers.js";
 import { OperationalSignalTriggerService } from "../autonomy/operational-triggers.js";
 import { MemoryTriggerService } from "../autonomy/memory-triggers.js";
 import { AutonomousRetryService } from "../autonomy/retry.js";
+import { RootMemoryConsolidationService } from "../memory/consolidation.js";
 import { parseGitHubRepository } from "../github/repository-utils.js";
 import { DaemonSchedulerStateStore } from "./state.js";
 
@@ -91,6 +92,12 @@ const TICKS: Array<Omit<TickJob, "last">> = [
     scope: "sync GitHub signals for linked project repositories",
     everyMs: 15 * 60 * 1000,
   },
+  {
+    name: "consolidate_root_memory",
+    type: "health_check",
+    scope: "consolidate durable ROOT memory from live workspace state",
+    everyMs: 24 * 60 * 60 * 1000,
+  },
 ];
 
 export class Scheduler {
@@ -100,7 +107,13 @@ export class Scheduler {
   private readonly state?: DaemonSchedulerStateStore;
 
   constructor(private readonly options: SchedulerOptions) {
-    this.jobs = TICKS.map((t) => ({ ...t }));
+    // ROOT consolidation is gated by the owner's memory policy: when
+    // `promote_daily_notes_to_durable_memory` is off, the job is never scheduled
+    // (so it leaves no cursor and never runs).
+    const promoteRoot = options.config.memory.promote_daily_notes_to_durable_memory;
+    this.jobs = TICKS.filter((t) => t.name !== "consolidate_root_memory" || promoteRoot).map(
+      (t) => ({ ...t }),
+    );
     this.state =
       options.schedulerState ??
       (options.workspaceRoot ? new DaemonSchedulerStateStore(options.workspaceRoot) : undefined);
@@ -162,6 +175,11 @@ export class Scheduler {
         }
         if (job.name === "autonomous_retry_scan") {
           await this.scanAutonomousRetries();
+          await this.markSucceeded(job, now);
+          continue;
+        }
+        if (job.name === "consolidate_root_memory") {
+          await this.consolidateRootMemory(now);
           await this.markSucceeded(job, now);
           continue;
         }
@@ -402,6 +420,20 @@ export class Scheduler {
     });
     this.log(
       `scheduler: autonomous_retry_scan retried ${result.triggered.length} runs, escalated ${result.escalated.length}, skipped ${result.skipped.length}`,
+    );
+  }
+
+  private async consolidateRootMemory(now: number): Promise<void> {
+    if (!this.options.workspaceRoot) {
+      this.log("scheduler: consolidate_root_memory skipped (workspace not configured)");
+      return;
+    }
+    const result = await new RootMemoryConsolidationService(this.options.workspaceRoot, {
+      ...(this.options.coordinator ? { audit: this.options.coordinator.audit } : {}),
+    }).consolidate({ now: new Date(now) });
+    this.log(
+      `scheduler: consolidated ROOT memory (${result.counts.activeClients} client(s), ` +
+        `${result.counts.activeProjects} project(s), ${result.counts.openOpportunities} opportunity(ies))`,
     );
   }
 
