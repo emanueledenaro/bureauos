@@ -60,6 +60,34 @@ export function opportunityProgress(status: string): number {
   }
 }
 
+export function runProgress(status: string): number {
+  switch (status) {
+    case "created":
+      return 10;
+    case "context_loading":
+      return 25;
+    case "planning":
+      return 40;
+    case "dispatching":
+      return 55;
+    case "in_progress":
+      return 70;
+    case "verifying":
+      return 85;
+    case "completed":
+      return 100;
+    case "needs_human":
+      return 60;
+    case "blocked":
+      return 45;
+    case "failed":
+    case "cancelled":
+      return 0;
+    default:
+      return 20;
+  }
+}
+
 export function clientRiskTone(risk: string): Tone {
   if (risk === "blocked") return "danger";
   if (risk === "follow_up_due" || risk === "proposal") return "warning";

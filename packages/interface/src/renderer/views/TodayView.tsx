@@ -20,7 +20,7 @@ import { ViewToolbar } from "../components/dashboard/ViewToolbar";
 import { DataTable, type DataTableColumn } from "../components/dashboard/DataTable";
 import { useAsyncAction } from "../hooks/useAsyncAction";
 import { actionStateLabel, runTone, toneIndicatorClass, type Tone } from "../lib/tone";
-import { buildTodayActions, sortNewest } from "../lib/builders";
+import { buildTodayActions, pipelineValue, sortNewest } from "../lib/builders";
 import { formatLabel, formatMoney } from "../lib/format";
 import type { MemoryTriggerResult } from "../lib/api";
 import type { AdaptiveMode, DashboardState, TodayAction } from "../lib/types";
@@ -46,8 +46,7 @@ export function TodayView({
   const activeProjects = state.projects.filter(
     (project) => !["delivered", "cancelled"].includes(project.status),
   ).length;
-  const pipeline =
-    state.clientIntelligence?.totals.pipeline_value ?? state.pulse?.revenue.pipeline_value ?? 0;
+  const pipeline = pipelineValue(state);
   const activeOpportunities =
     state.pulse?.revenue.active_opportunities ??
     state.opportunities.filter((opportunity) => !["won", "lost"].includes(opportunity.status))

@@ -5,7 +5,7 @@ import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "../../lib/utils";
 import { formatDate, formatMoney, formatTime } from "../../lib/format";
-import { buildTodayActions } from "../../lib/builders";
+import { buildTodayActions, pipelineValue } from "../../lib/builders";
 import { toneIndicatorClass, toneTextClass, type Tone } from "../../lib/tone";
 import type { AdaptiveMode, DashboardState } from "../../lib/types";
 
@@ -66,7 +66,7 @@ export function Header({
       : state.approvals.length > 0
         ? `${state.approvals.length} approvals`
         : "Clear";
-  const pipeline = state.pulse?.revenue.pipeline_value ?? 0;
+  const pipeline = pipelineValue(state);
   const autonomyTone: Tone = state.error ? "danger" : state.loading ? "warning" : "success";
   const autonomyLabel = state.error ? "Offline" : state.loading ? "Connecting" : "Active";
   const nextAction = buildTodayActions(state)[0];

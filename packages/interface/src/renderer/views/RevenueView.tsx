@@ -21,7 +21,7 @@ import { OperationalFocus } from "../components/dashboard/OperationalFocus";
 import { BaseCard, BaseCardHeader } from "../components/dashboard/BaseCard";
 import { Badge } from "../components/ui/badge";
 import { useAsyncAction } from "../hooks/useAsyncAction";
-import { clientName, sortNewest } from "../lib/builders";
+import { clientName, pipelineValue, sortNewest } from "../lib/builders";
 import { opportunityTone } from "../lib/tone";
 import { formatLabel, formatMoney } from "../lib/format";
 import type { OpportunityRecord, RevenuePipelineResult } from "../lib/api";
@@ -43,7 +43,7 @@ export function RevenueView({
   state: DashboardState;
   onGeneratePipeline?: () => Promise<RevenuePipelineResult>;
 }) {
-  const pipeline = state.opportunities.reduce((sum, item) => sum + (item.expected_value || 0), 0);
+  const pipeline = pipelineValue(state);
   const margin = state.opportunities.length
     ? state.opportunities.reduce((sum, item) => sum + (item.expected_margin || 0), 0) /
       state.opportunities.length

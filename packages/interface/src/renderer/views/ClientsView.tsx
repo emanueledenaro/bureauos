@@ -8,6 +8,7 @@ import { KpiBar } from "../components/dashboard/KpiBar";
 import { ViewToolbar } from "../components/dashboard/ViewToolbar";
 import { OperationalFocus } from "../components/dashboard/OperationalFocus";
 import { useAsyncAction } from "../hooks/useAsyncAction";
+import { pipelineValue } from "../lib/builders";
 import { clientRiskTone } from "../lib/tone";
 import { formatLabel, formatMoney, timeAgo } from "../lib/format";
 import type { ClientSuccessStatusResult, MemoryTriggerResult } from "../lib/api";
@@ -141,7 +142,7 @@ export function ClientsView({
         />
         <MetricTile
           label="Pipeline"
-          value={formatMoney(intelligence?.totals.pipeline_value ?? 0)}
+          value={formatMoney(pipelineValue(state))}
           detail={`${formatMoney(intelligence?.totals.won_value ?? 0)} won value`}
           icon={DollarSign}
           tone="success"

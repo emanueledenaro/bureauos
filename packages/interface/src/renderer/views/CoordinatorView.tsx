@@ -15,7 +15,7 @@ import { ScrollArea } from "../components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import { cn } from "../lib/utils";
 import { formatLabel, formatMoney, timeAgo } from "../lib/format";
-import { buildTodayActions, sortNewest } from "../lib/builders";
+import { buildTodayActions, pipelineValue, sortNewest } from "../lib/builders";
 import { actionStateLabel } from "../lib/tone";
 import type {
   CoordinatorAttachmentInput,
@@ -72,8 +72,7 @@ function ContextColumn({
   const recentArtifacts = useMemo(() => sortNewest(state.artifacts).slice(0, 4), [state.artifacts]);
   const nextActions = useMemo(() => buildTodayActions(state).slice(0, 4), [state]);
   const pendingApprovals = state.approvals.length;
-  const pipelineValue =
-    state.clientIntelligence?.totals.pipeline_value ?? state.pulse?.revenue.pipeline_value ?? 0;
+  const pipeline = pipelineValue(state);
   const blockedProjects = state.projects.filter((project) => project.status === "blocked").length;
   const activeRuns = state.runs.filter((run) => !["completed", "cancelled"].includes(run.status));
 
@@ -87,7 +86,7 @@ function ContextColumn({
           <PulseStat icon={CheckCircle2} label="Approvals" value={String(pendingApprovals)} />
           <PulseStat icon={Calendar} label="Blockers" value={String(blockedProjects)} />
           <PulseStat icon={Sparkles} label="Runs" value={String(activeRuns.length)} />
-          <PulseStat icon={MessageSquare} label="Pipeline" value={formatMoney(pipelineValue)} />
+          <PulseStat icon={MessageSquare} label="Pipeline" value={formatMoney(pipeline)} />
         </div>
       </BaseCard>
 

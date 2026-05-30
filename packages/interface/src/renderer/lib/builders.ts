@@ -30,6 +30,32 @@ export function clientName(clients: ClientRecord[], clientId: string): string {
   return clients.find((client) => client.id === clientId)?.name ?? "No client";
 }
 
+const CLOSED_OPPORTUNITY_STATUSES = new Set(["won", "lost"]);
+
+export function isOpenOpportunity(opportunity: { status: string }): boolean {
+  return !CLOSED_OPPORTUNITY_STATUSES.has(opportunity.status);
+}
+
+/**
+ * Single source of truth for the "Pipeline" value shown across views.
+ *
+ * Prefers the kernel-computed client intelligence total, falls back to the
+ * company pulse, and only as a last resort sums open (non won/lost)
+ * opportunities locally. This keeps Header, Today, Clients, and Revenue from
+ * reporting different pipeline numbers (SER-146).
+ */
+export function pipelineValue(state: DashboardState): number {
+  const fromIntelligence = state.clientIntelligence?.totals.pipeline_value;
+  if (typeof fromIntelligence === "number") return fromIntelligence;
+
+  const fromPulse = state.pulse?.revenue.pipeline_value;
+  if (typeof fromPulse === "number") return fromPulse;
+
+  return state.opportunities
+    .filter(isOpenOpportunity)
+    .reduce((sum, opportunity) => sum + (opportunity.expected_value || 0), 0);
+}
+
 export function sortNewest<T extends { created?: string; updated?: string }>(
   items: readonly T[],
 ): T[] {
@@ -340,7 +366,9 @@ export function buildPortfolioLanes(state: DashboardState): PortfolioLane[] {
       meta:
         opportunity.next_action ||
         (opportunity.expected_value ? formatMoney(opportunity.expected_value) : "Opportunity"),
-      badges: ["SALES", "PM", "PRICE"],
+      // Opportunities have no agent-ownership record in kernel state, so we do
+      // not fabricate sales/pricing/PM badges here (SER-152).
+      badges: [],
     });
   }
 
@@ -418,15 +446,10 @@ export function buildCapacitySegments(state: DashboardState): CapacitySegment[] 
 export function buildGoalItems(state: DashboardState): GoalItem[] {
   const activeClients = state.clients.filter((client) => client.status === "active").length;
   const clientTarget = Math.max(activeClients, state.clients.length, 1);
-  const openOpportunities = state.opportunities.filter(
-    (opportunity) => opportunity.status !== "won" && opportunity.status !== "lost",
-  );
+  const openOpportunities = state.opportunities.filter(isOpenOpportunity);
   const clientsWithPipeline = new Set(openOpportunities.map((opportunity) => opportunity.client_id))
     .size;
-  const pipelineValue = openOpportunities.reduce(
-    (sum, opportunity) => sum + (opportunity.expected_value || 0),
-    0,
-  );
+  const openPipelineValue = pipelineValue(state);
 
   const totalProjects = state.projects.length;
   const blockedProjects = state.projects.filter((project) => project.status === "blocked").length;
@@ -478,12 +501,12 @@ export function buildGoalItems(state: DashboardState): GoalItem[] {
       current: `${clientsWithPipeline}/${clientTarget} accounts`,
       target: "Every active client has an open opportunity",
       nextAction:
-        pipelineValue > 0
+        openPipelineValue > 0
           ? "Prioritize the highest-value opportunity and move it to proposal."
           : "Create or import the first qualified opportunity.",
       route: "revenue",
       signals: [
-        `${formatMoney(pipelineValue)} open pipeline`,
+        `${formatMoney(openPipelineValue)} open pipeline`,
         `${openOpportunities.length} open opportunities`,
       ],
     },
