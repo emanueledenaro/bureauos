@@ -64,7 +64,11 @@ export async function recordDecision(
 
   validateMemoryScope(input, { clientId, projectId });
 
-  const block = decisionBlock(id, ts, input, { clientId, projectId });
+  const block = decisionBlock(id, ts, input, {
+    clientId,
+    projectId,
+    runResolved: Boolean(runDoc),
+  });
   const writes: DecisionWriteResult = { id };
   const writeGlobal = input.memoryScope === undefined;
 
@@ -103,7 +107,19 @@ export async function recordDecision(
     );
   }
 
-  await new AuditLog(paths.auditLog).append({
+  const auditLog = new AuditLog(paths.auditLog);
+  if (input.runId && !runDoc) {
+    // The caller referenced a run that has no file; we omitted the dangling
+    // cross-link (SER-199) and note it so the unresolved reference is visible.
+    await auditLog.append({
+      actor: input.actor,
+      action: "memory.decision_run_unresolved",
+      target: id,
+      result: "ok",
+      error: `referenced run not found: ${input.runId}`,
+    });
+  }
+  await auditLog.append({
     actor: input.actor,
     action: "memory.decision_recorded",
     target: id,
@@ -143,7 +159,7 @@ function decisionBlock(
   id: string,
   ts: string,
   input: DecisionInput,
-  resolved: { clientId?: string; projectId?: string },
+  resolved: { clientId?: string; projectId?: string; runResolved?: boolean },
 ): string {
   const lines = [
     "",
@@ -165,7 +181,11 @@ function decisionBlock(
   if (input.revisitWhen) {
     lines.push(`- Revisit when: ${input.revisitWhen}`);
   }
-  if (input.runId) {
+  // Only cross-link a run that actually exists. Emitting `- Run:` for an
+  // unresolved id (e.g. an external/coordinator-supplied runId with no
+  // `runs/<id>.md`) created a dangling one-way link with no reciprocal
+  // back-link (SER-199).
+  if (input.runId && resolved.runResolved) {
     lines.push(`- Run: ${input.runId}`);
   }
   if (resolved.clientId) {

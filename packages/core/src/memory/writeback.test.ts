@@ -149,4 +149,23 @@ describe("memory write-back", () => {
       readFile(join(paths.projectsDir, beta.slug, "DECISIONS.md"), "utf8"),
     ).resolves.not.toContain("Write Beta decision from Alpha scope");
   });
+
+  it("omits the run cross-link when the referenced run does not exist (SER-199)", async () => {
+    const paths = workspacePaths(dir);
+
+    await recordDecision(dir, {
+      what: "Decision referencing a missing run",
+      why: "Caller supplied an unvalidated runId",
+      actor: "supreme_coordinator",
+      runId: "run_does_not_exist",
+    });
+
+    const globalDecisions = await readFile(paths.decisionsLog, "utf8");
+    expect(globalDecisions).toContain("Decision referencing a missing run");
+    // No dangling cross-link to a run with no file.
+    expect(globalDecisions).not.toContain("- Run: run_does_not_exist");
+
+    const audit = await readFile(paths.auditLog, "utf8");
+    expect(audit).toContain("memory.decision_run_unresolved");
+  });
 });
