@@ -146,6 +146,36 @@ function stripLeadingInternalPreamble(text: string): string {
   return index !== undefined ? text.slice(index) : text;
 }
 
+const LEADING_REASONING_VERB =
+  /^(?:deciding|considering|determining|figuring out|thinking|planning|choosing|crafting|analy[sz]ing|reflecting|let me\b|i'?ll\b|i will\b|i need to\b|i should\b|working out|deciding on)\b/i;
+
+/**
+ * Remove a single leading model-reasoning header line such as
+ * "**Deciding on response language**" / "Crafting a friendly reply" that some
+ * providers emit before the actual answer. Conservative: only a bold/heading
+ * line, or a short (<=60 char) line, that starts with a reasoning verb — so a
+ * legitimate answer sentence beginning with one of those words is preserved.
+ * (SER-219)
+ */
+function stripLeadingReasoningHeader(text: string): string {
+  const lines = text.split(/\r?\n/);
+  let i = 0;
+  while (i < lines.length && !(lines[i] ?? "").trim()) i += 1;
+  if (i >= lines.length) return text;
+  const first = (lines[i] ?? "").trim();
+  const bare = first
+    .replace(/^#{1,6}\s*/, "")
+    .replace(/^\*\*\s*|\s*\*\*$/g, "")
+    .trim();
+  const wasBoldOrHeading = first !== bare;
+  if (LEADING_REASONING_VERB.test(bare) && (wasBoldOrHeading || bare.length <= 60)) {
+    lines.splice(i, 1);
+    while (i < lines.length && !(lines[i] ?? "").trim()) lines.splice(i, 1);
+    return lines.join("\n");
+  }
+  return text;
+}
+
 function stripInternalLineSections(text: string): string {
   const output: string[] = [];
   let skippingInternalSection = false;
@@ -213,8 +243,10 @@ function keepAfterFinalAnswerMarker(text: string): string {
 export function sanitizeCoordinatorVisibleText(input: string): string {
   return stripDefensiveNoMutationFiller(
     stripInternalLineSections(
-      stripLeadingInternalPreamble(
-        keepAfterFinalAnswerMarker(stripInternalFences(stripTaggedInternalBlocks(input.trim()))),
+      stripLeadingReasoningHeader(
+        stripLeadingInternalPreamble(
+          keepAfterFinalAnswerMarker(stripInternalFences(stripTaggedInternalBlocks(input.trim()))),
+        ),
       ),
     ),
   )

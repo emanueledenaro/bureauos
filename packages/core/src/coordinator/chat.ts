@@ -636,12 +636,12 @@ function toolPlanningPrompt(
 }
 
 function idleAnswer(message: string, provider: CoordinatorChatProviderMeta): string {
-  if (isLowContextIdentityMessage(message, [])) return coordinatorIdentityAnswer();
+  if (isLowContextIdentityMessage(message, [])) return coordinatorIdentityAnswer(message);
   const providerIssue =
     provider.status === "failed"
       ? `Il provider ${provider.provider ?? "configurato"} non ha risposto.`
       : "";
-  return coordinatorIdleAnswer(providerIssue);
+  return coordinatorIdleAnswer(message, providerIssue);
 }
 
 function sanitizeCoordinatorAnswer(answer: string): string {
@@ -915,6 +915,19 @@ export class CoordinatorChatService {
 
   private async recordRejectedToolPlan(reason: string): Promise<void> {
     await this.tools.recordRejectedToolPlan(reason);
+  }
+
+  /**
+   * Whether the message references a known client or project by name. Used so a
+   * status question that names an entity ("status of Acme Pizzeria") is answered
+   * scoped to that entity instead of as a company-wide roll-up (SER-218).
+   */
+  private async referencesKnownEntity(message: string): Promise<boolean> {
+    const [clients, projects] = await Promise.all([this.clients.list(), this.projects.list()]);
+    return (
+      clients.some((client) => referenceScore(message, client.name) > 0) ||
+      projects.some((project) => referenceScore(message, project.name) > 0)
+    );
   }
 
   private async projectStatusLookup(message: string): Promise<ProjectStatusLookup> {
@@ -1270,6 +1283,11 @@ export class CoordinatorChatService {
     let plannedIntakePlan: CoordinatorToolPlan | undefined;
     let toolPlanningProvider: CoordinatorChatProviderMeta | undefined;
     if (isCompanyStatusQuestion(message, attachments)) {
+      // A status question that names a known client/project must be answered
+      // scoped to that entity, not as a company-wide roll-up (SER-218).
+      if (await this.referencesKnownEntity(message)) {
+        return this.answerProjectStatusQuestion({ message, attachments, memory });
+      }
       return this.answerCompanyStatusQuestion({ message, attachments, memory });
     }
 

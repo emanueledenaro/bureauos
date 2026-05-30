@@ -23,7 +23,9 @@ describe("CoordinatorMessageStore", () => {
     const messages = await store.list();
 
     expect(messages).toHaveLength(1);
-    expect(messages[0]?.text).toBe("Ciao Emanuele, ci sono.");
+    expect(messages[0]?.text).toBe(
+      "Ciao! Sono operativo — dimmi da dove partiamo: priorità di oggi, un cliente o una proposta.",
+    );
     expect(messages[0]?.text).not.toContain("Non uso memoria storica");
     expect(messages[0]?.meta).toMatchObject({
       migrated_from: "legacy_low_context_idle_answer",
