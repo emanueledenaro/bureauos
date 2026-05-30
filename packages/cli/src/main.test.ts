@@ -31,6 +31,22 @@ async function captureStdout(
   }
 }
 
+async function captureStderr(
+  run: () => Promise<number>,
+): Promise<{ code: number; output: string }> {
+  const originalWrite = process.stderr.write;
+  let output = "";
+  process.stderr.write = ((chunk: unknown, ..._args: unknown[]) => {
+    output += String(chunk);
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    return { code: await run(), output };
+  } finally {
+    process.stderr.write = originalWrite;
+  }
+}
+
 describe("bureau cli", () => {
   let dir: string;
   let prevCwd: string;
@@ -115,6 +131,29 @@ describe("bureau cli", () => {
   it("rejects unknown command", async () => {
     const code = await main(["node", "bureau", "frobnicate"]);
     expect(code).toBe(1);
+  });
+
+  it("rejects Object.prototype names as commands/subcommands without crashing (SER-207)", async () => {
+    // Top-level prototype name must not invoke Object.prototype.toString.
+    const top = await captureStderr(() => main(["node", "bureau", "toString"]));
+    expect(top.code).toBe(1);
+    expect(top.output).toContain('unknown command "toString"');
+
+    // Namespaced prototype name must yield the clean "expected one of:" error.
+    const sub = await captureStderr(() => main(["node", "bureau", "client", "toString"]));
+    expect(sub.code).toBe(1);
+    expect(sub.output).toContain("bureau client: expected one of:");
+
+    // Other inherited members across dispatch styles all exit 1 cleanly.
+    for (const argv of [
+      ["node", "bureau", "constructor"],
+      ["node", "bureau", "client", "constructor"],
+      ["node", "bureau", "memory", "hasOwnProperty"],
+      ["node", "bureau", "github", "valueOf"],
+    ]) {
+      const r = await captureStderr(() => main(argv));
+      expect(r.code).toBe(1);
+    }
   });
 
   it("records durable decisions and daily notes from CLI", async () => {
