@@ -537,6 +537,10 @@ export interface LocalNotificationRecord {
   created: string;
   updated: string;
 }
+export interface ReportDetail {
+  record: ArtifactRecord;
+  body: string;
+}
 export interface BusinessReportResult {
   generated_at: string;
   executive_report: ArtifactRecord;
@@ -955,6 +959,7 @@ export const Api = {
       body: JSON.stringify(input),
     }),
   reports: () => api<ArtifactRecord[]>("/reports"),
+  reportDetail: (id: string) => api<ReportDetail>(`/reports/detail?id=${encodeURIComponent(id)}`),
   generateReports: () =>
     api<BusinessReportResult>("/reports/generate", {
       method: "POST",

@@ -605,6 +605,15 @@ function arrayField<const K extends string>(key: K, value: unknown): Partial<Rec
   } as Partial<Record<K, string[]>>;
 }
 
+const REPORT_ARTIFACT_TYPES = new Set<string>([
+  "executive-report",
+  "cross-project-executive-report",
+  "business-operating-report",
+  "client-account-plan",
+  "client-success-status-report",
+  "revenue-pipeline-report",
+]);
+
 const ROUTES: Record<string, RouteHandler> = {
   "GET /health": async ({ res, options }) =>
     ok(res, { ok: true, daemon: await daemonSupervisor(options).status() }),
@@ -1241,17 +1250,26 @@ const ROUTES: Record<string, RouteHandler> = {
     const artifacts = await deps(options).artifacts.list();
     ok(
       res,
-      artifacts.filter((artifact) => {
-        return (
-          artifact.type === "executive-report" ||
-          artifact.type === "cross-project-executive-report" ||
-          artifact.type === "business-operating-report" ||
-          artifact.type === "client-account-plan" ||
-          artifact.type === "client-success-status-report" ||
-          artifact.type === "revenue-pipeline-report"
-        );
-      }),
+      artifacts.filter((artifact) => REPORT_ARTIFACT_TYPES.has(artifact.type)),
     );
+  },
+
+  "GET /reports/detail": async ({ res, options, url }) => {
+    const id = url.searchParams.get("id")?.trim();
+    if (!id) {
+      ok(res, { error: "id required" }, 400);
+      return;
+    }
+    if (!/^[A-Za-z0-9_-]+$/.test(id)) {
+      ok(res, { error: "invalid id" }, 400);
+      return;
+    }
+    const artifact = await deps(options).artifacts.read(id);
+    if (!artifact || !REPORT_ARTIFACT_TYPES.has(artifact.record.type)) {
+      ok(res, { error: "report not found" }, 404);
+      return;
+    }
+    ok(res, { record: artifact.record, body: artifact.body });
   },
 
   "POST /reports/generate": async ({ res, options }) => {

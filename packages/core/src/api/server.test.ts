@@ -1372,6 +1372,41 @@ describe("API server", () => {
     );
   });
 
+  it("returns a report body for the ElectronJS report detail dialog", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    await fetch(`${server.url}/coordinator/intake`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        clientName: "Pizzeria Aurora",
+        message: "Ho parlato con una pizzeria: vuole sito con prenotazioni.",
+        expectedValue: 4500,
+      }),
+    });
+
+    const generated = await fetch(`${server.url}/reports/generate`, { method: "POST" });
+    expect(generated.status).toBe(201);
+    const reportResult = (await generated.json()) as { executive_report: { id: string } };
+    const reportId = reportResult.executive_report.id;
+
+    const detail = await fetch(`${server.url}/reports/detail?id=${encodeURIComponent(reportId)}`);
+    expect(detail.status).toBe(200);
+    const detailBody = (await detail.json()) as {
+      record: { id: string; type: string };
+      body: string;
+    };
+    expect(detailBody.record.id).toBe(reportId);
+    expect(detailBody.record.type).toBe("executive-report");
+    expect(detailBody.body.length).toBeGreaterThan(0);
+
+    const missing = await fetch(`${server.url}/reports/detail?id=art_doesnotexist`);
+    expect(missing.status).toBe(404);
+
+    const badRequest = await fetch(`${server.url}/reports/detail`);
+    expect(badRequest.status).toBe(400);
+  });
+
   it("generates GitHub issue drafts from a project slug", async () => {
     server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
 
