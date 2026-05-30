@@ -57,26 +57,26 @@ interface DashboardRefreshOptions {
  * exactly this sequence. Deriving `CoreSettledResults` from this factory keeps
  * the two in lockstep.
  */
-function coreRequests() {
+function coreRequests(signal?: AbortSignal) {
   return [
-    Api.pulse(),
-    Api.clients(),
-    Api.clientIntelligence(),
-    Api.projects(),
-    Api.projectOwnership(),
-    Api.opportunities(),
-    Api.growthMemory(),
-    Api.approvals(),
-    Api.approvalsResolved(),
-    Api.notifications(),
-    Api.runs(),
-    Api.agents(),
-    Api.capabilities(),
-    Api.artifacts(),
-    Api.policyExplain(),
-    Api.providers(),
-    Api.settings(),
-    Api.providerConnectors(),
+    Api.pulse(signal),
+    Api.clients(signal),
+    Api.clientIntelligence(signal),
+    Api.projects(signal),
+    Api.projectOwnership(signal),
+    Api.opportunities(signal),
+    Api.growthMemory(signal),
+    Api.approvals(signal),
+    Api.approvalsResolved(signal),
+    Api.notifications(signal),
+    Api.runs(signal),
+    Api.agents(signal),
+    Api.capabilities(signal),
+    Api.artifacts(signal),
+    Api.policyExplain(20, signal),
+    Api.providers(signal),
+    Api.settings(signal),
+    Api.providerConnectors(signal),
   ] as const;
 }
 
@@ -190,34 +190,51 @@ export function useDashboard(): {
 } {
   const [state, setState] = useState<DashboardState>(emptyState);
 
-  const refreshDashboard = async ({
-    includeAudit = false,
-  }: DashboardRefreshOptions = {}): Promise<void> => {
+  const refreshDashboard = async (
+    { includeAudit = false }: DashboardRefreshOptions = {},
+    signal?: AbortSignal,
+  ): Promise<void> => {
     // allSettled (not all): one rejected endpoint must not blank the dashboard.
-    const results: CoreSettledResults = await Promise.allSettled(coreRequests());
+    const results: CoreSettledResults = await Promise.allSettled(coreRequests(signal));
     const auditResult = includeAudit
-      ? await Promise.allSettled([Api.audit(30)]).then((settled) => settled[0])
+      ? await Promise.allSettled([Api.audit(30, signal)]).then((settled) => settled[0])
       : undefined;
 
+    // The cycle was aborted (unmount) — don't apply its now-stale results.
+    if (signal?.aborted) return;
     setState((current) => applyCoreResults(current, results, auditResult));
   };
 
   const refresh = async (): Promise<void> => refreshDashboard({ includeAudit: true });
 
   useEffect(() => {
-    void refreshDashboard({ includeAudit: true });
-    const timer = setInterval(
-      () => void refreshDashboard({ includeAudit: false }),
-      CORE_REFRESH_INTERVAL_MS,
-    );
-
+    let cancelled = false;
+    // Aborts the in-flight fan-out on unmount so its ~18 sockets release instead
+    // of leaking against Chrome's 6-per-host budget (SER-222).
+    const controller = new AbortController();
     let stream: EventSource | undefined;
     let auditFallbackTimer: ReturnType<typeof setInterval> | undefined;
-    let cancelled = false;
+
+    // Skip a tick while the previous fan-out is still in flight: overlapping
+    // cycles would stack ~18 more sockets each and exhaust the connection budget
+    // under a slow backend (SER-222). One refresh cycle at a time.
+    let refreshing = false;
+    const tick = async (includeAudit: boolean): Promise<void> => {
+      if (cancelled || refreshing) return;
+      refreshing = true;
+      try {
+        await refreshDashboard({ includeAudit }, controller.signal);
+      } finally {
+        refreshing = false;
+      }
+    };
+
+    void tick(true);
+    const timer = setInterval(() => void tick(false), CORE_REFRESH_INTERVAL_MS);
 
     const pollAudit = async (): Promise<void> => {
       try {
-        const events = await Api.audit(30);
+        const events = await Api.audit(30, controller.signal);
         if (cancelled) return;
         setState((current) => ({
           ...current,
@@ -268,6 +285,7 @@ export function useDashboard(): {
 
     return () => {
       cancelled = true;
+      controller.abort();
       clearInterval(timer);
       if (auditFallbackTimer) clearInterval(auditFallbackTimer);
       stream?.close();

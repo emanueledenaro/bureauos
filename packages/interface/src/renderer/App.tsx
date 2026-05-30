@@ -30,7 +30,7 @@ import { SettingsView } from "./views/SettingsView";
 import { TimelineView } from "./views/TimelineView";
 import { RevenuePulseView } from "./views/RevenuePulseView";
 import { useDashboard } from "./hooks/useDashboard";
-import { adaptiveDefaultMode } from "./lib/builders";
+import { nextAutoSelection } from "./lib/builders";
 import {
   Api,
   type AutonomousRetryResult,
@@ -51,6 +51,7 @@ export function App() {
   const { state, refresh } = useDashboard();
   const [mode, setMode] = useState<AdaptiveMode>("portfolio");
   const [modeTouched, setModeTouched] = useState(false);
+  const [autoSelected, setAutoSelected] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [quickChatOpen, setQuickChatOpen] = useState(false);
   const [approvalsOpen, setApprovalsOpen] = useState(false);
@@ -64,11 +65,20 @@ export function App() {
     return () => query.removeEventListener("change", sync);
   }, []);
 
+  // Auto-select the default view only once, on first load. Re-deriving on every
+  // dashboard refresh / SSE event would snap the owner off their current screen
+  // each time the daemon emits an artifact (SER-223).
   useEffect(() => {
-    if (!modeTouched && !state.loading) {
-      setMode(isSmallScreen ? "coordinator" : adaptiveDefaultMode(state));
-    }
-  }, [isSmallScreen, modeTouched, state]);
+    const next = nextAutoSelection({
+      modeTouched,
+      autoSelected,
+      loading: state.loading,
+      isSmallScreen,
+      state,
+    });
+    if (next.mode) setMode(next.mode);
+    if (next.autoSelected !== autoSelected) setAutoSelected(next.autoSelected);
+  }, [isSmallScreen, modeTouched, autoSelected, state]);
 
   // ⌘K / Ctrl+K apre il quick-chat coordinator da qualsiasi vista.
   useEffect(() => {
