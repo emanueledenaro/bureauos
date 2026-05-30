@@ -141,6 +141,7 @@ export function DeliveryView({
 
   const verifyAll = useAsyncAction(onVerifyRepositories);
   const [busyProject, setBusyProject] = useState<string | undefined>();
+  const [verifyError, setVerifyError] = useState<string | undefined>();
 
   const linkedWorkColumns: DataTableColumn<LinkedWorkItem>[] = [
     {
@@ -222,8 +223,12 @@ export function DeliveryView({
 
   const verifySingle = async (projectSlug: string): Promise<void> => {
     setBusyProject(projectSlug);
+    setVerifyError(undefined);
     try {
       await onVerifyRepositories(projectSlug);
+    } catch (error) {
+      // A failing single-project verify must surface, not silently no-op (SER-206).
+      setVerifyError(error instanceof Error ? error.message : "Repository verification failed.");
     } finally {
       setBusyProject(undefined);
     }
@@ -245,6 +250,15 @@ export function DeliveryView({
         />
       }
     >
+      {verifyError ? (
+        <ActionBanner
+          tone="danger"
+          title="Repository verification failed"
+          detail={verifyError}
+          onDismiss={() => setVerifyError(undefined)}
+          className="mb-3"
+        />
+      ) : null}
       {verifyAll.error ? (
         <ActionBanner
           tone="danger"
