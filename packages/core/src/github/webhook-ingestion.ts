@@ -29,6 +29,8 @@ export interface GitHubWebhookIngestResult {
   failingChecks: readonly GitHubSignalCheckRun[];
   createdOpportunities: OpportunityRecord[];
   report: ArtifactRecord;
+  /** "duplicate" when a prior delivery with the same id was already ingested. */
+  status: "ingested" | "duplicate";
 }
 
 export interface GitHubWebhookIngestionDeps {
@@ -273,6 +275,39 @@ export class GitHubWebhookIngestionService {
     const payload = asRecord(input.payload);
     const action = stringValue(payload["action"]);
     const { owner, repo, repository } = repositoryFrom(payload);
+
+    // Idempotency (SER-176): GitHub retries deliveries (non-2xx, timeouts, manual
+    // redelivery). If a signal report already exists for this delivery id, skip
+    // re-ingestion so retries don't duplicate artifacts, per-signal audit
+    // records, or opportunity writes. One audit note records the skip.
+    const deliveryId = input.deliveryId?.trim();
+    if (deliveryId) {
+      const priorReports = await this.artifacts.list({ type: "github-signal-report" });
+      const seen = priorReports.find((artifact) => artifact["delivery_id"] === deliveryId);
+      if (seen) {
+        await this.audit.append({
+          actor: "github",
+          action: "github.webhook.duplicate_skipped",
+          target: `${repository}:${event}${action ? `:${action}` : ""}`,
+          capability: "github.webhook",
+          artifact_id: seen.id,
+          result: "ok",
+        });
+        return {
+          event,
+          action,
+          repository,
+          issues: [],
+          pullRequests: [],
+          checks: [],
+          failingChecks: [],
+          createdOpportunities: [],
+          report: seen,
+          status: "duplicate",
+        };
+      }
+    }
+
     const issues = event === "issues" ? parseIssue(payload, owner, repo) : [];
     const pullRequests = event === "pull_request" ? parsePullRequest(payload, owner, repo) : [];
     const checks = event === "check_run" ? parseCheckRun(payload, owner, repo) : [];
@@ -368,6 +403,7 @@ export class GitHubWebhookIngestionService {
       failingChecks,
       createdOpportunities,
       report,
+      status: "ingested",
     };
   }
 }
