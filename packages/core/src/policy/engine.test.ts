@@ -145,4 +145,105 @@ describe("PolicyEngine", () => {
     expect(d.outcome).toBe("allow");
     expect(d.approval_id).toBe(a.id);
   });
+
+  it("consumes a one-off approval after it authorizes one action; a second evaluation re-escalates", async () => {
+    const approvals = new ApprovalRegistry(dir);
+    const a = await approvals.request({
+      action: "publish_public_content",
+      actor: "owner",
+      target: "post_99",
+      scope: "one-off",
+      oneOff: true,
+    });
+    await approvals.resolve(a.id, "approved", "owner", "go once");
+    const engine = new PolicyEngine(defaultConfig("freelancer"), approvals);
+
+    const first = await engine.evaluate({
+      action: "publish_public_content",
+      actor: "social",
+      target: "post_99",
+    });
+    expect(first.allowed).toBe(true);
+    expect(first.approval_id).toBe(a.id);
+
+    const second = await engine.evaluate({
+      action: "publish_public_content",
+      actor: "social",
+      target: "post_99",
+    });
+    expect(second.allowed).toBe(false);
+    expect(second.outcome).toBe("require_approval");
+
+    const resolved = await approvals.listResolved();
+    expect(resolved.find((r) => r.id === a.id)?.consumed_at).not.toBe("");
+  });
+
+  it("keeps a standing (non one-off) approval valid across repeated evaluations", async () => {
+    const approvals = new ApprovalRegistry(dir);
+    const a = await approvals.request({
+      action: "publish_public_content",
+      actor: "owner",
+      target: "post_77",
+      scope: "standing",
+      oneOff: false,
+    });
+    await approvals.resolve(a.id, "approved", "owner", "standing grant");
+    const engine = new PolicyEngine(defaultConfig("freelancer"), approvals);
+
+    const first = await engine.evaluate({
+      action: "publish_public_content",
+      actor: "social",
+      target: "post_77",
+    });
+    const second = await engine.evaluate({
+      action: "publish_public_content",
+      actor: "social",
+      target: "post_77",
+    });
+    expect(first.allowed).toBe(true);
+    expect(second.allowed).toBe(true);
+    expect(second.approval_id).toBe(a.id);
+  });
+
+  it("does not consume a one-off approval during a preview evaluation", async () => {
+    const approvals = new ApprovalRegistry(dir);
+    const a = await approvals.request({
+      action: "publish_public_content",
+      actor: "owner",
+      target: "post_55",
+      scope: "one-off",
+      oneOff: true,
+    });
+    await approvals.resolve(a.id, "approved", "owner", "inspect");
+    const engine = new PolicyEngine(defaultConfig("freelancer"), approvals);
+
+    const preview1 = await engine.evaluate({
+      action: "publish_public_content",
+      actor: "social",
+      target: "post_55",
+      preview: true,
+    });
+    const preview2 = await engine.evaluate({
+      action: "publish_public_content",
+      actor: "social",
+      target: "post_55",
+      preview: true,
+    });
+    expect(preview1.allowed).toBe(true);
+    expect(preview2.allowed).toBe(true);
+
+    // A real (non-preview) evaluation still has the one-off available, then burns it.
+    const real = await engine.evaluate({
+      action: "publish_public_content",
+      actor: "social",
+      target: "post_55",
+    });
+    expect(real.allowed).toBe(true);
+    const after = await engine.evaluate({
+      action: "publish_public_content",
+      actor: "social",
+      target: "post_55",
+    });
+    expect(after.allowed).toBe(false);
+  });
 });
