@@ -200,7 +200,7 @@ const RUN_TYPES: ReadonlySet<RunType> = new Set([
   "health_check",
 ]);
 
-function parseFlags(
+export function parseFlags(
   args: readonly string[],
   schema: Record<string, { type: "string" | "number" | "boolean"; alias?: string }>,
 ): Record<string, string | number | boolean | undefined> | string {
@@ -226,17 +226,35 @@ function parseFlags(
       }
       return `unexpected argument "${arg ?? ""}"`;
     }
-    const key = arg.slice(2);
+    // Support both `--flag value` and the conventional `--flag=value` form
+    // (the standard way shells quote free-text values like intake messages or
+    // PR titles). Split on the first `=` only, so values may contain `=` (SER-178).
+    const raw = arg.slice(2);
+    const eq = raw.indexOf("=");
+    const key = eq >= 0 ? raw.slice(0, eq) : raw;
+    const inlineValue = eq >= 0 ? raw.slice(eq + 1) : undefined;
     const def = schema[key];
     if (!def) return `unknown option "--${key}"`;
     if (def.type === "boolean") {
-      out[key] = true;
+      if (inlineValue === undefined || inlineValue === "" || inlineValue === "true") {
+        out[key] = true;
+      } else if (inlineValue === "false") {
+        out[key] = false;
+      } else {
+        return `invalid boolean value for --${key}: "${inlineValue}"`;
+      }
       continue;
     }
-    const next = args[i + 1];
-    if (next === undefined) return `missing value for --${key}`;
-    out[key] = def.type === "number" ? Number(next) : next;
-    i++;
+    let value: string;
+    if (inlineValue !== undefined) {
+      value = inlineValue;
+    } else {
+      const next = args[i + 1];
+      if (next === undefined) return `missing value for --${key}`;
+      value = next;
+      i++;
+    }
+    out[key] = def.type === "number" ? Number(value) : value;
   }
   return out;
 }
