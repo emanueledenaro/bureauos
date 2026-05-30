@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Building2, KeyRound, Loader2, Lock, Plug, Shield } from "lucide-react";
+import { Building2, KeyRound, Loader2, Plug, Shield } from "lucide-react";
 import { SectionShell } from "../components/dashboard/SectionShell";
 import { ResponsiveTable } from "../components/dashboard/ResponsiveTable";
 import { Button } from "../components/ui/button";
@@ -239,6 +239,33 @@ export function SettingsView({
       setModelStatus(error instanceof Error ? error.message : "Failed to update model.");
     } finally {
       setSavingModel(false);
+    }
+  };
+
+  // Owner edits to autonomy / growth-policy / limits go through one guarded
+  // write path (`POST /settings/autonomy`). We track an in-flight key so its
+  // control disables while saving, and surface any rejection inline.
+  const [savingSetting, setSavingSetting] = useState<string | undefined>();
+  const [settingsError, setSettingsError] = useState<string | undefined>();
+
+  const updateSettings = async (
+    key: string,
+    input: {
+      autonomy?: Record<string, boolean>;
+      growth_autonomy?: Record<string, boolean>;
+      limits?: Record<string, number | boolean>;
+    },
+  ): Promise<void> => {
+    if (savingSetting) return;
+    setSavingSetting(key);
+    setSettingsError(undefined);
+    try {
+      await Api.updateSettings(input);
+      await onRefresh();
+    } catch (error) {
+      setSettingsError(error instanceof Error ? error.message : "Failed to update settings.");
+    } finally {
+      setSavingSetting(undefined);
     }
   };
 
@@ -509,8 +536,14 @@ export function SettingsView({
             label="Autonomy"
             title={`Level ${settings.autonomy.level ?? 2} · ${enabledCount(settings.autonomy)} enabled`}
           >
-            <ToggleList values={settings.autonomy} limit={8} />
-            <ReadOnlyNote />
+            <ToggleList
+              values={settings.autonomy}
+              limit={12}
+              savingKey={savingSetting}
+              onToggle={(key, next) =>
+                void updateSettings(`autonomy.${key}`, { autonomy: { [key]: next } })
+              }
+            />
           </SettingsCard>
 
           <SettingsCard
@@ -518,16 +551,41 @@ export function SettingsView({
             label="Growth Policy"
             title={`${enabledCount(settings.growth_autonomy)} / ${Object.keys(settings.growth_autonomy).length} enabled`}
           >
-            <ToggleList values={settings.growth_autonomy} limit={8} />
-            <ReadOnlyNote />
+            <ToggleList
+              values={settings.growth_autonomy}
+              limit={12}
+              savingKey={savingSetting}
+              onToggle={(key, next) =>
+                void updateSettings(`growth_autonomy.${key}`, {
+                  growth_autonomy: { [key]: next },
+                })
+              }
+            />
           </SettingsCard>
 
           <SettingsCard icon={Shield} label="Limits & Signals" title="Operational guards">
-            <div className="select-none space-y-1.5 text-[11px]">
-              <Row label="Max retries" value={settings.limits.max_retries_per_task as number} />
-              <Row
+            <div className="space-y-1.5 text-[11px]">
+              <NumberRow
+                label="Max retries"
+                value={settings.limits.max_retries_per_task as number}
+                savingKey={savingSetting}
+                fieldKey="limits.max_retries_per_task"
+                onSave={(next) =>
+                  void updateSettings("limits.max_retries_per_task", {
+                    limits: { max_retries_per_task: next },
+                  })
+                }
+              />
+              <NumberRow
                 label="Files before review"
                 value={settings.limits.max_files_changed_without_human_review as number}
+                savingKey={savingSetting}
+                fieldKey="limits.max_files_changed_without_human_review"
+                onSave={(next) =>
+                  void updateSettings("limits.max_files_changed_without_human_review", {
+                    limits: { max_files_changed_without_human_review: next },
+                  })
+                }
               />
               <Row label="Stale PR hours" value={settings.triggers.thresholds.stale_pr_hours} />
               <Row
@@ -542,8 +600,13 @@ export function SettingsView({
                 }
               />
             </div>
-            <ReadOnlyNote />
           </SettingsCard>
+        </div>
+      ) : null}
+
+      {settingsError ? (
+        <div className="mt-3 rounded-md border border-warning/40 bg-warning-subtle/30 p-3 text-[11px] text-foreground">
+          {settingsError}
         </div>
       ) : null}
 
@@ -657,48 +720,128 @@ function Row({
   );
 }
 
+/**
+ * Interactive list of boolean policy switches. Each row is a real toggle that
+ * persists through `onToggle`; the matching control disables while its write is
+ * in flight (`savingKey` carries the group-qualified key, e.g.
+ * `autonomy.create_issues`). The `level` key is presentational and skipped.
+ */
 function ToggleList({
   values,
   limit,
+  savingKey,
+  onToggle,
 }: {
   values: Record<string, boolean | number>;
   limit: number;
+  savingKey?: string;
+  onToggle: (key: string, next: boolean) => void;
 }) {
   const entries = Object.entries(values).filter(
     ([key, value]) => key !== "level" && typeof value === "boolean",
   );
   return (
-    <div className="select-none space-y-1 text-[11px]">
-      {entries.slice(0, limit).map(([key, value]) => (
-        <div key={key} className="flex items-center justify-between gap-2">
-          <span className="truncate text-muted-foreground">{formatLabel(key)}</span>
-          <span
-            className={cn(
-              "cursor-default rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide",
-              value
-                ? "bg-success-subtle/40 text-success"
-                : "bg-surface-subtle/60 text-muted-foreground/70",
-            )}
-          >
-            {value ? "on" : "off"}
-          </span>
-        </div>
-      ))}
+    <div className="space-y-1 text-[11px]">
+      {entries.slice(0, limit).map(([key, value]) => {
+        const on = value === true;
+        return (
+          <div key={key} className="flex items-center justify-between gap-2">
+            <span className="truncate text-muted-foreground">{formatLabel(key)}</span>
+            <PolicyToggle
+              on={on}
+              saving={savingKey !== undefined}
+              onClick={() => onToggle(key, !on)}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 /**
- * Inline notice that a settings card is display-only. Editing autonomy, growth
- * policy, and limits requires a config write path that does not exist yet
- * (tracked in SER-148); these cards visualize `bureauos.yaml` and must not look
- * like live controls until that backend exists.
+ * Single on/off control styled as the prior read-only pill so the card layout is
+ * unchanged, but now clickable. Disabled while any settings write is in flight to
+ * avoid racing concurrent edits against the single config file.
  */
-function ReadOnlyNote() {
+function PolicyToggle({
+  on,
+  saving,
+  onClick,
+}: {
+  on: boolean;
+  saving: boolean;
+  onClick: () => void;
+}) {
   return (
-    <div className="mt-3 flex items-center gap-1.5 border-t border-border/50 pt-2 text-[10px] text-muted-foreground/80">
-      <Lock className="h-3 w-3" />
-      <span>Read-only. Edit in bureauos.yaml.</span>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={saving}
+      aria-pressed={on}
+      className={cn(
+        "rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide transition-colors",
+        "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+        "disabled:cursor-not-allowed disabled:opacity-60",
+        on
+          ? "bg-success-subtle/40 text-success hover:bg-success-subtle/60"
+          : "bg-surface-subtle/60 text-muted-foreground/70 hover:bg-surface-subtle",
+      )}
+    >
+      {on ? "on" : "off"}
+    </button>
+  );
+}
+
+/**
+ * Editable positive-integer limit. The owner edits a small inline field and
+ * commits on blur or Enter; the value is reset to the persisted prop whenever it
+ * changes so a rejected or refreshed update reverts cleanly. Only commits when
+ * the parsed value is a positive integer different from the current one.
+ */
+function NumberRow({
+  label,
+  value,
+  fieldKey,
+  savingKey,
+  onSave,
+}: {
+  label: string;
+  value: number;
+  fieldKey: string;
+  savingKey?: string;
+  onSave: (next: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  const commit = (): void => {
+    const next = Number(draft);
+    if (!Number.isInteger(next) || next < 1 || next === value) {
+      setDraft(String(value));
+      return;
+    }
+    onSave(next);
+  };
+
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-muted-foreground">{label}</span>
+      <Input
+        type="number"
+        min={1}
+        step={1}
+        value={draft}
+        disabled={savingKey === fieldKey}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.currentTarget.blur();
+        }}
+        className="h-6 w-16 px-2 text-right text-[11px]"
+      />
     </div>
   );
 }

@@ -5,6 +5,11 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { CapabilityRegistry } from "@bureauos/capabilities";
 import { CapabilityUseService } from "../capabilities/usage.js";
 import type { BureauConfig } from "../config/schema.js";
+import {
+  applySettingsUpdate,
+  parseSettingsUpdate,
+  SettingsUpdateError,
+} from "../config/settings-update.js";
 import { workspacePaths } from "../paths.js";
 import { ClientRegistry } from "../registries/client.js";
 import { ProjectRegistry } from "../registries/project.js";
@@ -576,6 +581,64 @@ function settingsSummary(options: ApiServerOptions): SettingsSummary {
   };
 }
 
+/**
+ * Validate and persist an owner edit to the autonomy / growth-policy / limits
+ * settings, then return the refreshed settings summary.
+ *
+ * Safety: the patch is allowlist-validated (`parseSettingsUpdate`) before any
+ * disk access, the full config is re-validated against the zod schema and
+ * written atomically (`applySettingsUpdate`), the in-memory `options.config` is
+ * swapped to the reloaded config so the live server reflects the change, and one
+ * audit record is written per changed leaf. Backs both `POST /settings/autonomy`
+ * and `POST /settings/policy`; the route only marks intent — the body decides
+ * which groups change.
+ */
+async function handleSettingsUpdate({
+  res,
+  options,
+  req,
+}: Pick<RouteContext, "res" | "options" | "req">): Promise<void> {
+  let update;
+  try {
+    update = parseSettingsUpdate(await readJson(req));
+  } catch (error) {
+    if (error instanceof SettingsUpdateError) {
+      ok(res, { error: error.message }, 400);
+      return;
+    }
+    ok(res, { error: "invalid request body" }, 400);
+    return;
+  }
+
+  const configFile = workspacePaths(options.workspaceRoot).configFile;
+  let result;
+  try {
+    result = await applySettingsUpdate(configFile, update);
+  } catch (error) {
+    if (error instanceof SettingsUpdateError) {
+      ok(res, { error: error.message }, 400);
+      return;
+    }
+    throw error;
+  }
+
+  // Reflect the persisted config in the live server so subsequent reads (and the
+  // policy engine) see the new policy without a restart.
+  options.config = result.config;
+
+  const audit = deps(options).audit;
+  for (const change of result.changes) {
+    await audit.append({
+      actor: "owner",
+      action: "settings.updated",
+      target: `${change.path}=${change.value}`,
+      result: "ok",
+    });
+  }
+
+  ok(res, settingsSummary(options));
+}
+
 function daemonSupervisor(options: ApiServerOptions): DaemonApiSupervisor {
   return (
     options.daemonSupervisor ??
@@ -655,6 +718,14 @@ const ROUTES: Record<string, RouteHandler> = {
 
   "GET /settings": ({ res, options }) => {
     ok(res, settingsSummary(options));
+  },
+
+  "POST /settings/autonomy": async ({ res, options, req }) => {
+    await handleSettingsUpdate({ res, options, req });
+  },
+
+  "POST /settings/policy": async ({ res, options, req }) => {
+    await handleSettingsUpdate({ res, options, req });
   },
 
   "GET /company-pulse": async ({ res, options }) => {
