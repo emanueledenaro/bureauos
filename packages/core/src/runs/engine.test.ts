@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { defaultConfig } from "../config/loader.js";
 import { ApprovalRegistry } from "../registries/approval.js";
+import { ensureDir, writeDoc } from "../registries/base.js";
 import { ArtifactStore } from "../artifacts/store.js";
 import { AuditLog } from "../audit/log.js";
 import { PolicyEngine } from "../policy/engine.js";
@@ -365,5 +366,79 @@ describe("RunEngine", () => {
       scope: "implement X",
     });
     expect(run.status).toBe("needs_human");
+  });
+
+  async function seedRun(id: string, status: string, updated: string): Promise<void> {
+    const runsDir = workspacePaths(dir).runsDir;
+    await ensureDir(runsDir);
+    await writeDoc(
+      join(runsDir, `${id}.md`),
+      {
+        id,
+        type: "planning",
+        status,
+        trigger_type: "owner_request",
+        trigger_source: "test",
+        project_id: "",
+        client_id: "",
+        scope: `Run ${id}`,
+        created_by: "supreme_coordinator",
+        artifacts: [],
+        decisions: [],
+        created: updated,
+        updated,
+        completed: "",
+        source_work_item_type: "",
+        source_work_item_id: "",
+        source_work_item_url: "",
+        linear_identifier: "",
+        linear_url: "",
+      },
+      `# Run ${id}\n\nScope: Run ${id}\nStatus: ${status}\n`,
+    );
+  }
+
+  it("reconciles a run dangling in a non-terminal state past the threshold (SER-194)", async () => {
+    const config = defaultConfig("freelancer");
+    const approvals = new ApprovalRegistry(dir);
+    const policy = new PolicyEngine(config, approvals);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const engine = new RunEngine(dir, { audit, artifacts, policy });
+
+    await seedRun("run_stale01", "in_progress", "2026-05-29T00:00:00.000Z");
+
+    const reconciled = await engine.reconcileStaleRuns({
+      now: new Date("2026-05-30T12:00:00.000Z"),
+      staleMs: 60 * 60 * 1000,
+    });
+
+    expect(reconciled.map((r) => r.id)).toEqual(["run_stale01"]);
+    const reloaded = await engine.get("run_stale01");
+    expect(reloaded?.status).toBe("blocked");
+    expect(String(reloaded?.["blocking_reason"])).toContain("stale");
+
+    const auditLog = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(auditLog).toContain("run.reconciled_stale");
+  });
+
+  it("leaves fresh non-terminal and already-terminal runs untouched (SER-194)", async () => {
+    const config = defaultConfig("freelancer");
+    const approvals = new ApprovalRegistry(dir);
+    const policy = new PolicyEngine(config, approvals);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const engine = new RunEngine(dir, { audit, artifacts, policy });
+
+    const now = new Date("2026-05-30T12:00:00.000Z");
+    // Fresh in_progress (updated 1 minute ago) and an already-completed run.
+    await seedRun("run_fresh01", "in_progress", "2026-05-30T11:59:00.000Z");
+    await seedRun("run_done01", "completed", "2026-05-29T00:00:00.000Z");
+
+    const reconciled = await engine.reconcileStaleRuns({ now, staleMs: 60 * 60 * 1000 });
+
+    expect(reconciled).toHaveLength(0);
+    expect((await engine.get("run_fresh01"))?.status).toBe("in_progress");
+    expect((await engine.get("run_done01"))?.status).toBe("completed");
   });
 });
