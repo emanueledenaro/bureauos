@@ -247,6 +247,92 @@ describe("OpenAICodexOAuthAdapter", () => {
     });
   });
 
+  it("refreshes only once when two concurrent requests share an expired token", async () => {
+    const refreshedToken = accessToken("acct_refreshed");
+    const refreshed: unknown[] = [];
+    const tokenUrlCalls: string[] = [];
+    let releaseRefresh: (() => void) | undefined;
+    const refreshGate = new Promise<void>((resolve) => {
+      releaseRefresh = resolve;
+    });
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = String(input);
+      if (url === OPENAI_CODEX_TOKEN_URL) {
+        tokenUrlCalls.push(url);
+        // Hold the first refresh open so the second concurrent caller has to
+        // decide whether to start its own refresh or reuse the in-flight one.
+        await refreshGate;
+        return new Response(
+          JSON.stringify({
+            access_token: refreshedToken,
+            refresh_token: "refresh-new",
+            expires_in: 3600,
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
+      }
+      return sseResponse("concurrent run");
+    };
+    const adapter = new OpenAICodexOAuthAdapter("openai-codex-test", {
+      accessToken: accessToken("acct_old"),
+      refreshToken: "refresh-old",
+      expiresAt: new Date(0).toISOString(),
+      fetch: fetchImpl,
+      onTokenRefresh: async (token) => {
+        refreshed.push(token);
+      },
+    });
+
+    const first = adapter.generateText({ model: "gpt-5.3-codex", prompt: "first" });
+    const second = adapter.generateText({ model: "gpt-5.3-codex", prompt: "second" });
+    // Let both calls reach the refresh single-flight before releasing it.
+    await Promise.resolve();
+    releaseRefresh?.();
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+
+    expect(firstResult.text).toBe("concurrent run");
+    expect(secondResult.text).toBe("concurrent run");
+    expect(tokenUrlCalls).toHaveLength(1);
+    expect(refreshed).toHaveLength(1);
+  });
+
+  it("allows a fresh refresh after a previous refresh failed", async () => {
+    let attempt = 0;
+    const refreshedToken = accessToken("acct_recovered");
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = String(input);
+      if (url === OPENAI_CODEX_TOKEN_URL) {
+        attempt += 1;
+        if (attempt === 1) {
+          return new Response("nope", { status: 400 });
+        }
+        return new Response(
+          JSON.stringify({
+            access_token: refreshedToken,
+            refresh_token: "refresh-new",
+            expires_in: 3600,
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
+      }
+      return sseResponse("recovered run");
+    };
+    const adapter = new OpenAICodexOAuthAdapter("openai-codex-test", {
+      accessToken: accessToken("acct_old"),
+      refreshToken: "refresh-old",
+      expiresAt: new Date(0).toISOString(),
+      fetch: fetchImpl,
+    });
+
+    await expect(
+      adapter.generateText({ model: "gpt-5.3-codex", prompt: "first" }),
+    ).rejects.toThrow();
+
+    const result = await adapter.generateText({ model: "gpt-5.3-codex", prompt: "second" });
+    expect(result.text).toBe("recovered run");
+    expect(attempt).toBe(2);
+  });
+
   it("fails explicitly when the OAuth token has no ChatGPT account id", async () => {
     const adapter = new OpenAICodexOAuthAdapter("openai-codex-test", {
       accessToken: "header.payload.signature",
