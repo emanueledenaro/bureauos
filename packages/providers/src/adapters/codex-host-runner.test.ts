@@ -106,6 +106,72 @@ describe("HostCodexRuntimeRunner", () => {
     expect(executor.calls).toHaveLength(0);
   });
 
+  // SER-183: git global options (`-c`/`-C`/`--git-dir`/`--exec-path`/...) must
+  // not be usable to smuggle a blocked subcommand past the allow-list, escape
+  // the workspace, or run arbitrary commands. Each must be refused with no spawn.
+  it.each([
+    {
+      name: "git -c core.pager=x push (pager exec + hidden subcommand)",
+      args: ["-c", "core.pager=x", "push"],
+      expected: "git global flag is not allowed: -c",
+    },
+    {
+      name: "git -C /tmp push (workspace escape + hidden subcommand)",
+      args: ["-C", "/tmp", "push"],
+      expected: "git global flag is not allowed: -C",
+    },
+    {
+      name: "git --git-dir=/x reset --hard (workspace escape + destructive)",
+      args: ["--git-dir=/x", "reset", "--hard"],
+      expected: "git global flag is not allowed: --git-dir",
+    },
+    {
+      name: "git -c alias.x='!cmd' status (alias exec vector)",
+      args: ["-c", "alias.x=!cmd", "status"],
+      expected: "git global flag is not allowed: -c",
+    },
+    {
+      name: "git --exec-path=/tmp push (helper-binary hijack + hidden subcommand)",
+      args: ["--exec-path=/tmp", "push"],
+      expected: "git global flag is not allowed: --exec-path",
+    },
+  ])("refuses git global flag bypass: $name", async ({ args, expected }) => {
+    const executor = new FakeExecutor({}, ok());
+    const runner = new HostCodexRuntimeRunner({
+      executor,
+      commands: [{ command: "git", args }],
+    });
+
+    const result = await runner.execute(input());
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain(expected);
+    // No process must ever be spawned for a refused command.
+    expect(executor.calls).toHaveLength(0);
+  });
+
+  it.each([
+    { name: "git status --porcelain", args: ["status", "--porcelain"] },
+    { name: "git diff", args: ["diff"] },
+  ])("still allows the read-only git flow: $name", async ({ name, args }) => {
+    const key = `git ${args.join(" ")}`;
+    const executor = new FakeExecutor({
+      [key]: ok(""),
+      "git status --porcelain": ok(""),
+    });
+    const runner = new HostCodexRuntimeRunner({
+      executor,
+      commands: [{ command: "git", args, label: name }],
+    });
+
+    const result = await runner.execute(input());
+
+    expect(result.ok).toBe(true);
+    expect(result.error).toBeUndefined();
+    // The allow-listed git command was actually spawned.
+    expect(executor.calls.map((call) => [call.command, ...call.args].join(" "))).toContain(key);
+  });
+
   it("stops at the first failing command and surfaces the failure", async () => {
     const executor = new FakeExecutor({
       "pnpm build": ok(),
@@ -166,6 +232,22 @@ describe("HostCodexRuntimeRunner", () => {
 
     expect(result.ok).toBe(true);
     expect(result.commands).toEqual(["node verify.js"]);
+  });
+
+  // Finding #38: a command whose cwd resolves outside the workspace root must be
+  // refused and must never spawn. `safeWorkspaceCwd` enforces this.
+  it("refuses a command whose cwd escapes the workspace root", async () => {
+    const executor = new FakeExecutor({}, ok());
+    const runner = new HostCodexRuntimeRunner({
+      executor,
+      commands: [{ command: "pnpm", args: ["test"], cwd: "../../escape" }],
+    });
+
+    await expect(runner.execute(input())).rejects.toThrow(/command cwd escapes workspace/);
+    // The escaping command was never spawned.
+    expect(executor.calls.map((call) => [call.command, ...call.args].join(" "))).not.toContain(
+      "pnpm test",
+    );
   });
 
   it("returns empty changed files when git inspection fails", async () => {
