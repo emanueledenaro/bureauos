@@ -91,6 +91,7 @@ export function RevenuePulseView({
   clientIntelligence,
   opportunities,
   artifacts,
+  pipelineValue,
   onGenerateReport,
 }: {
   pulse?: CompanyPulse;
@@ -98,12 +99,19 @@ export function RevenuePulseView({
   clientIntelligence?: ClientIntelligenceSummary;
   opportunities: OpportunityRecord[];
   artifacts: ArtifactRecord[];
+  /**
+   * Pipeline value from the shared `pipelineValue(state)` builder (single source
+   * of truth: prefers client-intelligence totals over the pulse figure). Passed
+   * in so this tile matches Header/Revenue/Today/Clients instead of reading the
+   * raw pulse value directly (SER-204).
+   */
+  pipelineValue: number;
   onGenerateReport: () => Promise<BusinessReportResult>;
 }) {
   const [busy, setBusy] = useState(false);
   const [report, setReport] = useState<BusinessReportResult | undefined>();
 
-  const pipeline = pulse?.revenue.pipeline_value ?? 0;
+  const pipeline = pipelineValue;
   const active = pulse?.revenue.active_opportunities ?? 0;
   const margin = opportunities.length
     ? opportunities.reduce((sum, item) => sum + (item.expected_margin || 0), 0) /
