@@ -341,9 +341,17 @@ describe("bureau cli", () => {
     expect(runFile).toBeDefined();
     const runPath = join(runsDir, runFile!);
     const runDoc = await readFile(runPath, "utf8");
+    // Force a clean retryable failure. The coordinator-dispatched bug run can
+    // legitimately end blocked (e.g. the QA acceptance gate), but this test
+    // asserts the bounded-retry start path, which needs a generic retryable
+    // failure rather than an acceptance-criteria blocker.
     await writeFile(
       runPath,
-      runDoc.replace("status: completed", "status: failed").replace(/completed: .*/, "completed: "),
+      runDoc
+        .replace(/status: \w+/, "status: failed")
+        .replace(/dispatch_status: \w+/, "dispatch_status: failed")
+        .replace(/^dispatch_blockers:.*$/m, "dispatch_blockers: []")
+        .replace(/completed: .*/, "completed: "),
       "utf8",
     );
 
@@ -748,7 +756,11 @@ describe("bureau cli", () => {
     );
     expect(ownership).toContain("manager_agent_id: project_manager");
     const audit = await readFile(join(dir, ".bureauos", "audit", "audit.log"), "utf8");
-    expect(audit).toContain("project.dispatch.completed");
+    // The feature pipeline runs real concrete agents; QA legitimately blocks
+    // without acceptance evidence, so the dispatch is truthfully recorded as
+    // blocked rather than a clean completion (SER-185).
+    expect(audit).toContain("project.dispatch.blocked");
+    expect(audit).not.toContain("project.dispatch.completed");
     const runs = await readFile(
       join(dir, ".bureauos", "memory", "projects", "pizzeria-aurora-booking-website", "RUNS.md"),
       "utf8",

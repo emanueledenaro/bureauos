@@ -365,26 +365,63 @@ export class ProjectDispatchService {
       ...producedArtifactIds,
     ]);
 
+    // Truthfully reflect specialist failures. Now that dispatch steps carry
+    // `ok`/`blockers`, a blocking specialist must not be reported as a clean
+    // completion: record an `error` audit, write a project RISKS.md entry, and
+    // surface blockers in the summary/next_actions.
+    const blockedSteps = dispatch.steps.filter((step) => !step.ok);
+    const blockers = blockedSteps.flatMap((step) =>
+      step.blockers.length > 0
+        ? step.blockers.map((blocker) => `${step.role}: ${blocker}`)
+        : [`${step.role}: ${step.notes}`],
+    );
+    const dispatchResult: "ok" | "error" = blockedSteps.length > 0 ? "error" : "ok";
+
     await appendFile(
       join(paths.projectsDir, project.slug, "RUNS.md"),
-      `\n\n## Dispatch ${run.id}\n\n- Type: ${run.type}\n- Project Manager: ${ownership.manager_agent_id}\n- Team: ${ownership.team_id}\n- Packet: ${packet.id}\n- Pipeline: ${pipeline.join(", ")}\n- Handoffs: ${handoffs.map((handoff) => handoff.artifact.id).join(", ")}\n- Outputs: ${producedArtifactIds.join(", ")}\n`,
+      `\n\n## Dispatch ${run.id}\n\n- Type: ${run.type}\n- Project Manager: ${ownership.manager_agent_id}\n- Team: ${ownership.team_id}\n- Packet: ${packet.id}\n- Pipeline: ${pipeline.join(", ")}\n- Handoffs: ${handoffs.map((handoff) => handoff.artifact.id).join(", ")}\n- Outputs: ${producedArtifactIds.join(", ")}\n- Result: ${dispatchResult === "error" ? "blocked" : "completed"}\n${dispatchResult === "error" ? `- Blockers: ${blockers.join("; ")}\n` : ""}`,
       "utf8",
     );
+
+    if (blockedSteps.length > 0) {
+      await appendFile(
+        join(paths.projectsDir, project.slug, "RISKS.md"),
+        `\n\n## Dispatch ${run.id} blocked\n\n- Run: ${run.id}\n- Type: ${run.type}\n- Project Manager: ${ownership.manager_agent_id}\n- Blocked roles: ${blockedSteps.map((step) => step.role).join(", ")}\n- Blockers: ${blockers.join("; ")}\n`,
+        "utf8",
+      );
+    }
+
     await this.audit.append({
       actor: ownership.manager_agent_id,
-      action: "project.dispatch.completed",
+      action: blockedSteps.length > 0 ? "project.dispatch.blocked" : "project.dispatch.completed",
       target: project.id,
       artifact_id: packet.id,
-      result: "ok",
+      ...(blockers.length > 0 ? { error: blockers.join("; ") } : {}),
+      result: dispatchResult,
     });
 
+    const summary =
+      blockedSteps.length > 0
+        ? `Dispatched ${project.name} to ${pipeline.length} roles; ${blockedSteps.length} blocked (${blockedSteps
+            .map((step) => step.role)
+            .join(", ")}). Owner resolution required before delivery.`
+        : `Dispatched ${project.name} to ${pipeline.length} roles with ${handoffs.length} handoff packets.`;
+    const nextActions =
+      blockedSteps.length > 0
+        ? [
+            `Resolve specialist blockers before delivery: ${blockers.join("; ")}.`,
+            "Review the project RISKS.md entry for the blocked dispatch.",
+            "Re-dispatch once blockers are cleared, or escalate for owner intervention.",
+          ]
+        : [
+            "Review specialist artifacts before creating dev-ready GitHub issues.",
+            "Resolve pending approval gates before external commitments.",
+            "Use the dispatch packet as the project-scoped context source for follow-up runs.",
+          ];
+
     return {
-      summary: `Dispatched ${project.name} to ${pipeline.length} roles with ${handoffs.length} handoff packets.`,
-      next_actions: [
-        "Review specialist artifacts before creating dev-ready GitHub issues.",
-        "Resolve pending approval gates before external commitments.",
-        "Use the dispatch packet as the project-scoped context source for follow-up runs.",
-      ],
+      summary,
+      next_actions: nextActions,
       project,
       ownership,
       ...(client ? { client } : {}),
