@@ -5,7 +5,7 @@ import {
   type SemanticMemoryHit,
   type SemanticMemoryIndex,
 } from "./semantic.js";
-import { SqliteFtsMemoryIndex } from "./sqlite-index.js";
+import { SqliteFtsMemoryIndex, tokenizeQuery } from "./sqlite-index.js";
 
 /**
  * Markdown-backed memory store.
@@ -162,9 +162,8 @@ export class LocalMemoryStore {
         if (backend === "sqlite_fts5") return [];
       }
     }
-    const needle = normalizedQuery.toLowerCase();
     const files = await this.walk(this.root);
-    return this.searchFiles(files, needle, limit);
+    return this.searchFiles(files, normalizedQuery, limit);
   }
 
   /**
@@ -191,9 +190,15 @@ export class LocalMemoryStore {
 
   protected async searchFiles(
     files: readonly string[],
-    needle: string,
+    query: string,
     limit: number,
   ): Promise<MemoryHit[]> {
+    // Tokenize and OR-match the query the same way the FTS5 backend does
+    // (`tokenizeQuery` + OR-join), so the Markdown-scan path and the FTS5 path
+    // recall the same documents for a multi-word query instead of requiring the
+    // whole contiguous phrase (SER-197).
+    const terms = tokenizeQuery(query.trim().toLowerCase());
+    if (terms.length === 0) return [];
     const hits: MemoryHit[] = [];
     for (const file of files) {
       if (!file.endsWith(".md")) continue;
@@ -205,17 +210,24 @@ export class LocalMemoryStore {
       }
       const lc = content.toLowerCase();
       let score = 0;
-      let from = 0;
-      while (true) {
-        const idx = lc.indexOf(needle, from);
-        if (idx < 0) break;
-        score++;
-        from = idx + needle.length;
+      let firstMatch = -1;
+      let firstMatchLength = 0;
+      for (const term of terms) {
+        let from = 0;
+        while (true) {
+          const idx = lc.indexOf(term, from);
+          if (idx < 0) break;
+          score++;
+          if (firstMatch < 0 || idx < firstMatch) {
+            firstMatch = idx;
+            firstMatchLength = term.length;
+          }
+          from = idx + term.length;
+        }
       }
       if (score > 0) {
-        const idx = lc.indexOf(needle);
-        const start = Math.max(0, idx - 80);
-        const end = Math.min(content.length, idx + needle.length + 80);
+        const start = Math.max(0, firstMatch - 80);
+        const end = Math.min(content.length, firstMatch + firstMatchLength + 80);
         hits.push({
           path: file,
           // Match the FTS5 backend, which returns a workspace-relative path.
@@ -301,10 +313,15 @@ export class ScopedMemoryStore extends LocalMemoryStore {
 
   override async search(query: string, options: SearchOptions = {}): Promise<MemoryHit[]> {
     const limit = options.limit ?? 20;
-    const needle = query.toLowerCase();
-    if (!needle) return [];
+    // Trim and let searchFiles tokenize, so scoped recall matches the global
+    // store's tokenized recall for multi-word queries; only the in-scope file
+    // set is ever read, preserving scope isolation (SER-197). The FTS5 index is
+    // intentionally not consulted here — it spans the whole workspace, and a
+    // scoped agent must never read out-of-scope content even transiently.
+    const normalizedQuery = query.trim();
+    if (!normalizedQuery) return [];
     const files = await this.filesForRules(this.allowed);
-    return this.searchFiles(files, needle, limit);
+    return this.searchFiles(files, normalizedQuery, limit);
   }
 
   private assertAccess(relativePath: string): void {
