@@ -1753,6 +1753,57 @@ describe("API server", () => {
     expect(audit).not.toContain("sk-test-provider-secret");
   });
 
+  it("updates a connected provider default model without re-running auth", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const login = await fetch(`${server.url}/providers/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        provider: "openai",
+        apiKey: "sk-test-provider-secret",
+        defaultModel: "gpt-5.5",
+      }),
+    });
+    expect(login.status).toBe(201);
+
+    const update = await fetch(`${server.url}/providers/auth/model`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ provider: "openai", defaultModel: "gpt-5.5-mini" }),
+    });
+    expect(update.status, await update.clone().text()).toBe(200);
+    const updateBody = (await update.json()) as Array<{
+      provider: string;
+      source: string;
+      default_model: string;
+      api_key_masked: string;
+    }>;
+    const openai = updateBody.find((provider) => provider.provider === "openai");
+    expect(openai?.source).toBe("auth");
+    expect(openai?.default_model).toBe("gpt-5.5-mini");
+    // The stored API key must survive a model-only update.
+    expect(openai?.api_key_masked).toBe("sk-t...cret");
+    expect(JSON.stringify(updateBody)).not.toContain("sk-test-provider-secret");
+
+    const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(audit).toContain("provider.auth.model");
+    expect(audit).not.toContain("sk-test-provider-secret");
+  });
+
+  it("rejects a default model update for a provider that is not connected", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const update = await fetch(`${server.url}/providers/auth/model`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ provider: "anthropic", defaultModel: "claude-x" }),
+    });
+    expect(update.status).toBe(404);
+    const body = (await update.json()) as { error: string };
+    expect(body.error).toContain("not connected");
+  });
+
   it("connects OpenAI Codex OAuth without falling back to OpenAI API auth", async () => {
     server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
 

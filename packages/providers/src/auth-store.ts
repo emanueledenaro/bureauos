@@ -116,6 +116,34 @@ export class ProviderAuthStore {
     return record;
   }
 
+  /**
+   * Update the default model on an already-connected credential without
+   * touching its OAuth tokens or API key. Returns undefined when no matching
+   * credential exists so callers can surface a "not connected" error instead of
+   * silently creating a credential without auth material.
+   */
+  async setDefaultModel(
+    provider: ProviderType,
+    defaultModel: string,
+    id = defaultProviderId(provider),
+  ): Promise<ProviderCredentialRecord | undefined> {
+    const file = await this.load();
+    const existing = file.credentials.find(
+      (record) => record.provider === provider && record.id === id,
+    );
+    if (!existing) return undefined;
+    const record: ProviderCredentialRecord = {
+      ...existing,
+      defaultModel: defaultModel.trim(),
+      updated: new Date().toISOString(),
+    };
+    const nextCredentials = file.credentials.map((item) =>
+      item.provider === provider && item.id === id ? record : item,
+    );
+    await this.save({ version: 1, credentials: nextCredentials });
+    return record;
+  }
+
   async remove(provider: ProviderType, id = defaultProviderId(provider)): Promise<boolean> {
     const file = await this.load();
     const nextCredentials = file.credentials.filter(

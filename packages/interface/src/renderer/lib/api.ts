@@ -814,9 +814,17 @@ export interface ProviderModelList {
     budgetTier: "free" | "low" | "standard" | "high" | "premium";
   }>;
 }
+/**
+ * OAuth completion strategy shared by the authorize response and the callback
+ * request. Mirrors `ProviderOAuthMethod` in `@bureauos/core`. "auto" means the
+ * local callback server captured the redirect and BureauOS can finish without
+ * owner input; "code" means the owner pastes the final redirect URL or code.
+ */
+export type ProviderOAuthMethod = "auto" | "code";
+
 export interface ProviderAuthAuthorization {
   url: string;
-  method: "auto" | "code";
+  method: ProviderOAuthMethod;
   instructions: string;
 }
 export interface ProviderOAuthCallbackResult {
@@ -1011,15 +1019,20 @@ export const Api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+  providerSetDefaultModel: (input: { provider: string; id?: string; defaultModel: string }) =>
+    api<ProviderConnection[]>("/providers/auth/model", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   providerAuthMethods: () => api<Record<string, ProviderAuthMethod[]>>("/provider/auth"),
-  providerOAuthAuthorize: (providerID: string, method = 0) =>
+  providerOAuthAuthorize: (providerID: string, method: ProviderOAuthMethod = "auto") =>
     api<ProviderAuthAuthorization>(`/provider/${providerID}/oauth/authorize`, {
       method: "POST",
       body: JSON.stringify({ method }),
     }),
   providerOAuthCallback: (
     providerID: string,
-    input: { method?: number; code?: string; defaultModel?: string } = {},
+    input: { method?: ProviderOAuthMethod; code?: string; defaultModel?: string } = {},
   ) =>
     api<ProviderOAuthCallbackResult>(`/provider/${providerID}/oauth/callback`, {
       method: "POST",

@@ -444,6 +444,7 @@ export type {
   ProviderAuthAuthorization,
   ProviderOAuthCallbackInput,
   ProviderOAuthCallbackResult,
+  ProviderOAuthMethod,
 } from "./providers/openai-codex-oauth-session.js";
 export type { ProviderAuthMethod } from "@bureauos/providers";
 

@@ -10,14 +10,22 @@ import {
   type OpenAICodexOAuthFetch,
 } from "@bureauos/providers";
 
+/**
+ * OAuth completion strategy shared by the authorize response and the callback
+ * request. "auto" means BureauOS captured the redirect on a local callback
+ * server and can finish without owner input; "code" means the owner must paste
+ * the final redirect URL or authorization code.
+ */
+export type ProviderOAuthMethod = "auto" | "code";
+
 export interface ProviderAuthAuthorization {
   url: string;
-  method: "auto" | "code";
+  method: ProviderOAuthMethod;
   instructions: string;
 }
 
 export interface ProviderOAuthCallbackInput {
-  method?: number;
+  method?: ProviderOAuthMethod;
   code?: string;
   defaultModel?: string;
 }
