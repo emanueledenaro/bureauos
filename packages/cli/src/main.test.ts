@@ -156,6 +156,23 @@ describe("bureau cli", () => {
     }
   });
 
+  it("formats handler errors as 'bureau: <command>: <message>' without a fatal Error prefix (SER-210)", async () => {
+    // No workspace in the test cwd: handleIntake throws from loadWorkspaceConfig.
+    const top = await captureStderr(() => main(["node", "bureau", "intake", "--message", "hello"]));
+    expect(top.code).toBe(1);
+    expect(top.output).toContain("bureau: intake: ");
+    expect(top.output).toContain("no workspace");
+    expect(top.output).not.toContain("fatal");
+    expect(top.output).not.toContain("Error:");
+
+    // A namespaced command labels with "<command> <sub>".
+    const sub = await captureStderr(() => main(["node", "bureau", "report", "generate"]));
+    expect(sub.code).toBe(1);
+    expect(sub.output).toContain("bureau: report generate: ");
+    expect(sub.output).not.toContain("fatal");
+    expect(sub.output).not.toContain("Error:");
+  });
+
   it("records durable decisions and daily notes from CLI", async () => {
     await main(["node", "bureau", "init", "--name", "BOS"]);
 
