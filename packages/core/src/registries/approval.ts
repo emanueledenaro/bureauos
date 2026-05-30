@@ -272,11 +272,19 @@ export class ApprovalRegistry {
    * Returns the most recent matching approval that is still valid: approved, not
    * expired, and — for one-off approvals — not already consumed. Standing /
    * recurring approvals (`one_off: false`) keep matching until they expire.
+   *
+   * When `scope` is supplied, the candidate approval must have been granted for
+   * that exact scope (or an explicit `"*"` wildcard). The coarse policy `action`
+   * collapses several distinct, differently-risky capability operations into one
+   * value, so matching on action+target alone lets an approval for one operation
+   * auto-authorize a different one; the scope check prevents that (SER-180).
+   * Omitting `scope` keeps the legacy coarse action+target matching.
    */
   async match(
     action: string,
     target: string,
     now = new Date(),
+    scope?: string,
   ): Promise<ApprovalRecord | undefined> {
     const resolved = await this.listResolved();
     const candidates = resolved
@@ -284,7 +292,8 @@ export class ApprovalRegistry {
         (r) =>
           r.status === "approved" &&
           r.action === action &&
-          (r.target === target || r.target === "*"),
+          (r.target === target || r.target === "*") &&
+          (scope === undefined || r.scope === scope || r.scope === "*"),
       )
       .filter((r) => !r.expires_at || new Date(r.expires_at).getTime() > now.getTime())
       // A one-off approval that has already authorized an action is spent and

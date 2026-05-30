@@ -8,13 +8,19 @@ import { ApprovalRegistry, inferApprovalRiskLevel } from "./approval.js";
 
 async function approvedOneOff(
   approvals: ApprovalRegistry,
-  overrides: Partial<{ action: string; target: string; oneOff: boolean; expiresAt: string }> = {},
+  overrides: Partial<{
+    action: string;
+    target: string;
+    scope: string;
+    oneOff: boolean;
+    expiresAt: string;
+  }> = {},
 ) {
   const record = await approvals.request({
     action: overrides.action ?? "deploy_production",
     actor: "owner",
     target: overrides.target ?? "vercel://prod",
-    scope: "test",
+    scope: overrides.scope ?? "test",
     oneOff: overrides.oneOff ?? true,
     ...(overrides.expiresAt ? { expiresAt: overrides.expiresAt } : {}),
   });
@@ -86,6 +92,73 @@ describe("ApprovalRegistry consumption", () => {
     expect((await approvals.match("deploy_production", "any-target"))?.id).toBe(record.id);
     await approvals.consume(record.id);
     expect(await approvals.match("deploy_production", "any-target")).toBeUndefined();
+  });
+
+  it("does not let an approval for one scope authorize a different scope (SER-180)", async () => {
+    const approvals = new ApprovalRegistry(dir);
+    // stripe.refund_payment and stripe.change_price both collapse to the coarse
+    // change_billing action on the same target.
+    const refund = await approvedOneOff(approvals, {
+      action: "change_billing",
+      target: "stripe://acct/acme",
+      scope: "stripe.refund_payment",
+      oneOff: false,
+    });
+
+    // The refund approval authorizes its own scope...
+    expect(
+      (
+        await approvals.match(
+          "change_billing",
+          "stripe://acct/acme",
+          undefined,
+          "stripe.refund_payment",
+        )
+      )?.id,
+    ).toBe(refund.id);
+    // ...but NOT the differently-risky price-change scope.
+    expect(
+      await approvals.match(
+        "change_billing",
+        "stripe://acct/acme",
+        undefined,
+        "stripe.change_price",
+      ),
+    ).toBeUndefined();
+    // Omitting scope keeps the legacy coarse action+target match.
+    expect((await approvals.match("change_billing", "stripe://acct/acme"))?.id).toBe(refund.id);
+  });
+
+  it("honors an explicit wildcard scope as a broad grant (SER-180)", async () => {
+    const approvals = new ApprovalRegistry(dir);
+    const record = await approvedOneOff(approvals, {
+      action: "change_billing",
+      target: "stripe://acct/acme",
+      scope: "*",
+      oneOff: false,
+    });
+
+    // A "*" scope matches any requested scope for that action+target.
+    expect(
+      (
+        await approvals.match(
+          "change_billing",
+          "stripe://acct/acme",
+          undefined,
+          "stripe.change_price",
+        )
+      )?.id,
+    ).toBe(record.id);
+    expect(
+      (
+        await approvals.match(
+          "change_billing",
+          "stripe://acct/acme",
+          undefined,
+          "stripe.refund_payment",
+        )
+      )?.id,
+    ).toBe(record.id);
   });
 });
 
