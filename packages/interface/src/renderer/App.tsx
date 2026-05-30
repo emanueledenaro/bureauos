@@ -30,7 +30,7 @@ import { SettingsView } from "./views/SettingsView";
 import { TimelineView } from "./views/TimelineView";
 import { RevenuePulseView } from "./views/RevenuePulseView";
 import { useDashboard } from "./hooks/useDashboard";
-import { adaptiveDefaultMode } from "./lib/builders";
+import { adaptiveDefaultMode, pipelineValue } from "./lib/builders";
 import {
   Api,
   type AutonomousRetryResult,
@@ -466,6 +466,7 @@ function DashboardLayout({
         clientIntelligence={state.clientIntelligence}
         opportunities={state.opportunities}
         artifacts={state.artifacts}
+        pipelineValue={pipelineValue(state)}
         onGenerateReport={onGenerateReport}
       />
     </div>
