@@ -40,7 +40,7 @@ Every major capability described in the docs must become one of:
 | Memory browser | `MemoryBrowserService` routed through `LocalMemoryStore.search` (FTS5) and the config semantic index, `GET /memory/browser` | implemented |
 | Run decision records | `RunEngine` auto-appends `DECISIONS.md` records on completion via `recordDecision` (honors `memory.write_decision_records`), cross-linked to runs and client/project decision logs | implemented |
 | Opportunity pipeline | `OpportunityRegistry`, `RevenuePipelineService`, revenue pulse, `revenue-pipeline-report` | partial |
-| Run lifecycle | `RunEngine`, injected coordinator dispatcher, `bureau run new --stub` | partial |
+| Run lifecycle | `RunEngine`, injected coordinator dispatcher, `bureau run new --stub`; the coordinator dispatcher truthfully propagates specialist `ok:false` as a `blocked` terminal status with aggregated `dispatch_blockers` (no longer hardcoded to `completed`), so blocked runs transition to `blocked` and feed the bounded-retry scan | partial |
 | Artifact store | `ArtifactStore` | partial |
 | Audit log | `AuditLog`, `/audit`, SSE events | implemented |
 | Approval gates | `ApprovalRegistry`, `PolicyEngine`, ElectronJS approvals | partial |
@@ -86,7 +86,7 @@ Every major capability described in the docs must become one of:
 | --- | --- | --- |
 | Agent role catalog | `AGENT_ROLES` | implemented |
 | PM agent per project | concrete PM agent with provider-backed drafting, per-project `OWNERSHIP.md`, and deterministic local template when selected route is unavailable | partial |
-| Delivery agents | concrete/template agents with provider-backed drafting, deterministic local template fallback, Reviewer/QA/Security agents that enrich their narrative via the provider while keeping their deterministic structured gate authoritative, and Development Agent runtime execution through a real host-backed Codex runner (opt-in via `runtime.codex.enabled`) when Codex runtime plus capability checker are supplied | partial |
+| Delivery agents | concrete/template agents with provider-backed drafting, deterministic local template fallback, Reviewer/QA/Security agents that enrich their narrative via the provider while keeping their deterministic structured gate authoritative, and Development Agent runtime execution through a real host-backed Codex runner (opt-in via `runtime.codex.enabled`) when Codex runtime plus capability checker are supplied; specialist `ok:false` blockers now surface as `DispatchOutput` step `ok`/`blockers` and propagate to the dispatch result and project dispatch instead of being swallowed | partial |
 | Growth agents | template agents with provider-backed drafting and deterministic local template when selected route is unavailable | partial |
 | Compliance agent | concrete compliance agent with provider-backed drafting and deterministic local template when selected route is unavailable | partial |
 | Agent provider routing | `ProviderRouter`, `configureAgentProviderRouting`, dispatcher model capability, per-model capability metadata, budget-tier filtering, and no API fallback from `openai-codex` OAuth | implemented |
@@ -124,7 +124,7 @@ Every major capability described in the docs must become one of:
 | Client account review | scheduler creates account review runs and real client-account-plan artifacts from client intelligence | partial |
 | Threshold triggers | `GitHubSignalTriggerService` and `OperationalSignalTriggerService` start idempotent runs from failing/stale GitHub work, blocked internal work, unanswered client messages, and empty content pipeline signals; internal signals now attach `project-health-report`, `client-account-plan`, or `content-pipeline-report` artifacts before specialist dispatch | implemented |
 | Memory triggers | `MemoryTriggerService`, `memory_due` client-success runs from due `next_follow_up_at` client memory, `client-success-status-report` artifacts, `bureau autonomy memory-scan`, `/autonomy/memory-triggers/scan`, scheduler memory scan | implemented |
-| Bounded retry system | `AutonomousRetryService`, `autonomy-retry-report`, `bureau autonomy retry-scan`, `/autonomy/retries/scan`, scheduler retry scan, max attempts from `limits.max_retries_per_task`, policy escalation to approval; covered by `retry.test.ts` | implemented |
+| Bounded retry system | `AutonomousRetryService`, `autonomy-retry-report`, `bureau autonomy retry-scan`, `/autonomy/retries/scan`, scheduler retry scan, max attempts from `limits.max_retries_per_task`, policy escalation to approval; only marks `retry_recovered_at` when the retry dispatch truly completes with no blockers, so a blocked retry stays eligible and escalates over the limit; covered by `retry.test.ts` | implemented |
 | Failing check detection | `GitHubSignalSyncService`, `GitHubWebhookIngestionService`, `github sync`, `/github/webhook`, `github-signal-report` | partial |
 | Stale PR/issue detection | `GitHubSignalSyncService`, `github sync --stale-days` | partial |
 

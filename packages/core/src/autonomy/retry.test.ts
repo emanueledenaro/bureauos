@@ -12,6 +12,46 @@ import { ApprovalRegistry } from "../registries/approval.js";
 import { readDoc, writeDoc } from "../registries/base.js";
 import { RunEngine, type RunRecord } from "../runs/engine.js";
 import { AutonomousRetryService } from "./retry.js";
+import { AgentRegistry, type AgentRunInput, type AgentRunOutput } from "../agents/runtime.js";
+import { AGENT_INDEX } from "../agents/roles.js";
+
+/** Registry whose every role resolves to an ok stub (clean recovery path). */
+function okRegistry(deps: {
+  artifacts: ArtifactStore;
+  audit: AuditLog;
+  policy: PolicyEngine;
+}): AgentRegistry {
+  return new AgentRegistry(deps);
+}
+
+/** Registry where one role blocks, so a coordinator retry truthfully fails. */
+function blockingRegistry(
+  deps: { artifacts: ArtifactStore; audit: AuditLog; policy: PolicyEngine },
+  roleId: string,
+  blocker: string,
+): AgentRegistry {
+  const registry = new AgentRegistry(deps);
+  const definition = AGENT_INDEX.get(roleId)!;
+  registry.register({
+    definition,
+    async execute(input: AgentRunInput): Promise<AgentRunOutput> {
+      const record = await deps.artifacts.write({
+        type: "run-report",
+        createdBy: definition.id,
+        runId: input.context.runId,
+        body: `# ${definition.role} blocked\n\n${blocker}`,
+      });
+      return {
+        ok: false,
+        artifactIds: [record.id],
+        decisions: ["blocked"],
+        blockers: [blocker],
+        notes: `${definition.role} blocked`,
+      };
+    },
+  });
+  return registry;
+}
 
 const NOW = new Date("2026-05-25T12:00:00.000Z");
 
@@ -58,7 +98,7 @@ describe("AutonomousRetryService", () => {
       audit,
       artifacts,
       policy,
-      coordinator: { audit, artifacts, policy },
+      coordinator: { audit, artifacts, policy, registry: okRegistry({ artifacts, audit, policy }) },
     });
     const result = await service.scan({ now: NOW, maxAttempts: 2 });
     const duplicate = await service.scan({ now: NOW, maxAttempts: 2 });
@@ -180,6 +220,56 @@ describe("AutonomousRetryService", () => {
       retry_classification: "non_retryable_credentials",
     });
     expect(patchedOriginal?.["retry_child_runs"]).toBeUndefined();
+  });
+
+  it("does not mark recovery when the retry truthfully blocks, then escalates over the limit", async () => {
+    const { artifacts, audit, policy, runs } = runtime();
+    const original = await runs.start({
+      type: "bug",
+      triggerType: "owner_request",
+      triggerSource: "owner:bug",
+      scope: "Fix booking regression",
+    });
+    await patchRun(original, { status: "failed", completed: "" });
+
+    const service = new AutonomousRetryService(dir, {
+      runs,
+      audit,
+      artifacts,
+      policy,
+      coordinator: {
+        audit,
+        artifacts,
+        policy,
+        registry: blockingRegistry({ artifacts, audit, policy }, "qa", "qa: still not ready"),
+      },
+    });
+
+    // First attempt: the coordinator retry blocks, so recovery must NOT be set
+    // and the original stays eligible for the next bounded attempt.
+    const first = await service.scan({ now: NOW, maxAttempts: 1 });
+    expect(first.triggered).toHaveLength(1);
+    const retryRunId = first.triggered[0]!.retryRun.id;
+
+    const afterFirst = await runs.get(original.id);
+    expect(afterFirst?.["retry_recovered_at"]).toBeUndefined();
+    expect(afterFirst?.["retry_attempts"]).toBe(1);
+
+    // The retry child itself is now truthfully blocked with blockers persisted.
+    const retryRun = await runs.get(retryRunId);
+    expect(retryRun?.status).toBe("blocked");
+    expect(retryRun?.["dispatch_blockers"]).toEqual(["qa: qa: still not ready"]);
+
+    // Second scan over maxAttempts escalates the original instead of looping.
+    const second = await service.scan({ now: NOW, maxAttempts: 1 });
+    expect(second.triggered).toHaveLength(0);
+    expect(second.escalated).toHaveLength(1);
+    expect(second.escalated[0]?.run.id).toBe(original.id);
+    expect(second.escalated[0]?.reason).toBe("max_attempts_reached");
+
+    const escalatedOriginal = await runs.get(original.id);
+    expect(escalatedOriginal?.["retry_escalated_at"]).toBe(NOW.toISOString());
+    expect(escalatedOriginal?.["retry_recovered_at"]).toBeUndefined();
   });
 
   it("honors policy when retry triage is disabled", async () => {

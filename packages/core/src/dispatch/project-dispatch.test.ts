@@ -40,6 +40,12 @@ describe("ProjectDispatchService", () => {
       briefing: "Create the first implementation-ready delivery packet.",
     });
 
+    // The feature pipeline runs real concrete agents; QA legitimately blocks
+    // when no acceptance evidence is attached, so this dispatch is truthfully
+    // blocked rather than a clean completion (SER-185).
+    const blockedSteps = result.dispatch.steps.filter((step) => !step.ok);
+    expect(blockedSteps.length).toBeGreaterThan(0);
+
     expect(result.project.id).toBe(intake.project.id);
     expect(result.client?.id).toBe(intake.client.id);
     expect(result.ownership).toMatchObject({
@@ -102,8 +108,22 @@ describe("ProjectDispatchService", () => {
     expect(runs).toContain(`Dispatch ${result.run.id}`);
     expect(runs).toContain("Project Manager: project_manager");
     expect(runs).toContain(result.packet.id);
+    expect(runs).toContain("Result: blocked");
 
+    // Truthful blocked propagation (SER-185): error audit, RISKS.md entry, and
+    // the blocker surfaced in the summary and next actions.
     const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
-    expect(audit).toContain("project.dispatch.completed");
+    expect(audit).toContain("project.dispatch.blocked");
+    expect(audit).toContain('"result":"error"');
+    expect(audit).not.toContain("project.dispatch.completed");
+
+    const risks = await readFile(
+      join(workspacePaths(dir).projectsDir, intake.project.slug, "RISKS.md"),
+      "utf8",
+    );
+    expect(risks).toContain(`Dispatch ${result.run.id} blocked`);
+
+    expect(result.summary).toContain("blocked");
+    expect(result.next_actions.join(" ")).toContain("Resolve specialist blockers");
   });
 });

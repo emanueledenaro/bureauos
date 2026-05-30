@@ -171,7 +171,12 @@ export type {
   RunDispatchTerminalStatus,
 } from "./runs/engine.js";
 export { createCoordinatorRunDispatcher, dispatchRun } from "./runs/coordinator.js";
-export type { DispatchInput, DispatchOutput, CoordinatorDeps } from "./runs/coordinator.js";
+export type {
+  DispatchInput,
+  DispatchOutput,
+  DispatchStep,
+  CoordinatorDeps,
+} from "./runs/coordinator.js";
 
 // Supreme coordinator
 export { CoordinatorIntakeService } from "./coordinator/intake.js";

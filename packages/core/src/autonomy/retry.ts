@@ -423,6 +423,13 @@ Owner intervention is required before BureauOS should retry this run again.
       });
       if (report) await this.deps.runs.attachArtifacts(retryRun.id, [report.id]);
 
+      // Track the retry's TRUE terminal outcome. The retry run starts through
+      // the stub path (which always completes), so `retryRun.status` alone lies
+      // when the coordinator dispatch actually blocks. We apply the dispatch
+      // result to the retry run and only treat it as recovered when the real
+      // pipeline completed with no blockers.
+      let retryRecovered = retryRun.status === "completed";
+      let retryBlockers: string[] = [];
       if (this.deps.coordinator && retryRun.status !== "needs_human") {
         const dispatch = await dispatchRun(this.deps.coordinator, {
           workspaceRoot: this.workspaceRoot,
@@ -442,6 +449,24 @@ Owner intervention is required before BureauOS should retry this run again.
           dispatch.briefingArtifactId,
           ...dispatch.steps.flatMap((step) => step.artifactIds),
         ]);
+
+        const blockedSteps = dispatch.steps.filter((step) => !step.ok);
+        retryBlockers = blockedSteps.flatMap((step) =>
+          step.blockers.length > 0
+            ? step.blockers.map((blocker) => `${step.role}: ${blocker}`)
+            : [`${step.role}: ${step.notes}`],
+        );
+        retryRecovered = blockedSteps.length === 0;
+        if (blockedSteps.length > 0) {
+          // Persist the truthful blocked outcome on the retry run so a later
+          // scan classifies and retries/escalates it rather than treating the
+          // stub completion as success.
+          await this.deps.runs.patch(retryRun.id, {
+            status: "blocked",
+            dispatch_status: "blocked",
+            dispatch_blockers: retryBlockers,
+          });
+        }
       }
 
       await this.deps.runs.patch(candidate.run.id, {
@@ -450,7 +475,7 @@ Owner intervention is required before BureauOS should retry this run again.
         next_retry_at: candidate.nextRetryAt ?? nextRetryAt(now, candidate.nextAttempt),
         retry_classification: candidate.classification.reason,
         ...(report ? { retry_report_id: report.id } : {}),
-        ...(retryRun.status === "completed" ? { retry_recovered_at: now.toISOString() } : {}),
+        ...(retryRecovered ? { retry_recovered_at: now.toISOString() } : {}),
         retry_child_runs: [...stringList(candidate.run["retry_child_runs"]), retryRun.id],
       });
       await this.deps.runs.patch(retryRun.id, {

@@ -10,7 +10,9 @@ import { workspacePaths } from "../paths.js";
 import { PolicyEngine } from "../policy/engine.js";
 import { ApprovalRegistry } from "../registries/approval.js";
 import { RunEngine } from "./engine.js";
-import { dispatchRun } from "./coordinator.js";
+import { createCoordinatorRunDispatcher, dispatchRun } from "./coordinator.js";
+import { AgentRegistry, type AgentRunInput, type AgentRunOutput } from "../agents/runtime.js";
+import { AGENT_INDEX } from "../agents/roles.js";
 import {
   ProviderRouter,
   type GenerateTextOptions,
@@ -72,6 +74,77 @@ class FakeRuntime implements RuntimeAdapter {
       commands: ["pnpm test"],
     };
   }
+}
+
+/**
+ * Test agent that always succeeds, recording a single artifact. Lets pipeline
+ * tests assert the happy path without depending on concrete-agent evidence
+ * gates.
+ */
+class OkTestAgent {
+  constructor(
+    public readonly definition: NonNullable<ReturnType<typeof AGENT_INDEX.get>>,
+    private readonly artifacts: ArtifactStore,
+  ) {}
+
+  async execute(input: AgentRunInput): Promise<AgentRunOutput> {
+    const record = await this.artifacts.write({
+      type: "run-report",
+      createdBy: this.definition.id,
+      runId: input.context.runId,
+      body: `# ${this.definition.role} ok\n\nScope: ${input.context.scope}`,
+    });
+    return {
+      ok: true,
+      artifactIds: [record.id],
+      decisions: [],
+      blockers: [],
+      notes: `${this.definition.role} completed`,
+    };
+  }
+}
+
+/** Test agent that always blocks with explicit blockers. */
+class BlockingTestAgent {
+  constructor(
+    public readonly definition: NonNullable<ReturnType<typeof AGENT_INDEX.get>>,
+    private readonly artifacts: ArtifactStore,
+    private readonly blocker: string,
+  ) {}
+
+  async execute(input: AgentRunInput): Promise<AgentRunOutput> {
+    const record = await this.artifacts.write({
+      type: "run-report",
+      createdBy: this.definition.id,
+      runId: input.context.runId,
+      body: `# ${this.definition.role} blocked\n\n${this.blocker}`,
+    });
+    return {
+      ok: false,
+      artifactIds: [record.id],
+      decisions: ["blocked"],
+      blockers: [this.blocker],
+      notes: `${this.definition.role} blocked`,
+    };
+  }
+}
+
+function registryWith(
+  artifacts: ArtifactStore,
+  audit: AuditLog,
+  policy: PolicyEngine,
+  overrides: Record<string, "ok" | { block: string }>,
+): AgentRegistry {
+  const registry = new AgentRegistry({ artifacts, audit, policy });
+  for (const [roleId, behavior] of Object.entries(overrides)) {
+    const definition = AGENT_INDEX.get(roleId)!;
+    registry.register(
+      behavior === "ok"
+        ? new OkTestAgent(definition, artifacts)
+        : new BlockingTestAgent(definition, artifacts, behavior.block),
+    );
+  }
+  return registry;
 }
 
 describe("Supreme Coordinator dispatch", () => {
@@ -273,5 +346,129 @@ describe("Supreme Coordinator dispatch", () => {
     const written = await artifacts.read(featureSpec!.id);
     expect(written?.body).toContain("# Generated fake-model");
     expect(written?.body).toContain("- Model: fake-model");
+  });
+
+  it("propagates a specialist ok:false as a blocked dispatch result with blockers", async () => {
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const artifacts = new ArtifactStore(dir);
+    const policy = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
+    const runs = new RunEngine(dir, { audit, artifacts, policy });
+
+    const run = await runs.start({
+      type: "planning",
+      triggerType: "owner_request",
+      triggerSource: "test",
+      scope: "Blocked planning",
+    });
+
+    const registry = registryWith(artifacts, audit, policy, {
+      project_manager: "ok",
+      product: { block: "missing acceptance evidence" },
+    });
+    const result = await dispatchRun(
+      { audit, artifacts, policy, registry },
+      {
+        workspaceRoot: dir,
+        run,
+        scope: "Blocked planning",
+      },
+    );
+
+    expect(result.steps.map((step) => step.ok)).toEqual([true, false]);
+    const dispatcher = createCoordinatorRunDispatcher({ audit, artifacts, policy, registry });
+    const dispatchResult = await dispatcher({
+      workspaceRoot: dir,
+      run,
+      startInput: {
+        type: "planning",
+        triggerType: "owner_request",
+        triggerSource: "test",
+        scope: "Blocked planning",
+      },
+    });
+    expect(dispatchResult.status).not.toBe("completed");
+    expect(dispatchResult.status).toBe("blocked");
+    expect(dispatchResult.blockers).toEqual(["product: missing acceptance evidence"]);
+  });
+
+  it("keeps completing when every specialist returns ok", async () => {
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const artifacts = new ArtifactStore(dir);
+    const policy = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
+    const runs = new RunEngine(dir, { audit, artifacts, policy });
+
+    const run = await runs.start({
+      type: "planning",
+      triggerType: "owner_request",
+      triggerSource: "test",
+      scope: "Happy planning",
+    });
+
+    const registry = registryWith(artifacts, audit, policy, {
+      project_manager: "ok",
+      product: "ok",
+    });
+    const dispatcher = createCoordinatorRunDispatcher({ audit, artifacts, policy, registry });
+    const dispatchResult = await dispatcher({
+      workspaceRoot: dir,
+      run,
+      startInput: {
+        type: "planning",
+        triggerType: "owner_request",
+        triggerSource: "test",
+        scope: "Happy planning",
+      },
+    });
+    expect(dispatchResult.status).toBe("completed");
+    expect(dispatchResult.blockers).toBeUndefined();
+  });
+
+  it("ends the run blocked with dispatch_blockers and a run.blocked audit record through RunEngine", async () => {
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const artifacts = new ArtifactStore(dir);
+    const policy = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
+    const registry = registryWith(artifacts, audit, policy, {
+      project_manager: "ok",
+      product: { block: "missing acceptance evidence" },
+    });
+    const dispatcher = createCoordinatorRunDispatcher({ audit, artifacts, policy, registry });
+    const runs = new RunEngine(dir, { audit, artifacts, policy, dispatcher });
+
+    const run = await runs.start({
+      type: "planning",
+      triggerType: "owner_request",
+      triggerSource: "test",
+      scope: "Blocked planning through engine",
+    });
+
+    expect(run.status).toBe("blocked");
+    expect(run["dispatch_blockers"]).toEqual(["product: missing acceptance evidence"]);
+
+    const log = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(log).toContain("run.blocked");
+    expect(log).not.toContain("run.completed");
+  });
+
+  it("completes the run through RunEngine when all specialists succeed", async () => {
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const artifacts = new ArtifactStore(dir);
+    const policy = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
+    const registry = registryWith(artifacts, audit, policy, {
+      project_manager: "ok",
+      product: "ok",
+    });
+    const dispatcher = createCoordinatorRunDispatcher({ audit, artifacts, policy, registry });
+    const runs = new RunEngine(dir, { audit, artifacts, policy, dispatcher });
+
+    const run = await runs.start({
+      type: "planning",
+      triggerType: "owner_request",
+      triggerSource: "test",
+      scope: "Happy planning through engine",
+    });
+
+    expect(run.status).toBe("completed");
+    const log = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(log).toContain("run.completed");
   });
 });

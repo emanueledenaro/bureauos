@@ -1789,8 +1789,12 @@ describe("API server", () => {
       expect.arrayContaining(["development", "qa"]),
     );
 
+    // The feature pipeline runs real concrete agents; QA legitimately blocks
+    // without acceptance evidence, so the dispatch is truthfully recorded as
+    // blocked rather than a clean completion (SER-185).
     const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
-    expect(audit).toContain("project.dispatch.completed");
+    expect(audit).toContain("project.dispatch.blocked");
+    expect(audit).not.toContain("project.dispatch.completed");
   });
 
   it("connects and disconnects provider auth without leaking secrets to the API response", async () => {

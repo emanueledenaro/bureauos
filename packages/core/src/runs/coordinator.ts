@@ -74,9 +74,17 @@ export interface DispatchInput {
   contextArtifactIdsByRole?: Readonly<Record<string, readonly string[]>>;
 }
 
+export interface DispatchStep {
+  role: string;
+  ok: boolean;
+  artifactIds: readonly string[];
+  blockers: readonly string[];
+  notes: string;
+}
+
 export interface DispatchOutput {
   runId: string;
-  steps: ReadonlyArray<{ role: string; artifactIds: readonly string[]; notes: string }>;
+  steps: ReadonlyArray<DispatchStep>;
   briefingArtifactId: string;
 }
 
@@ -133,7 +141,7 @@ ${input.briefing ?? "(none supplied)"}
     result: "ok",
   });
 
-  const steps: Array<{ role: string; artifactIds: readonly string[]; notes: string }> = [];
+  const steps: DispatchStep[] = [];
   for (const role of pipeline) {
     const agent = registry.get(role);
     const roleContextArtifactIds = Array.from(
@@ -189,7 +197,13 @@ ${input.briefing ?? "(none supplied)"}
         ...(modelSelection ? ([[MODEL_PROVIDER_CAPABILITY, modelSelection]] as const) : []),
       ]),
     });
-    steps.push({ role, artifactIds: out.artifactIds, notes: out.notes });
+    steps.push({
+      role,
+      ok: out.ok,
+      artifactIds: out.artifactIds,
+      blockers: out.blockers,
+      notes: out.notes,
+    });
     await deps.audit.append({
       actor: "supreme_coordinator",
       action: "coordinator.step_completed",
@@ -213,10 +227,25 @@ export function createCoordinatorRunDispatcher(deps: CoordinatorDeps): RunDispat
     const stepArtifactIds = output.steps.flatMap((step) => step.artifactIds);
     const pipeline = output.steps.map((step) => step.role);
 
+    // Truthfully propagate specialist failures. Concrete agents legitimately
+    // return `ok:false` with blockers (e.g. blocked development runtime, QA not
+    // ready for review, security findings). When any step blocks, surface a
+    // non-completed terminal status with aggregated blockers so RunEngine
+    // transitions the run to `blocked` (populating `dispatch_blockers`) and the
+    // AutonomousRetryService can pick it up. The happy path (all steps ok) still
+    // completes.
+    const failedSteps = output.steps.filter((step) => !step.ok);
+    const blockers = failedSteps.flatMap((step) =>
+      step.blockers.length > 0
+        ? step.blockers.map((blocker) => `${step.role}: ${blocker}`)
+        : [`${step.role}: ${step.notes}`],
+    );
+
     return {
-      status: "completed",
+      status: failedSteps.length > 0 ? "blocked" : "completed",
       artifactIds: [output.briefingArtifactId, ...stepArtifactIds],
       decisions: output.steps.map((step) => `${step.role}: ${step.notes}`),
+      ...(blockers.length > 0 ? { blockers } : {}),
       metadata: {
         dispatch_mode: "coordinator",
         dispatch_briefing_artifact_id: output.briefingArtifactId,
