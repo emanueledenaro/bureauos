@@ -7,7 +7,70 @@ import { defaultConfig } from "../config/loader.js";
 import { CoordinatorIntakeService } from "../coordinator/intake.js";
 import { initWorkspace } from "../init/initializer.js";
 import { workspacePaths } from "../paths.js";
-import { ProjectDispatchService } from "./project-dispatch.js";
+import { ProjectDispatchService, pendingProjectApprovals } from "./project-dispatch.js";
+import type { ApprovalRecord } from "../registries/approval.js";
+import type { ProjectRecord } from "../registries/project.js";
+
+function projectRecord(id: string, name: string): ProjectRecord {
+  return {
+    id,
+    slug: name.toLowerCase().replace(/\s+/g, "-"),
+    name,
+    client_id: "client_x",
+    status: "in_progress",
+    repository: "",
+    stack: "",
+    created: "2026-05-30T00:00:00.000Z",
+    updated: "2026-05-30T00:00:00.000Z",
+  };
+}
+
+function approvalFor(target: string, scope: string): ApprovalRecord {
+  return {
+    id: `approval_${target}`,
+    action: "send_final_proposals",
+    actor: "supreme_coordinator",
+    target,
+    scope,
+    source: "",
+    limit: "",
+    run_id: "",
+    risk_level: "medium",
+    status: "pending",
+    expires_at: "",
+    one_off: false,
+    recurring: false,
+    created: "2026-05-30T00:00:00.000Z",
+    updated: "2026-05-30T00:00:00.000Z",
+    resolved_at: "",
+    resolved_by: "",
+    reason: "",
+    consumed_at: "",
+  };
+}
+
+describe("pendingProjectApprovals (SER-179)", () => {
+  it("matches approvals by project id, not by name substring", () => {
+    const projectA = projectRecord("project_a", "CRM");
+    const projectB = projectRecord("project_b", "CRM Redesign");
+    // Each approval targets its own project id; scopes mention both names so the
+    // old substring branch would cross-match.
+    const approvalA = approvalFor("project_a", "Approve CRM work for CRM Redesign context");
+    const approvalB = approvalFor("project_b", "Approve CRM Redesign work");
+
+    const forA = pendingProjectApprovals([approvalA, approvalB], projectA);
+    const forB = pendingProjectApprovals([approvalA, approvalB], projectB);
+
+    expect(forA.map((a) => a.id)).toEqual(["approval_project_a"]);
+    expect(forB.map((a) => a.id)).toEqual(["approval_project_b"]);
+  });
+
+  it("still matches an approval carrying a project_id front-matter field", () => {
+    const project = projectRecord("project_c", "Booking");
+    const approval = { ...approvalFor("*", "wildcard"), project_id: "project_c" } as ApprovalRecord;
+    expect(pendingProjectApprovals([approval], project).map((a) => a.id)).toEqual(["approval_*"]);
+  });
+});
 
 describe("ProjectDispatchService", () => {
   let dir: string;
