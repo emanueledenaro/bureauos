@@ -61,6 +61,40 @@ describe("front-matter serializer", () => {
     expect(parsed.front.ratio).toBe(-2.5);
     expect(parsed.front.tags).toEqual(["a", "b"]);
   });
+
+  it("round-trips array elements containing commas and quotes (SER-164)", () => {
+    const tags = [
+      "a",
+      "b,c",
+      'has "double, quote" inside',
+      "has 'single, quote' inside",
+      "trailing comma,",
+      ",leading comma",
+      "plain",
+    ];
+    const rendered = renderFrontMatter({ id: "run_1", tags }, "# body\n");
+    // Arrays must stay on a single front-matter line so the parser sees them whole.
+    const fmBlock = rendered.split("\n---\n")[0] ?? rendered;
+    expect(fmBlock.split("\n").filter((l) => l.startsWith("tags:"))).toHaveLength(1);
+
+    const parsed = parseFrontMatter<{ id: string; tags: string[] }>(rendered);
+    expect(parsed.front.tags).toEqual(tags);
+    expect(parsed.front.id).toBe("run_1");
+  });
+
+  it("parses an empty array and a single comma-bearing element", () => {
+    expect(parseFrontMatter(renderFrontMatter({ tags: [] }, "")).front.tags).toEqual([]);
+    const single = parseFrontMatter<{ tags: string[] }>(
+      renderFrontMatter({ tags: ["only, one"] }, ""),
+    );
+    expect(single.front.tags).toEqual(["only, one"]);
+  });
+
+  it("still parses legacy unquoted array front matter", () => {
+    // Hand-edited / pre-fix front matter wrote bare elements without JSON quoting.
+    const parsed = parseFrontMatter<{ tags: string[] }>("---\ntags: [a, b, c]\n---\nbody\n");
+    expect(parsed.front.tags).toEqual(["a", "b", "c"]);
+  });
 });
 
 describe("atomic + serialized document writes (SER-163)", () => {

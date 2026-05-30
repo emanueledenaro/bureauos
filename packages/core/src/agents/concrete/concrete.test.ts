@@ -3,10 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type {
+  GenerateTextOptions,
+  GenerateTextResult,
+  ProviderAdapter,
   RuntimeAdapter,
   RuntimeContext,
   RuntimeResult,
   RuntimeTask,
+  ValidationResult,
 } from "@bureauos/providers";
 import { ArtifactStore } from "../../artifacts/store.js";
 import { AuditLog } from "../../audit/log.js";
@@ -16,11 +20,53 @@ import { ApprovalRegistry } from "../../registries/approval.js";
 import { initWorkspace } from "../../init/initializer.js";
 import { workspacePaths } from "../../paths.js";
 import type { AgentCapabilityCheckInput } from "../runtime.js";
+import { MODEL_PROVIDER_CAPABILITY, type AgentModelSelection } from "../provider-routing.js";
 import { DevelopmentAgent } from "./development.js";
 import { buildDefaultAgentRegistry } from "./index.js";
 import { QaAgent } from "./qa.js";
 import { ReviewerAgent } from "./reviewer.js";
 import { SecurityAgent } from "./security.js";
+
+class FakeProvider implements ProviderAdapter {
+  readonly id = "openai-default";
+  readonly type = "openai" as const;
+  readonly name = "Fake OpenAI";
+  readonly defaultModel = "fake-model";
+
+  constructor(private readonly behavior: "ok" | "throw" = "ok") {}
+
+  async listModels(): Promise<readonly string[]> {
+    return [this.defaultModel];
+  }
+
+  async validateCredentials(): Promise<ValidationResult> {
+    return { ok: true };
+  }
+
+  async generateText(options: GenerateTextOptions): Promise<GenerateTextResult> {
+    if (this.behavior === "throw") throw new Error("provider unavailable");
+    return {
+      text: `# Model-Drafted ${options.model}\n\n${options.prompt}`,
+      model: options.model,
+    };
+  }
+
+  async *stream(): AsyncIterable<string> {
+    yield "unused";
+  }
+}
+
+function modelCapability(
+  provider: ProviderAdapter,
+  model = "fake-model",
+): Map<string, AgentModelSelection> {
+  return new Map([
+    [
+      MODEL_PROVIDER_CAPABILITY,
+      { provider, model, validation: { ok: true } } satisfies AgentModelSelection,
+    ],
+  ]);
+}
 
 class FakeRuntime implements RuntimeAdapter {
   public readonly id = "codex-test";
@@ -541,6 +587,148 @@ describe("concrete agents", () => {
     expect(written?.body).toContain(
       "Merge and deployment still require separate policy-gated approval",
     );
+  });
+
+  it("enriches reviewer/QA/security artifacts via the provider while keeping the gate deterministic (SER-170)", async () => {
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const artifacts = new ArtifactStore(dir);
+    const policy = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
+    const capabilities = modelCapability(new FakeProvider("ok"));
+
+    // Reviewer: clean diff with test evidence -> deterministic approve, body enriched.
+    const reviewer = new ReviewerAgent({ artifacts, audit, policy });
+    const reviewerOut = await reviewer.execute({
+      context: {
+        runId: "run_provider_review",
+        scope: "Review PR for timeline copy update",
+        briefing: [
+          "Changed files:",
+          "- packages/interface/src/renderer/views/TimelineView.tsx",
+          "Test evidence: pnpm --filter @bureauos/interface test passed",
+        ].join("\n"),
+      },
+      capabilities,
+    });
+    expect(reviewerOut.ok).toBe(true);
+    expect(reviewerOut.decisions).toContain("review:approve_with_residual_risk");
+    const reviewerArtifact = await artifacts.read(reviewerOut.artifactIds[0]!);
+    expect(reviewerArtifact?.record.finding_count).toBe(0);
+    expect(reviewerArtifact?.body).toContain("# Model-Drafted fake-model");
+    expect(reviewerArtifact?.body).toContain("## Generation Metadata");
+
+    // QA: passing acceptance evidence -> deterministic ready, body enriched.
+    await artifacts.write({
+      type: "test-evidence-report",
+      createdBy: "development",
+      runId: "run_provider_qa",
+      body: ["# Test Evidence", "", "PASS: smoke test passes."].join("\n"),
+    });
+    const qa = new QaAgent({ artifacts, audit, policy });
+    const qaOut = await qa.execute({
+      context: {
+        runId: "run_provider_qa",
+        scope: ["Acceptance criteria:", "- smoke test passes."].join("\n"),
+      },
+      capabilities,
+    });
+    expect(qaOut.ok).toBe(true);
+    expect(qaOut.decisions).toContain("qa:ready_for_review");
+    const qaArtifact = await artifacts.read(qaOut.artifactIds[0]!);
+    expect(qaArtifact?.record.qa_readiness).toBe("ready_for_review");
+    expect(qaArtifact?.record.acceptance_pass_count).toBe(1);
+    expect(qaArtifact?.body).toContain("# Model-Drafted fake-model");
+    expect(qaArtifact?.body).toContain("## Generation Metadata");
+
+    // Security: unresolved secret path -> deterministic block, body enriched.
+    await artifacts.write({
+      type: "technical-plan",
+      createdBy: "development",
+      runId: "run_provider_security",
+      body: ["# Runtime Diff", "", "Changed files:", "- packages/core/src/config/secrets.ts"].join(
+        "\n",
+      ),
+    });
+    const security = new SecurityAgent({ artifacts, audit, policy });
+    const securityOut = await security.execute({
+      context: {
+        runId: "run_provider_security",
+        scope: "Review security-sensitive runtime changes before PR readiness.",
+      },
+      capabilities,
+    });
+    expect(securityOut.ok).toBe(false);
+    expect(securityOut.decisions).toContain("security:blocked");
+    expect(securityOut.blockers).toEqual([
+      "unresolved critical security finding in packages/core/src/config/secrets.ts: secret",
+    ]);
+    const securityArtifact = await artifacts.read(securityOut.artifactIds[0]!);
+    expect(securityArtifact?.record.risk_level).toBe("critical");
+    expect(securityArtifact?.record.unresolved_high_risk_count).toBe(1);
+    expect(securityArtifact?.body).toContain("# Model-Drafted fake-model");
+    expect(securityArtifact?.body).toContain("## Generation Metadata");
+
+    const log = await readAudit(dir);
+    expect(log).toContain("agent.reviewer.executed");
+    expect(log).toContain("agent.qa.executed");
+    expect(log).toContain("agent.security.executed");
+    expect(log).toContain("model:openai-default");
+  });
+
+  it("falls back to the deterministic body when the provider fails for reviewer/QA/security (SER-170)", async () => {
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const artifacts = new ArtifactStore(dir);
+    const policy = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
+    const capabilities = modelCapability(new FakeProvider("throw"));
+
+    const reviewer = new ReviewerAgent({ artifacts, audit, policy });
+    const reviewerOut = await reviewer.execute({
+      context: {
+        runId: "run_fallback_review",
+        scope: "Review PR for timeline copy update",
+        briefing: [
+          "Changed files:",
+          "- packages/interface/src/renderer/views/TimelineView.tsx",
+          "Test evidence: pnpm --filter @bureauos/interface test passed",
+        ].join("\n"),
+      },
+      capabilities,
+    });
+    expect(reviewerOut.ok).toBe(true);
+    const reviewerArtifact = await artifacts.read(reviewerOut.artifactIds[0]!);
+    // Deterministic template body is used verbatim; no model output leaks in.
+    expect(reviewerArtifact?.body).toContain("# PR Review");
+    expect(reviewerArtifact?.body).not.toContain("# Model-Drafted");
+    expect(reviewerArtifact?.body).toContain("## Provider Unavailable");
+
+    const qa = new QaAgent({ artifacts, audit, policy });
+    const qaOut = await qa.execute({
+      context: {
+        runId: "run_fallback_qa",
+        scope: ["Acceptance criteria:", "- smoke test passes."].join("\n"),
+        briefing: "PASS: smoke test passes.",
+      },
+      capabilities,
+    });
+    const qaArtifact = await artifacts.read(qaOut.artifactIds[0]!);
+    expect(qaArtifact?.body).toContain("# QA Verification Report");
+    expect(qaArtifact?.body).not.toContain("# Model-Drafted");
+
+    const security = new SecurityAgent({ artifacts, audit, policy });
+    const securityOut = await security.execute({
+      context: {
+        runId: "run_fallback_security",
+        scope: "Review auth change.",
+        briefing: ["Changed files:", "- packages/core/src/auth/session.ts"].join("\n"),
+      },
+      capabilities,
+    });
+    const securityArtifact = await artifacts.read(securityOut.artifactIds[0]!);
+    expect(securityArtifact?.body).toContain("# Security Review");
+    expect(securityArtifact?.body).not.toContain("# Model-Drafted");
+
+    const log = await readAudit(dir);
+    // The provider error is surfaced in the audit trail for each agent.
+    expect(log).toContain("provider generation failed");
   });
 });
 

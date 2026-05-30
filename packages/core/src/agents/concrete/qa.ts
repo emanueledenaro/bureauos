@@ -1,6 +1,7 @@
 import type { AgentDeps, AgentRunInput, AgentRunOutput, AgentRuntime } from "../runtime.js";
 import { AGENT_INDEX } from "../roles.js";
 import type { ArtifactRecord } from "../../artifacts/store.js";
+import { draftAgentArtifact } from "../model-drafting.js";
 import { blockedByInvalidHandoff, validateRequiredHandoff } from "../handoff.js";
 
 export type QaAcceptanceStatus = "pass" | "fail" | "unknown";
@@ -304,6 +305,17 @@ export class QaAgent implements AgentRuntime {
     );
     const analysis = analyzeQaVerification(input, sourceArtifacts);
     const summary = statusSummary(analysis.checks);
+    // The deterministic acceptance verification drives readiness, blockers, and
+    // metadata. The provider, when configured, only enriches the narrative; with
+    // no provider the body is the deterministic report, unchanged.
+    const draft = await draftAgentArtifact({
+      input,
+      definition: this.definition,
+      artifactTitle: "QA Verification Report",
+      outputInstructions:
+        "Explain the acceptance-criteria verification, the supporting evidence, and the ready-for-review gate. Do not mark work ready unless the evidence supports it.",
+      templateBody: reportBody(input, analysis),
+    });
     const artifact = await this.deps.artifacts.write({
       type: "test-plan",
       createdBy: this.definition.id,
@@ -318,13 +330,15 @@ export class QaAgent implements AgentRuntime {
         acceptance_unknown_count: summary.unknown,
         source_artifact_ids: analysis.sourceArtifacts.map((artifact) => artifact.record.id),
       },
-      body: reportBody(input, analysis),
+      body: draft.body,
     });
     await this.deps.audit.append({
       actor: this.definition.id,
       action: "agent.qa.executed",
       target: input.context.runId,
       artifact_id: artifact.id,
+      ...(draft.capability ? { capability: draft.capability } : {}),
+      ...(draft.error ? { error: draft.error } : {}),
       result: analysis.readiness === "ready_for_review" ? "ok" : "error",
     });
     return {

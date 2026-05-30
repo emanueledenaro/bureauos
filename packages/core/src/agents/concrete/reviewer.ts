@@ -1,5 +1,6 @@
 import type { AgentDeps, AgentRunInput, AgentRunOutput, AgentRuntime } from "../runtime.js";
 import { AGENT_INDEX } from "../roles.js";
+import { draftAgentArtifact } from "../model-drafting.js";
 import { blockedByInvalidHandoff, validateRequiredHandoff } from "../handoff.js";
 
 export type ReviewFindingSeverity = "low" | "medium" | "high" | "critical";
@@ -148,6 +149,17 @@ export class ReviewerAgent implements AgentRuntime {
     if (!handoff.ok) return blockedByInvalidHandoff(handoff);
 
     const analysis = analyzeReviewInput(input);
+    // The deterministic findings drive the gate (ok/blockers/decisions/metadata).
+    // The provider, when configured, only enriches the human-readable narrative;
+    // with no provider the body is the deterministic template, unchanged.
+    const draft = await draftAgentArtifact({
+      input,
+      definition: this.definition,
+      artifactTitle: "PR Review",
+      outputInstructions:
+        "Write a PR review that explains each structured finding, the residual risks, and the recommendation. Do not approve a merge, deploy, or external publication.",
+      templateBody: body(input, analysis),
+    });
     const artifact = await this.deps.artifacts.write({
       type: "pr-review",
       createdBy: this.definition.id,
@@ -160,13 +172,15 @@ export class ReviewerAgent implements AgentRuntime {
         recommendation: analysis.recommendation,
         comment_capabilities: ["github.comment", "linear.comment"],
       },
-      body: body(input, analysis),
+      body: draft.body,
     });
     await this.deps.audit.append({
       actor: this.definition.id,
       action: "agent.reviewer.executed",
       target: input.context.runId,
       artifact_id: artifact.id,
+      ...(draft.capability ? { capability: draft.capability } : {}),
+      ...(draft.error ? { error: draft.error } : {}),
       result: "ok",
     });
     return {
