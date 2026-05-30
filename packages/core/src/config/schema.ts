@@ -304,6 +304,38 @@ const LimitsConfig = z
   })
   .default({});
 
+const RuntimeCommandConfig = z.object({
+  command: z.string().min(1),
+  args: z.array(z.string()).default([]),
+  cwd: z.string().optional(),
+  label: z.string().optional(),
+});
+export type RuntimeCommandConfig = z.infer<typeof RuntimeCommandConfig>;
+
+/**
+ * Development-execution runtime settings.
+ *
+ * The host-backed Codex runner is disabled by default. When `codex.enabled` is
+ * true, the kernel constructs a real subprocess-backed runner behind the
+ * existing `CodexRuntimeAdapter` safety boundary. `allowed_commands` is the
+ * binary allow-list the runner enforces before spawning, and `commands` is the
+ * conservative verification/edit sequence it runs.
+ */
+const RuntimeConfig = z
+  .object({
+    codex: z
+      .object({
+        enabled: z.boolean().default(false),
+        allowed_commands: z.array(z.string()).default(["pnpm", "npm", "yarn", "node", "git"]),
+        commands: z.array(RuntimeCommandConfig).default([]),
+        max_changed_files: z.number().int().positive().default(25),
+        timeout_ms: z.number().int().positive().default(120_000),
+        max_output_chars: z.number().int().positive().default(12_000),
+      })
+      .default({}),
+  })
+  .default({});
+
 const MemoryConfig = z
   .object({
     coordinator_has_global_access: z.boolean().default(true),
@@ -456,6 +488,7 @@ export const BureauConfigSchema = z
     business: BusinessConfig,
     open_source: OpenSourceConfig,
     limits: LimitsConfig,
+    runtime: RuntimeConfig,
     memory: MemoryConfig,
     github: GitHubConfig,
     provider: z.record(z.string(), ProviderConfig).default({}),

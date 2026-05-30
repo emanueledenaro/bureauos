@@ -48,7 +48,7 @@ exception.
 | Coordinator intake | Owner intake can create/update clients, opportunities, projects, proposal/pricing drafts, compliance reviews, growth drafts, and approval gates. | implemented | intake tests, artifact generation |
 | Run lifecycle | Runs can be created, dispatched through the coordinator, assigned specialists, and written back as reports/artifacts. | partial | `RunEngine`, coordinator dispatcher |
 | Specialist agents | PM, product, development, QA, security, reviewer, compliance, growth, and revenue agents can produce bounded artifacts with provider or deterministic fallback. | partial | agent tests, dispatcher tests |
-| Development runtime | Development Agent can prepare a technical plan and use a host-supplied Codex runtime only after policy and capability checks. | partial | development agent tests, Codex runtime boundary |
+| Development runtime | Development Agent can prepare a technical plan and use a real host-backed Codex runner (opt-in via `runtime.codex.enabled`, shell-less subprocess execution, command allow-list, diff evidence) behind the `CodexRuntimeAdapter` safety boundary, only after policy and capability checks; stays template-only when disabled. | partial | development agent tests, `HostCodexRuntimeRunner` tests, `buildCodexRuntimeFromConfig` tests, Codex runtime boundary |
 | GitHub labels and issues | BureauOS can draft/create GitHub issues, ensure labels, and sync relevant issue/PR/check signals under policy. | partial | GitHub services and tests |
 | Branch creation | Development branches are policy-gated, deterministic, auditable, and blocked on unsafe/conflicting conditions. | partial | `DevelopmentBranchService` |
 | Test evidence | Project test commands can be discovered or configured, executed in a subprocess boundary, and stored as structured evidence. | partial | `ProjectTestRunnerService`, `test-evidence-report` |
@@ -102,7 +102,7 @@ be considered complete.
 
 | Decision | Needed before v1 | Current state |
 | --- | --- | --- |
-| Codex runtime host | Choose how the desktop/host process supplies a real Codex execution runner to the kernel boundary. | partial |
+| Codex runtime host | A real host-backed subprocess runner (`HostCodexRuntimeRunner`) now executes an owner-configured, allow-listed command sequence behind the safety boundary, wired through `runtime.codex` config and the CLI dispatcher. Remaining decision: how the host drives actual model-driven code generation (Codex CLI vs API vs agent loop) into that command/edit cycle, and whether the Electron host injects its own executor. | partial |
 | Local API trust model | Document whether API access is loopback-only, token-protected, or process-private for v1. | partial | `docs/secrets.md` |
 | Release packaging | Decide whether v1 ships as source-only, CLI package, unsigned desktop build, or signed desktop app. | designed |
 | GitHub verification workspace | Provide a safe test repository for live issue, branch, test, and draft PR smoke checks. | blocked |

@@ -317,6 +317,30 @@ limits:
   require_security_review_for_payment_changes: true
   require_human_for_destructive_actions: true
 
+runtime:
+  # Development-execution runtime for the Development Agent.
+  # Disabled by default: the agent stays template-only until you opt in. When
+  # enabled, BureauOS wires a host-backed Codex runner behind the existing
+  # CodexRuntimeAdapter safety boundary (no merge/deploy/destructive git, no
+  # secret paths, changed-file limit enforced). Commands run with shell:false,
+  # confined to the workspace, and only binaries in `allowed_commands` may run.
+  codex:
+    enabled: false
+    allowed_commands:
+      - pnpm
+      - npm
+      - yarn
+      - node
+      - git
+    # Conservative verification/edit sequence run for an edit/test cycle.
+    commands:
+      - command: pnpm
+        args: ["test"]
+        label: "unit tests"
+    max_changed_files: 25
+    timeout_ms: 120000
+    max_output_chars: 12000
+
 memory:
   coordinator_has_global_access: true
   isolate_projects: true
