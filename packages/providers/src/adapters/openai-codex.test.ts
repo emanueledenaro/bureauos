@@ -343,4 +343,142 @@ describe("OpenAICodexOAuthAdapter", () => {
       OpenAICodexOAuthError,
     );
   });
+
+  it("reports not-ok when the access token is expired and no refresh token exists (SER-200)", async () => {
+    const adapter = new OpenAICodexOAuthAdapter("openai-codex-test", {
+      accessToken: accessToken(),
+      expiresAt: new Date(0).toISOString(),
+    });
+
+    const validation = await adapter.validateCredentials();
+    expect(validation.ok).toBe(false);
+    expect(validation.reason).toContain("expired");
+  });
+
+  it("stays ok when the access token is expired but a refresh token is connected (SER-200)", async () => {
+    const adapter = new OpenAICodexOAuthAdapter("openai-codex-test", {
+      accessToken: accessToken(),
+      refreshToken: "refresh-token",
+      expiresAt: new Date(0).toISOString(),
+    });
+
+    await expect(adapter.validateCredentials()).resolves.toEqual({ ok: true });
+  });
+
+  it("throws the backend reason when an HTTP-200 stream emits an error frame (SER-201)", async () => {
+    const fetchImpl: typeof fetch = async () =>
+      new Response(
+        [
+          `data: ${JSON.stringify({ type: "response.output_text.delta", delta: "partial" })}`,
+          `data: ${JSON.stringify({
+            type: "error",
+            error: { message: "model overloaded, retry later" },
+          })}`,
+          "",
+        ].join("\n\n"),
+        { headers: { "content-type": "text/event-stream" } },
+      );
+    const adapter = new OpenAICodexOAuthAdapter("openai-codex-test", {
+      accessToken: accessToken(),
+      fetch: fetchImpl,
+    });
+
+    const chunks: string[] = [];
+    await expect(async () => {
+      for await (const chunk of adapter.stream({ model: "gpt-5.3-codex", prompt: "hello" })) {
+        chunks.push(chunk);
+      }
+    }).rejects.toThrow("model overloaded, retry later");
+    // The valid delta that arrived before the error frame still reached the caller.
+    expect(chunks).toEqual(["partial"]);
+  });
+
+  it("throws when a streamed response object reports a failed status (SER-201)", async () => {
+    const fetchImpl: typeof fetch = async () =>
+      new Response(
+        [
+          `data: ${JSON.stringify({
+            type: "response.completed",
+            response: { status: "failed", error: { message: "context length exceeded" } },
+          })}`,
+          "",
+        ].join("\n\n"),
+        { headers: { "content-type": "text/event-stream" } },
+      );
+    const adapter = new OpenAICodexOAuthAdapter("openai-codex-test", {
+      accessToken: accessToken(),
+      fetch: fetchImpl,
+    });
+
+    await expect(async () => {
+      for await (const _ of adapter.stream({ model: "gpt-5.3-codex", prompt: "hello" })) {
+        void _;
+      }
+    }).rejects.toThrow("context length exceeded");
+  });
+
+  it("surfaces error frames in the non-streaming generateText path (SER-201)", async () => {
+    const fetchImpl: typeof fetch = async () =>
+      new Response(
+        [
+          `data: ${JSON.stringify({ type: "error", error: { message: "quota exhausted" } })}`,
+          "",
+        ].join("\n\n"),
+        { headers: { "content-type": "text/event-stream" } },
+      );
+    const adapter = new OpenAICodexOAuthAdapter("openai-codex-test", {
+      accessToken: accessToken(),
+      fetch: fetchImpl,
+    });
+
+    await expect(adapter.generateText({ model: "gpt-5.3-codex", prompt: "hello" })).rejects.toThrow(
+      "quota exhausted",
+    );
+  });
+
+  it("flushes a final SSE frame that arrives without a trailing newline (SER-202)", async () => {
+    // No "" terminator and the last `data:` line is not newline-terminated.
+    const fetchImpl: typeof fetch = async () =>
+      new Response(
+        `data: ${JSON.stringify({
+          type: "response.done",
+          response: { output: [{ content: [{ text: "Final answer" }] }] },
+        })}`,
+        { headers: { "content-type": "text/event-stream" } },
+      );
+    const adapter = new OpenAICodexOAuthAdapter("openai-codex-test", {
+      accessToken: accessToken(),
+      fetch: fetchImpl,
+    });
+
+    const chunks: string[] = [];
+    for await (const chunk of adapter.stream({ model: "gpt-5.3-codex", prompt: "hello" })) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks).toEqual(["Final answer"]);
+  });
+
+  it("flushes a trailing delta frame without a final newline (SER-202)", async () => {
+    const fetchImpl: typeof fetch = async () =>
+      new Response(
+        [
+          `data: ${JSON.stringify({ type: "response.output_text.delta", delta: "Strea" })}`,
+          `data: ${JSON.stringify({ type: "response.output_text.delta", delta: "ming" })}`,
+        ].join("\n") +
+          `\ndata: ${JSON.stringify({ type: "response.output_text.delta", delta: "!" })}`,
+        { headers: { "content-type": "text/event-stream" } },
+      );
+    const adapter = new OpenAICodexOAuthAdapter("openai-codex-test", {
+      accessToken: accessToken(),
+      fetch: fetchImpl,
+    });
+
+    const chunks: string[] = [];
+    for await (const chunk of adapter.stream({ model: "gpt-5.3-codex", prompt: "hello" })) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks).toEqual(["Strea", "ming", "!"]);
+  });
 });
