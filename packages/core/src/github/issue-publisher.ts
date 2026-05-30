@@ -54,6 +54,24 @@ export interface GitHubIssuePublishResult {
   report?: ArtifactRecord;
 }
 
+export interface EnsureRepositoryLabelsInput {
+  owner: string;
+  repo: string;
+  labels: readonly { name: string; color?: string; description?: string }[];
+}
+
+export interface EnsureRepositoryLabelsResult {
+  status: "ensured" | "blocked";
+  repository: {
+    owner: string;
+    repo: string;
+    url: string;
+  };
+  policy: PolicyDecision;
+  approval?: ApprovalRecord;
+  labels: { name: string }[];
+}
+
 export interface GitHubIssuePublishDeps {
   config: BureauConfig;
   githubClient: GitHubIssuePublishClient;
@@ -298,6 +316,83 @@ export class GitHubIssuePublishService {
       source_artifacts: sourceArtifacts,
       report,
     };
+  }
+
+  /**
+   * Apply a label taxonomy to a repository behind the same policy gate + audit
+   * trail as issue creation (SER-208). Previously the `github ensure-labels`
+   * path called Octokit directly with no `PolicyEngine.evaluate` and no
+   * `AuditLog` entry — a repo-mutating external write that bypassed the autonomy
+   * boundary gating every other GitHub write. When policy blocks, no labels are
+   * created, an approval is requested, and the block is reported; on success the
+   * write is audited.
+   */
+  async ensureRepositoryLabels(
+    input: EnsureRepositoryLabelsInput,
+  ): Promise<EnsureRepositoryLabelsResult> {
+    const repository = normalizeRepoTarget(input.owner, input.repo);
+    const target = `${repository.owner}/${repository.repo}`;
+    const decision = await this.policy.evaluate({
+      action: "create_issues",
+      actor: "supreme_coordinator",
+      target,
+      capability: "github.create_issue",
+      riskClass: "medium",
+    });
+
+    if (!decision.allowed) {
+      const approval = await this.findOrRequestLabelApproval(repository, decision.reason);
+      await this.audit.append({
+        actor: "supreme_coordinator",
+        action: "github.labels.blocked",
+        target,
+        approval_id: approval.id,
+        policy_result: auditPolicyResult(decision.outcome),
+        result: "ok",
+      });
+      return { status: "blocked", repository, policy: decision, approval, labels: [] };
+    }
+
+    if (!this.githubClient.ensureLabels) {
+      throw new Error("configured GitHub client does not support ensureLabels");
+    }
+    await this.githubClient.ensureLabels(repository.owner, repository.repo, [...input.labels]);
+    await this.audit.append({
+      actor: "supreme_coordinator",
+      action: "github.labels.ensured",
+      target,
+      policy_result: auditPolicyResult(decision.outcome),
+      result: "ok",
+    });
+    return {
+      status: "ensured",
+      repository,
+      policy: decision,
+      labels: input.labels.map((label) => ({ name: label.name })),
+    };
+  }
+
+  private async findOrRequestLabelApproval(
+    repository: { owner: string; repo: string; url: string },
+    reason: string,
+  ): Promise<ApprovalRecord> {
+    const target = `${repository.owner}/${repository.repo}`;
+    const pending = await this.approvals.listPending();
+    const existing = pending.find(
+      (approval) => approval.action === "create_issues" && approval.target === target,
+    );
+    if (existing) return existing;
+    return this.approvals.request({
+      action: "create_issues",
+      actor: "supreme_coordinator",
+      target,
+      scope: target,
+      body: `# Approval: apply GitHub labels
+
+Repository: ${repository.url}
+Reason: ${reason}
+`,
+    });
   }
 
   private async loadDrafts(

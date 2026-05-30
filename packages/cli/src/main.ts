@@ -1946,10 +1946,28 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
       if (typeof flags.repo !== "string") return err("github ensure-labels: --repo required");
       const token = typeof flags.token === "string" ? flags.token : process.env["GITHUB_TOKEN"];
       if (!token) return err("github ensure-labels: provide --token or set GITHUB_TOKEN");
-      const gh = new OctokitGitHubClient({ token });
-      await gh.ensureLabels(flags.owner, flags.repo, GITHUB_LABEL_TAXONOMY);
+      // Route through the policy-gated, audited service rather than calling
+      // Octokit directly: ensuring labels is a repo-mutating external write and
+      // must clear the same autonomy boundary as every other GitHub write
+      // (SER-208).
+      const config = await loadWorkspaceConfig(process.cwd());
+      const result = await new GitHubIssuePublishService(process.cwd(), {
+        config,
+        githubClient: new OctokitGitHubClient({ token }),
+      }).ensureRepositoryLabels({
+        owner: flags.owner,
+        repo: flags.repo,
+        labels: GITHUB_LABEL_TAXONOMY,
+      });
+      if (result.status === "blocked") {
+        process.stdout.write(
+          `bureau: ensure-labels blocked by policy; approval ${result.approval?.id ?? "required"} requested\n`,
+        );
+        process.stdout.write(`policy: ${result.policy.reason}\n`);
+        return 0;
+      }
       process.stdout.write(
-        `bureau: ensured ${GITHUB_LABEL_TAXONOMY.length} labels on ${flags.owner}/${flags.repo}\n`,
+        `bureau: ensured ${result.labels.length} labels on ${result.repository.owner}/${result.repository.repo}\n`,
       );
       return 0;
     },

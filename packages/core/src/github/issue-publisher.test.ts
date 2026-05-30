@@ -135,4 +135,50 @@ describe("GitHubIssuePublishService", () => {
     const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(audit).toContain("github.issue_publish.blocked");
   });
+
+  it("ensures repository labels behind the policy gate and audits the write (SER-208)", async () => {
+    const githubClient = new RecordingGitHubClient();
+
+    const result = await new GitHubIssuePublishService(dir, {
+      config: defaultConfig("agency"),
+      githubClient,
+    }).ensureRepositoryLabels({
+      owner: "emanueledenaro",
+      repo: "pizzeria-aurora",
+      labels: [{ name: "type:feature" }, { name: "stage:intake" }],
+    });
+
+    expect(result.status).toBe("ensured");
+    expect(result.labels.map((label) => label.name)).toEqual(["type:feature", "stage:intake"]);
+    expect(githubClient.ensuredLabels).toEqual(["type:feature", "stage:intake"]);
+
+    const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(audit).toContain("github.labels.ensured");
+  });
+
+  it("blocks ensure-labels and requests approval when policy denies the write (SER-208)", async () => {
+    const config = defaultConfig("agency");
+    config.autonomy.create_issues = false;
+    const githubClient = new RecordingGitHubClient();
+
+    const result = await new GitHubIssuePublishService(dir, {
+      config,
+      githubClient,
+    }).ensureRepositoryLabels({
+      owner: "emanueledenaro",
+      repo: "pizzeria-aurora",
+      labels: [{ name: "type:feature" }],
+    });
+
+    expect(result.status).toBe("blocked");
+    expect(result.labels).toHaveLength(0);
+    expect(githubClient.ensuredLabels).toHaveLength(0);
+    expect(result.approval?.action).toBe("create_issues");
+
+    const approvals = await new ApprovalRegistry(dir).listPending();
+    expect(approvals.map((approval) => approval.action)).toContain("create_issues");
+
+    const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(audit).toContain("github.labels.blocked");
+  });
 });

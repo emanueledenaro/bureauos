@@ -476,6 +476,8 @@ export type {
   GitHubIssuePublishDeps,
   GitHubIssuePublishInput,
   GitHubIssuePublishResult,
+  EnsureRepositoryLabelsInput,
+  EnsureRepositoryLabelsResult,
 } from "./github/issue-publisher.js";
 export { GitHubPullRequestPublishService } from "./github/pr-publisher.js";
 export type {
