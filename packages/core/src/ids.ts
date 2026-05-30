@@ -4,10 +4,16 @@ import { randomBytes } from "node:crypto";
  * Lowercase alphanumeric ID generator. Stable across renames because we
  * never derive IDs from human-readable names.
  *
- * Format: `<prefix>_<8 hex chars>` (e.g. `run_3a7f2b91`).
+ * Format: `<prefix>_<16 hex chars>` (e.g. `run_3a7f2b9148c0e5d2`).
+ *
+ * Uses 64 bits of entropy. The id-keyed write paths (artifacts, runs,
+ * opportunities, approvals) write `<id>.md` with no destination existence
+ * check, so a collision would silently overwrite durable data. At 64 bits the
+ * birthday-collision probability stays negligible even for very large record
+ * sets, which the previous 32-bit width did not provide.
  */
 export function newId(prefix: string): string {
-  const id = randomBytes(4).toString("hex");
+  const id = randomBytes(8).toString("hex");
   return `${prefix}_${id}`;
 }
 

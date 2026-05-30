@@ -55,4 +55,21 @@ describe("ClientRegistry", () => {
     const updated = await r.update("gamma", { status: "active" });
     expect(updated.status).toBe("active");
   });
+
+  it("does not lose concurrent updates to distinct fields (SER-187)", async () => {
+    const r = new ClientRegistry(dir);
+    await r.create({ name: "Delta" });
+    // Fire overlapping updates, each patching a different field of the same
+    // record. Without serialization each call reads the same base and the last
+    // writer would clobber the others; with `withFileLock` all changes survive.
+    await Promise.all([
+      r.update("delta", { status: "active" }),
+      r.update("delta", { industry: "fintech" }),
+      r.update("delta", { name: "Delta Renamed" }),
+    ]);
+    const got = await r.get("delta");
+    expect(got?.status).toBe("active");
+    expect(got?.industry).toBe("fintech");
+    expect(got?.name).toBe("Delta Renamed");
+  });
 });

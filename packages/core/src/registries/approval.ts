@@ -4,7 +4,15 @@ import { AuditLog } from "../audit/log.js";
 import { newId } from "../ids.js";
 import { LocalNotificationCenter, type ApprovalNotificationSink } from "../notifications/local.js";
 import { workspacePaths } from "../paths.js";
-import { ensureDir, fileExists, listDocs, readDoc, writeDoc, type FrontMatter } from "./base.js";
+import {
+  ensureDir,
+  fileExists,
+  listDocs,
+  readDoc,
+  withFileLock,
+  writeDoc,
+  type FrontMatter,
+} from "./base.js";
 
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "expired";
 export type ApprovalRiskLevel = "low" | "medium" | "high" | "critical";
@@ -212,27 +220,31 @@ export class ApprovalRegistry {
   ): Promise<ApprovalRecord> {
     const path = this.pendingFile(id);
     if (!(await fileExists(path))) throw new Error(`approval not found: ${id}`);
-    const doc = await readDoc<ApprovalRecord>(path);
-    const now = new Date().toISOString();
-    const updated: ApprovalRecord = {
-      ...doc.front,
-      status,
-      updated: now,
-      resolved_at: now,
-      resolved_by: resolvedBy,
-      reason,
-    };
-    await ensureDir(this.paths().approvalsResolvedDir);
-    await writeDoc(this.resolvedFile(id), updated, doc.body);
-    await rename(path, this.pendingFile(`${id}.archived`)).catch(() => {});
-    // Try a hard removal by writing then deleting via fs.unlink-style helper.
-    try {
-      const { unlink } = await import("node:fs/promises");
-      await unlink(this.pendingFile(`${id}.archived`));
-    } catch {
-      // Best-effort cleanup; the resolved record is the source of truth.
-    }
-    return updated;
+    // Serialize against a concurrent resolve/consume of the same approval, keyed
+    // on the resolved-record path so it shares a lock with `consume`.
+    return withFileLock(this.resolvedFile(id), async () => {
+      const doc = await readDoc<ApprovalRecord>(path);
+      const now = new Date().toISOString();
+      const updated: ApprovalRecord = {
+        ...doc.front,
+        status,
+        updated: now,
+        resolved_at: now,
+        resolved_by: resolvedBy,
+        reason,
+      };
+      await ensureDir(this.paths().approvalsResolvedDir);
+      await writeDoc(this.resolvedFile(id), updated, doc.body);
+      await rename(path, this.pendingFile(`${id}.archived`)).catch(() => {});
+      // Try a hard removal by writing then deleting via fs.unlink-style helper.
+      try {
+        const { unlink } = await import("node:fs/promises");
+        await unlink(this.pendingFile(`${id}.archived`));
+      } catch {
+        // Best-effort cleanup; the resolved record is the source of truth.
+      }
+      return updated;
+    });
   }
 
   async listPending(): Promise<ApprovalRecord[]> {
@@ -295,18 +307,23 @@ export class ApprovalRegistry {
   async consume(id: string, now = new Date()): Promise<ApprovalRecord | undefined> {
     const path = this.resolvedFile(id);
     if (!(await fileExists(path))) return undefined;
-    const doc = await readDoc<ApprovalRecord>(path);
-    const record = doc.front;
-    if (!record.one_off || record.consumed_at) return record;
-    const stamp = now.toISOString();
-    const updated: ApprovalRecord = {
-      ...record,
-      consumed_at: stamp,
-      updated: stamp,
-    };
-    await writeDoc(this.resolvedFile(id), updated, doc.body);
-    await this.recordConsumption(updated);
-    return updated;
+    // Serialize the read-modify-write so two concurrent acting paths cannot both
+    // observe the approval as un-consumed and burn it twice (double audit), and
+    // so it does not race a concurrent `resolve` of the same record.
+    return withFileLock(path, async () => {
+      const doc = await readDoc<ApprovalRecord>(path);
+      const record = doc.front;
+      if (!record.one_off || record.consumed_at) return record;
+      const stamp = now.toISOString();
+      const updated: ApprovalRecord = {
+        ...record,
+        consumed_at: stamp,
+        updated: stamp,
+      };
+      await writeDoc(this.resolvedFile(id), updated, doc.body);
+      await this.recordConsumption(updated);
+      return updated;
+    });
   }
 
   private async recordConsumption(record: ApprovalRecord): Promise<void> {

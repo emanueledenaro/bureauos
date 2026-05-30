@@ -1,7 +1,15 @@
 import { join } from "node:path";
 import { newId } from "../ids.js";
 import { workspacePaths } from "../paths.js";
-import { ensureDir, fileExists, listDocs, readDoc, writeDoc, type FrontMatter } from "./base.js";
+import {
+  ensureDir,
+  fileExists,
+  listDocs,
+  readDoc,
+  withFileLock,
+  writeDoc,
+  type FrontMatter,
+} from "./base.js";
 
 export type OpportunityStatus =
   | "intake"
@@ -97,13 +105,18 @@ export class OpportunityRegistry {
   ): Promise<OpportunityRecord> {
     const path = this.file(id);
     if (!(await fileExists(path))) throw new Error(`opportunity not found: ${id}`);
-    const doc = await readDoc<OpportunityRecord>(path);
-    const updated: OpportunityRecord = {
-      ...doc.front,
-      ...patch,
-      updated: new Date().toISOString(),
-    };
-    await writeDoc(path, updated, doc.body);
-    return updated;
+    // Serialize the read-modify-write so concurrent patches to the same
+    // opportunity (e.g. pipeline qualification vs. an API status change) do not
+    // overwrite one another.
+    return withFileLock(path, async () => {
+      const doc = await readDoc<OpportunityRecord>(path);
+      const updated: OpportunityRecord = {
+        ...doc.front,
+        ...patch,
+        updated: new Date().toISOString(),
+      };
+      await writeDoc(path, updated, doc.body);
+      return updated;
+    });
   }
 }

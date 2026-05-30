@@ -1,7 +1,15 @@
 import { join } from "node:path";
 import { newId, slugify } from "../ids.js";
 import { workspacePaths } from "../paths.js";
-import { ensureDir, fileExists, listDirs, readDoc, writeDoc, type FrontMatter } from "./base.js";
+import {
+  ensureDir,
+  fileExists,
+  listDirs,
+  readDoc,
+  withFileLock,
+  writeDoc,
+  type FrontMatter,
+} from "./base.js";
 
 export type ProjectStatus =
   | "intake"
@@ -253,8 +261,13 @@ export class ProjectRegistry {
   ): Promise<ProjectOwnershipRecord> {
     const project = await this.get(slug);
     if (!project) throw new Error(`project not found: ${slug}`);
-    const existing = await this.getOwnership(slug);
-    return this.writeOwnership(project, patch, existing);
+    // Serialize the read (getOwnership) + merge + write on OWNERSHIP.md. The
+    // lock is keyed on the ownership file; `writeOwnership` is intentionally not
+    // locked so this does not nest a lock on the same path.
+    return withFileLock(this.ownershipPath(slug), async () => {
+      const existing = await this.getOwnership(slug);
+      return this.writeOwnership(project, patch, existing);
+    });
   }
 
   async update(
@@ -265,13 +278,18 @@ export class ProjectRegistry {
     if (!(await fileExists(path))) {
       throw new Error(`project not found: ${slug}`);
     }
-    const doc = await readDoc<ProjectRecord>(path);
-    const updated: ProjectRecord = {
-      ...doc.front,
-      ...patch,
-      updated: new Date().toISOString(),
-    };
-    await writeDoc(path, updated, doc.body);
-    return updated;
+    // Serialize the read-modify-write so concurrent patches to the same project
+    // (status vs. repository URL, driven from scheduler/GitHub paths and
+    // coordinator intake) do not overwrite one another.
+    return withFileLock(path, async () => {
+      const doc = await readDoc<ProjectRecord>(path);
+      const updated: ProjectRecord = {
+        ...doc.front,
+        ...patch,
+        updated: new Date().toISOString(),
+      };
+      await writeDoc(path, updated, doc.body);
+      return updated;
+    });
   }
 }
