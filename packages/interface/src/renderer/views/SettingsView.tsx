@@ -80,6 +80,7 @@ export function SettingsView({
     ProviderAuthAuthorization | undefined
   >();
   const [oauthStatus, setOauthStatus] = useState<string | undefined>();
+  const [connectError, setConnectError] = useState<string | undefined>();
   const [modelList, setModelList] = useState<ProviderModelList | undefined>();
   const [busy, setBusy] = useState(false);
   const [savingModel, setSavingModel] = useState(false);
@@ -199,22 +200,31 @@ export function SettingsView({
 
   const completeOpenAICodexOAuth = async (): Promise<void> => {
     const code = extractOAuthCode(oauthCode);
-    if (!code) return;
+    if (!code || busy) return;
+    setBusy(true);
+    setConnectError(undefined);
     setOauthStatus("Completing OpenAI Codex OAuth…");
-    const result = await Api.providerOAuthCallback("openai-codex", {
-      method: "code",
-      code,
-      ...(defaultModel.trim() ? { defaultModel: defaultModel.trim() } : {}),
-    });
-    if (result.status !== "connected") {
-      setOauthStatus("Authorization is still pending.");
-      return;
+    try {
+      const result = await Api.providerOAuthCallback("openai-codex", {
+        method: "code",
+        code,
+        ...(defaultModel.trim() ? { defaultModel: defaultModel.trim() } : {}),
+      });
+      if (result.status !== "connected") {
+        setOauthStatus("Authorization is still pending.");
+        return;
+      }
+      setOauthStatus("OpenAI Codex OAuth connected.");
+      setOauthAuthorization(undefined);
+      setOauthCode("");
+      setDefaultModel("");
+      await onRefresh();
+    } catch (error) {
+      setConnectError(error instanceof Error ? error.message : "Failed to complete OAuth.");
+      setOauthStatus(undefined);
+    } finally {
+      setBusy(false);
     }
-    setOauthStatus("OpenAI Codex OAuth connected.");
-    setOauthAuthorization(undefined);
-    setOauthCode("");
-    setDefaultModel("");
-    await onRefresh();
   };
 
   const saveModel = async (): Promise<void> => {
@@ -272,6 +282,7 @@ export function SettingsView({
   const connect = async (): Promise<void> => {
     if (busy) return;
     setBusy(true);
+    setConnectError(undefined);
     try {
       if (provider === "openai-codex") {
         await startOpenAICodexOAuth();
@@ -290,6 +301,12 @@ export function SettingsView({
       setOauthStatus(undefined);
       setOauthAuthorization(undefined);
       setOauthCode("");
+    } catch (error) {
+      // A rejected authorize/callback/login left the owner staring at a frozen
+      // "in progress" status with no error and no retry (SER-205). Surface the
+      // failure, clear the fake progress message, and re-enable the buttons.
+      setConnectError(error instanceof Error ? error.message : "Failed to connect provider.");
+      setOauthStatus(undefined);
     } finally {
       setBusy(false);
     }
@@ -375,6 +392,15 @@ export function SettingsView({
               : "Connect"}
         </Button>
       </div>
+
+      {connectError ? (
+        <div
+          role="alert"
+          className="mt-3 rounded-md border border-danger/40 bg-danger-subtle/30 p-3 text-[11px] text-danger"
+        >
+          {connectError}
+        </div>
+      ) : null}
 
       {connectedProvider?.source === "auth" ? (
         <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-border/70 bg-surface-subtle/40 px-4 py-3">
