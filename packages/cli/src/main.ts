@@ -2061,7 +2061,13 @@ export async function main(argv: readonly string[]): Promise<number> {
     return 0;
   }
 
-  const entry = COMMANDS[command];
+  // Own-property checks only: COMMANDS and the namespaced groups are plain object
+  // literals, so a bare `command in entry` / `COMMANDS[command]` would resolve
+  // inherited Object.prototype members (`toString`, `constructor`, `valueOf`,
+  // `hasOwnProperty`) to built-in functions and invoke them as handlers — a
+  // crash / non-integer exit reachable with trivial input (SER-207).
+  const hasOwn = Object.prototype.hasOwnProperty;
+  const entry = hasOwn.call(COMMANDS, command) ? COMMANDS[command] : undefined;
   if (!entry) {
     process.stderr.write(`bureau: unknown command "${command}"\n\n${HELP}`);
     return 1;
@@ -2070,7 +2076,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     return entry(args.slice(1));
   }
   const sub = args[1];
-  if (!sub || !(sub in entry)) {
+  if (!sub || !hasOwn.call(entry, sub)) {
     const subs = Object.keys(entry).join(", ");
     process.stderr.write(`bureau ${command}: expected one of: ${subs}\n`);
     return 1;
