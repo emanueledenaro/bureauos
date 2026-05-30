@@ -33,4 +33,19 @@ describe("slugify", () => {
     const long = "x".repeat(200);
     expect(slugify(long)).toHaveLength(64);
   });
+
+  it("falls back to a non-empty, filesystem-safe slug for non-Latin/symbol/empty names (SER-230)", () => {
+    const slugPattern = /^[a-z0-9][a-z0-9-]*$/;
+    for (const name of ["株式会社", "!!!", "   ", "", "—–-"]) {
+      const slug = slugify(name);
+      expect(slug.length).toBeGreaterThan(0);
+      expect(slug).toMatch(slugPattern);
+    }
+    // Distinct empty-slugifying names get distinct slugs (no collision into "").
+    expect(slugify("株式会社")).not.toBe(slugify("!!!"));
+    // Deterministic: the same name always maps to the same slug.
+    expect(slugify("株式会社")).toBe(slugify("株式会社"));
+    // Latin names are unchanged by the fallback.
+    expect(slugify("Acme Co.")).toBe("acme-co");
+  });
 });
