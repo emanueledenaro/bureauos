@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback } from "../ui/avatar";
 import { Card } from "../ui/card";
@@ -54,6 +54,7 @@ export function CoordinatorPanel({
   state,
   onMessage,
   onStreamMessage,
+  headerSlot,
 }: {
   state: DashboardState;
   onMessage: (
@@ -65,6 +66,11 @@ export function CoordinatorPanel({
     attachments: CoordinatorAttachmentInput[] | undefined,
     handlers: CoordinatorChatStreamHandlers,
   ) => Promise<CoordinatorChatResult>;
+  /**
+   * Optional header control rendered next to the status pills. The coordinator
+   * page uses it to surface the context drawer trigger below xl (SER-153).
+   */
+  headerSlot?: ReactNode;
 }) {
   const [messages, setMessages] = useState<CoordinatorMessageRecord[]>([]);
   const [draft, setDraft] = useState("");
@@ -241,6 +247,7 @@ export function CoordinatorPanel({
             value={`${activeRuns.length} active runs`}
             tone={activeRuns.length > 0 ? "info" : "success"}
           />
+          {headerSlot}
         </div>
       </header>
 

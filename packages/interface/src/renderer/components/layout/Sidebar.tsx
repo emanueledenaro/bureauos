@@ -4,8 +4,8 @@ import {
   Box,
   Briefcase,
   FileText,
-  Home,
-  Inbox,
+  LayoutGrid,
+  ListChecks,
   Database,
   MessageSquare,
   Settings as SettingsIcon,
@@ -18,13 +18,15 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
+import { MODE_LABELS } from "../../lib/modes";
 import type { AdaptiveMode, DashboardState } from "../../lib/types";
 import { Badge } from "../ui/badge";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "../ui/sheet";
 
+// Labels are sourced from the shared MODE_LABELS map (SER-155) so a mode is
+// named identically in the sidebar and the header.
 interface NavItem {
   id: AdaptiveMode;
-  label: string;
   icon: LucideIcon;
   badgeKey?: keyof BadgeData;
 }
@@ -41,26 +43,26 @@ interface BadgeData {
 }
 
 const COMMAND: NavItem[] = [
-  { id: "coordinator", label: "Coordinator", icon: MessageSquare },
-  { id: "portfolio", label: "Home", icon: Home },
-  { id: "today", label: "Inbox", icon: Inbox, badgeKey: "runs" },
+  { id: "coordinator", icon: MessageSquare },
+  { id: "portfolio", icon: LayoutGrid },
+  { id: "today", icon: ListChecks, badgeKey: "runs" },
 ];
 
 const BUSINESS: NavItem[] = [
-  { id: "revenue", label: "Revenue", icon: Wallet },
-  { id: "delivery", label: "Delivery", icon: Briefcase, badgeKey: "projects" },
-  { id: "growth", label: "Growth", icon: TrendingUp, badgeKey: "opportunities" },
-  { id: "clients", label: "Clients", icon: Users, badgeKey: "clients" },
+  { id: "revenue", icon: Wallet },
+  { id: "delivery", icon: Briefcase, badgeKey: "projects" },
+  { id: "growth", icon: TrendingUp, badgeKey: "opportunities" },
+  { id: "clients", icon: Users, badgeKey: "clients" },
 ];
 
 const CONTROL: NavItem[] = [
-  { id: "risk", label: "Risk", icon: ShieldAlert, badgeKey: "risk" },
-  { id: "approvals", label: "Approvals", icon: ShieldCheck, badgeKey: "approvals" },
-  { id: "memory", label: "Memory", icon: Database },
-  { id: "agents", label: "Agents", icon: Bot },
-  { id: "goals", label: "Goals", icon: Target },
-  { id: "reports", label: "Reports", icon: FileText },
-  { id: "settings", label: "Settings", icon: SettingsIcon },
+  { id: "risk", icon: ShieldAlert, badgeKey: "risk" },
+  { id: "approvals", icon: ShieldCheck, badgeKey: "approvals" },
+  { id: "memory", icon: Database },
+  { id: "agents", icon: Bot },
+  { id: "goals", icon: Target },
+  { id: "reports", icon: FileText },
+  { id: "settings", icon: SettingsIcon },
 ];
 
 function computeBadges(state: DashboardState): BadgeData {
@@ -88,7 +90,8 @@ function SidebarContent({
   onModeChange: (mode: AdaptiveMode) => void;
 }) {
   const badges = computeBadges(state);
-  const systemHealthy = !state.error && !state.loading;
+  const connecting = !state.hasLoaded && !state.error;
+  const systemHealthy = !state.error && state.hasLoaded;
 
   return (
     <div className="flex h-full flex-col">
@@ -141,13 +144,13 @@ function SidebarContent({
               "h-1.5 w-1.5 rounded-full",
               systemHealthy
                 ? "bg-success shadow-[0_0_8px_hsl(var(--success)/0.6)]"
-                : state.loading
+                : connecting
                   ? "bg-warning"
                   : "bg-danger",
             )}
           />
           <span className="text-foreground">
-            {state.error ? "API offline" : state.loading ? "Connecting" : "All systems online"}
+            {state.error ? "API offline" : connecting ? "Connecting" : "All systems online"}
           </span>
         </div>
         <div className="mt-1 text-[10px] text-muted-foreground">
@@ -276,7 +279,7 @@ function SidebarItem({
             active ? "text-foreground" : "text-muted-foreground/80 group-hover:text-foreground",
           )}
         />
-        <span className="font-medium">{item.label}</span>
+        <span className="font-medium">{MODE_LABELS[item.id]}</span>
       </div>
       {badge !== undefined && badge > 0 ? (
         <Badge

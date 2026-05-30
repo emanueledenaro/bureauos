@@ -35,6 +35,7 @@ const emptyDashboardState: DashboardState = {
   artifacts: [],
   audit: [],
   loading: false,
+  hasLoaded: true,
 };
 
 describe("normalizeRepositoryReference", () => {

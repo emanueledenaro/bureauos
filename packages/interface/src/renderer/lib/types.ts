@@ -58,6 +58,13 @@ export interface DashboardState {
   policyExplain?: PolicyExplainResult;
   error?: string;
   loading: boolean;
+  /**
+   * True once the first dashboard fetch has settled (regardless of whether
+   * individual slices failed). Lets views distinguish "still loading for the
+   * first time" (show skeletons) from "loaded and genuinely empty" (show empty
+   * states) so initial empty arrays do not flash as "nothing to do".
+   */
+  hasLoaded: boolean;
 }
 
 export interface Workstream {
