@@ -157,6 +157,12 @@ export class Scheduler {
       const due = lastActivity === undefined || now - lastActivity >= job.everyMs;
       if (!due) continue;
       await this.state?.markStarted(job.name, new Date(now));
+      // Record the attempt time in-memory up front, not only on success. The
+      // persisted `last_started_at` already backs off a started job, but
+      // `markStarted` is a no-op when no state store is configured; without
+      // this, a failing job (whose `job.last` stays unset) would be
+      // re-attempted on every tick instead of once per `everyMs` (SER-226).
+      job.last = now;
       try {
         if (job.name === "github_project_signal_sync") {
           await this.syncGitHubProjectSignals();
