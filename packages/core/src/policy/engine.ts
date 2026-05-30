@@ -16,6 +16,13 @@ export interface PolicyInput {
   target?: string;
   capability?: string;
   riskClass?: RiskClass;
+  /**
+   * When true the evaluation is a read-only preview (e.g. `policy explain`,
+   * `capabilities check`) and must NOT burn a matching one-off approval. Acting
+   * callers leave this unset so that a one-off approval is consumed exactly once
+   * when it authorizes the action. See `ApprovalRegistry.consume`.
+   */
+  preview?: boolean;
 }
 
 export interface PolicyDecision {
@@ -107,6 +114,7 @@ export class PolicyEngine {
     if (ALWAYS_HUMAN.has(input.action)) {
       const approval = await this.approvals.match(input.action, input.target ?? "*");
       if (approval) {
+        await this.consumeOnGrant(input, approval.id);
         return {
           ...base,
           outcome: "allow",
@@ -185,6 +193,7 @@ export class PolicyEngine {
   ): Promise<PolicyDecision> {
     const approval = await this.approvals.match(input.action, input.target ?? "*");
     if (approval) {
+      await this.consumeOnGrant(input, approval.id);
       return {
         ...base,
         outcome: "allow",
@@ -205,6 +214,16 @@ export class PolicyEngine {
       approval_required: true,
       required_gates: ["owner_approval"],
     };
+  }
+
+  /**
+   * Burn a matching one-off approval when it authorizes a real action. Skipped
+   * for read-only previews (`input.preview`). Standing/recurring approvals are
+   * left intact by {@link ApprovalRegistry.consume}.
+   */
+  private async consumeOnGrant(input: PolicyInput, approvalId: string): Promise<void> {
+    if (input.preview) return;
+    await this.approvals.consume(approvalId);
   }
 
   private gatesFor(input: PolicyInput): string[] {

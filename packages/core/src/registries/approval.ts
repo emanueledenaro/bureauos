@@ -1,5 +1,6 @@
 import { rename } from "node:fs/promises";
 import { join } from "node:path";
+import { AuditLog } from "../audit/log.js";
 import { newId } from "../ids.js";
 import { LocalNotificationCenter, type ApprovalNotificationSink } from "../notifications/local.js";
 import { workspacePaths } from "../paths.js";
@@ -27,6 +28,12 @@ export interface ApprovalRecord extends FrontMatter {
   resolved_at: string;
   resolved_by: string;
   reason: string;
+  /**
+   * ISO timestamp recording when a one-off approval was burned by being used to
+   * authorize an action. Empty until consumed. Standing/recurring approvals
+   * (`one_off: false`) are never consumed and keep this empty.
+   */
+  consumed_at: string;
 }
 
 export interface CreateApprovalInput {
@@ -46,6 +53,11 @@ export interface CreateApprovalInput {
 
 export interface ApprovalRegistryDeps {
   notifications?: ApprovalNotificationSink | false;
+  /**
+   * Audit sink used to record `approval.consumed` when a one-off approval is
+   * burned. Defaults to the workspace audit log; pass `false` to disable.
+   */
+  audit?: AuditLog | false;
 }
 
 const APPROVAL_ACTION_RISK: Readonly<Record<string, ApprovalRiskLevel>> = {
@@ -118,6 +130,7 @@ export function approvalRequiresDecisionNote(
 
 export class ApprovalRegistry {
   private readonly notifications?: ApprovalNotificationSink;
+  private readonly audit?: AuditLog;
 
   constructor(
     public readonly workspaceRoot: string,
@@ -127,6 +140,10 @@ export class ApprovalRegistry {
       deps.notifications === false
         ? undefined
         : (deps.notifications ?? new LocalNotificationCenter(workspaceRoot));
+    this.audit =
+      deps.audit === false
+        ? undefined
+        : (deps.audit ?? new AuditLog(workspacePaths(workspaceRoot).auditLog));
   }
 
   private paths() {
@@ -165,6 +182,7 @@ export class ApprovalRegistry {
       resolved_at: "",
       resolved_by: "",
       reason: "",
+      consumed_at: "",
     };
     await writeDoc(this.pendingFile(id), record, input.body ?? "");
     await this.emitApprovalNotification(record);
@@ -239,7 +257,9 @@ export class ApprovalRegistry {
 
   /**
    * Look up a standing or one-off approval matching the requested action and target.
-   * Returns the most recent matching approval that is still valid (not expired).
+   * Returns the most recent matching approval that is still valid: approved, not
+   * expired, and — for one-off approvals — not already consumed. Standing /
+   * recurring approvals (`one_off: false`) keep matching until they expire.
    */
   async match(
     action: string,
@@ -255,7 +275,51 @@ export class ApprovalRegistry {
           (r.target === target || r.target === "*"),
       )
       .filter((r) => !r.expires_at || new Date(r.expires_at).getTime() > now.getTime())
+      // A one-off approval that has already authorized an action is spent and
+      // must not grant again; standing approvals (one_off === false) are reusable.
+      .filter((r) => !(r.one_off && r.consumed_at))
       .sort((a, b) => (a.resolved_at > b.resolved_at ? -1 : 1));
     return candidates[0];
+  }
+
+  /**
+   * Burn a one-off approval after it has authorized an action so it cannot
+   * authorize a second one. Idempotent and safe to call with any id:
+   *
+   * - returns `undefined` if the resolved approval does not exist;
+   * - is a no-op (returns the record unchanged) for standing/recurring approvals
+   *   (`one_off: false`) and for approvals already consumed;
+   * - otherwise stamps `consumed_at`, rewrites the resolved record, and writes an
+   *   `approval.consumed` audit event.
+   */
+  async consume(id: string, now = new Date()): Promise<ApprovalRecord | undefined> {
+    const path = this.resolvedFile(id);
+    if (!(await fileExists(path))) return undefined;
+    const doc = await readDoc<ApprovalRecord>(path);
+    const record = doc.front;
+    if (!record.one_off || record.consumed_at) return record;
+    const stamp = now.toISOString();
+    const updated: ApprovalRecord = {
+      ...record,
+      consumed_at: stamp,
+      updated: stamp,
+    };
+    await writeDoc(this.resolvedFile(id), updated, doc.body);
+    await this.recordConsumption(updated);
+    return updated;
+  }
+
+  private async recordConsumption(record: ApprovalRecord): Promise<void> {
+    try {
+      await this.audit?.append({
+        actor: record.resolved_by || "policy",
+        action: "approval.consumed",
+        target: record.target,
+        approval_id: record.id,
+        result: "ok",
+      });
+    } catch {
+      // Audit is best-effort; the consumed record on disk is the source of truth.
+    }
   }
 }

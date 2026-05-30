@@ -115,6 +115,55 @@ const BLOCKED_GIT_SUBCOMMANDS = new Set([
   "switch",
 ]);
 
+/**
+ * Git GLOBAL options that are outright rejected before the subcommand is even
+ * resolved. Each is an escape / arbitrary-command-execution vector with no
+ * legitimate use in the verify/edit cycle:
+ *
+ * - `-c <name=value>` / `--config-env=<name=ENV>` can set `core.pager`,
+ *   `alias.*`, `core.fsmonitor`, etc. to arbitrary shell commands git then runs.
+ * - `-C <path>` / `--git-dir` / `--work-tree` / `--namespace` / `--super-prefix`
+ *   redirect git's notion of the repo/worktree, escaping the workspace
+ *   confinement that {@link safeWorkspaceCwd} otherwise enforces.
+ * - `--exec-path[=<path>]` points git at an attacker-controlled directory of
+ *   `git-*` helper binaries.
+ *
+ * Names are matched in both their `--flag` and `--flag=value` spellings, so the
+ * map is keyed by the bare option name (without any `=value` suffix).
+ */
+const REJECTED_GIT_GLOBAL_FLAGS = new Set([
+  "-c",
+  "--config-env",
+  "-C",
+  "--git-dir",
+  "--work-tree",
+  "--exec-path",
+  "--namespace",
+  "--super-prefix",
+]);
+
+/**
+ * Git GLOBAL options that take a value supplied as the FOLLOWING, separate token
+ * (e.g. `git -C /tmp status`, `git -c k=v status`). When the parser walks the
+ * pre-subcommand args it must skip both the flag and its value so the real
+ * subcommand is identified correctly. `--flag=value` forms are single tokens
+ * and are NOT listed here.
+ *
+ * Note: `--exec-path`'s value is optional (`git --exec-path` just prints the
+ * path). It is still treated as consuming a following non-flag token, which is
+ * safe because the flag itself is rejected outright anyway.
+ */
+const VALUE_TAKING_GIT_GLOBAL_FLAGS = new Set([
+  "-C",
+  "--git-dir",
+  "--work-tree",
+  "--namespace",
+  "--super-prefix",
+  "--exec-path",
+  "-c",
+  "--config-env",
+]);
+
 export class HostCodexRuntimeRunner implements CodexRuntimeRunner {
   private readonly commands: readonly HostCodexCommand[];
   private readonly allowedCommands: ReadonlySet<string>;
@@ -219,10 +268,8 @@ export class HostCodexRuntimeRunner implements CodexRuntimeRunner {
         return `command is not on the allow-list: ${binary}`;
       }
       if (binary === "git") {
-        const subcommand = firstGitSubcommand(command.args ?? []);
-        if (subcommand && BLOCKED_GIT_SUBCOMMANDS.has(subcommand)) {
-          return `git subcommand is not allowed: ${subcommand}`;
-        }
+        const gitError = inspectGitArgs(command.args ?? []);
+        if (gitError) return gitError;
       }
     }
     return undefined;
@@ -345,10 +392,61 @@ function commandsFromInputs(inputs: Record<string, unknown> | undefined): HostCo
   return commands;
 }
 
-function firstGitSubcommand(args: readonly string[]): string | undefined {
-  for (const arg of args) {
-    if (arg.startsWith("-")) continue;
-    return arg.toLowerCase();
+/**
+ * Returns the bare option name of a git global flag token, stripping any
+ * `=value` suffix. `-c` and `--git-dir=/x` both normalise to `-c` / `--git-dir`.
+ * Returns `undefined` for non-flag tokens (i.e. the subcommand or its args).
+ */
+function gitGlobalFlagName(token: string): string | undefined {
+  if (!token.startsWith("-")) return undefined;
+  const eq = token.indexOf("=");
+  return eq >= 0 ? token.slice(0, eq) : token;
+}
+
+/**
+ * Inspects the argument vector of a `git` invocation against git's real CLI
+ * grammar and returns a validation-error string if it must be refused, or
+ * `undefined` if it is allowed.
+ *
+ * Git's grammar is `git [<global-options>] <subcommand> [<args>]`. The previous
+ * naive parser returned the first arg not starting with `-`, which mis-read the
+ * VALUE of a value-taking global option (e.g. `git -c core.pager=x push` read
+ * `core.pager=x`, and `git -C /tmp push` read `/tmp`) as the subcommand,
+ * silently allowing blocked subcommands AND enabling arbitrary command
+ * execution / workspace escape via `-c`, `-C`, `--git-dir`, etc.
+ *
+ * This walks the global-option prefix correctly:
+ *  1. Reject outright any dangerous global option (see {@link REJECTED_GIT_GLOBAL_FLAGS}).
+ *  2. Skip the value token of value-taking, separate-arg global options so the
+ *     subcommand is identified at the right position.
+ *  3. Resolve the first real subcommand token and reject it if it is in
+ *     {@link BLOCKED_GIT_SUBCOMMANDS}.
+ */
+function inspectGitArgs(args: readonly string[]): string | undefined {
+  let i = 0;
+  for (; i < args.length; i += 1) {
+    const token = args[i] as string;
+    const flagName = gitGlobalFlagName(token);
+    if (flagName === undefined) {
+      // First non-flag token: this is the subcommand.
+      break;
+    }
+    if (REJECTED_GIT_GLOBAL_FLAGS.has(flagName)) {
+      return `git global flag is not allowed: ${flagName}`;
+    }
+    // For a value-taking option in its separate-arg form (no `=` in the token),
+    // the next token is its value, not the subcommand — skip it.
+    const hasInlineValue = token.includes("=");
+    if (!hasInlineValue && VALUE_TAKING_GIT_GLOBAL_FLAGS.has(flagName)) {
+      i += 1;
+    }
+    // Otherwise (boolean global flag or `--flag=value` single token) the loop
+    // advances by one normally.
+  }
+
+  const subcommand = args[i]?.toLowerCase();
+  if (subcommand && BLOCKED_GIT_SUBCOMMANDS.has(subcommand)) {
+    return `git subcommand is not allowed: ${subcommand}`;
   }
   return undefined;
 }

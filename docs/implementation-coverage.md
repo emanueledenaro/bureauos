@@ -43,7 +43,7 @@ Every major capability described in the docs must become one of:
 | Run lifecycle | `RunEngine`, injected coordinator dispatcher, `bureau run new --stub`; the coordinator dispatcher truthfully propagates specialist `ok:false` as a `blocked` terminal status with aggregated `dispatch_blockers` (no longer hardcoded to `completed`), so blocked runs transition to `blocked` and feed the bounded-retry scan | partial |
 | Artifact store | `ArtifactStore` | partial |
 | Audit log | `AuditLog`, `/audit`, SSE events | implemented |
-| Approval gates | `ApprovalRegistry`, `PolicyEngine`, ElectronJS approvals | partial |
+| Approval gates | `ApprovalRegistry`, `PolicyEngine`, ElectronJS approvals; one-off approvals are single-use (consumed/audited after they authorize an action, `ApprovalRegistry.consume`), standing approvals reuse until expiry | partial |
 
 ## Owner Intake
 
@@ -90,7 +90,7 @@ Every major capability described in the docs must become one of:
 | Growth agents | template agents with provider-backed drafting and deterministic local template when selected route is unavailable | partial |
 | Compliance agent | concrete compliance agent with provider-backed drafting and deterministic local template when selected route is unavailable | partial |
 | Agent provider routing | `ProviderRouter`, `configureAgentProviderRouting`, dispatcher model capability, per-model capability metadata, budget-tier filtering, and no API fallback from `openai-codex` OAuth | implemented |
-| Codex runtime capability | capability registry boundary, `CapabilityUseService`, `CodexRuntimeAdapter` prepare/execute contract, real host-backed `HostCodexRuntimeRunner` (shell-less `spawn`, command allow-list, blocked destructive git subcommands, `git status --porcelain` diff evidence) wired via `buildCodexRuntimeFromConfig` + `runtime.codex` config and the CLI dispatcher, `UnconfiguredCodexRuntimeRunner` fallback when disabled, `capabilities check`, `/capabilities/check`, gate/audit artifacts before runtime execution, changed-file limit evidence for runtime-reported diffs | partial |
+| Codex runtime capability | capability registry boundary, `CapabilityUseService`, `CodexRuntimeAdapter` prepare/execute contract, real host-backed `HostCodexRuntimeRunner` (shell-less `spawn`, command allow-list, grammar-aware git argument inspection that rejects subcommand-smuggling/escape global flags (`-c`, `-C`, `--git-dir`, `--work-tree`, `--exec-path`, `--namespace`, `--super-prefix`, `--config-env`) and blocks destructive git subcommands, workspace-confined cwd, `git status --porcelain` diff evidence) wired via `buildCodexRuntimeFromConfig` + `runtime.codex` config and the CLI dispatcher, `UnconfiguredCodexRuntimeRunner` fallback when disabled, `capabilities check`, `/capabilities/check`, gate/audit artifacts before runtime execution, changed-file limit evidence for runtime-reported diffs | partial |
 | MCP capability bus | `CapabilityRegistry`, config parsing, `/capabilities`, `/capabilities/check`, `bureau capabilities list/check`, Electron Agents capability matrix, `capability-audit` artifacts | partial |
 
 ## Growth and Revenue
