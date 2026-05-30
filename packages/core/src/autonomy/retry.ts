@@ -271,6 +271,10 @@ export class AutonomousRetryService {
     const now = input.now ?? new Date();
     const maxAttempts = input.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
     const statuses = new Set(input.statuses ?? DEFAULT_STATUSES);
+    // First sweep dangling runs: a crash/interrupted write can leave a run stuck
+    // in a non-terminal state forever. Reconcile them to `blocked` so they enter
+    // the candidate set below and get bounded retry/escalation (SER-194).
+    await this.deps.runs.reconcileStaleRuns({ now });
     const runs = await this.deps.runs.list();
     const knownSources = new Set(runs.map((run) => run.trigger_source));
     const triggered: TriggeredAutonomousRetry[] = [];

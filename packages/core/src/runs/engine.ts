@@ -130,6 +130,30 @@ export interface RunEngineDeps {
   recordDecisions?: boolean;
 }
 
+/**
+ * Run states that have NOT reached a final outcome. A run left in any of these
+ * (process crash, a rejected mid-flight write between `in_progress` and the
+ * terminal transition) would otherwise dangle here forever — excluded from
+ * retry/escalation and never producing an outcome (SER-194).
+ */
+const NON_TERMINAL_RUN_STATUSES: ReadonlySet<RunStatus> = new Set([
+  "created",
+  "context_loading",
+  "planning",
+  "dispatching",
+  "in_progress",
+  "verifying",
+]);
+
+/** Default age (relative to `updated`) after which a non-terminal run is stale. */
+const DEFAULT_STALE_RUN_MS = 60 * 60 * 1000;
+
+export interface ReconcileStaleRunsOptions {
+  now?: Date;
+  /** Age in ms (relative to a run's `updated`) past which it is reconciled. */
+  staleMs?: number;
+}
+
 export class RunEngine {
   constructor(
     public readonly workspaceRoot: string,
@@ -449,6 +473,50 @@ export class RunEngine {
       out.push(doc.front);
     }
     return out;
+  }
+
+  /**
+   * Reconcile runs left dangling in a non-terminal state past the staleness
+   * threshold (SER-194). Each is transitioned to `blocked` with a reason, gets
+   * an audit record and outcome memory, and becomes eligible for the bounded
+   * retry/escalation scan. Meant to run on the daemon (e.g. inside the retry
+   * scan) so a crashed/interrupted run never silently disappears.
+   */
+  async reconcileStaleRuns(options: ReconcileStaleRunsOptions = {}): Promise<RunRecord[]> {
+    const now = options.now ?? new Date();
+    const staleMs = options.staleMs ?? DEFAULT_STALE_RUN_MS;
+    const runs = await this.list();
+    const reconciled: RunRecord[] = [];
+    for (const run of runs) {
+      if (!NON_TERMINAL_RUN_STATUSES.has(run.status)) continue;
+      const updatedMs = Date.parse(run.updated || run.created || "");
+      if (!Number.isFinite(updatedMs)) continue;
+      if (now.getTime() - updatedMs < staleMs) continue;
+
+      const reason = `reconciled: run was stale in non-terminal state "${run.status}" with no terminal transition`;
+      const record: RunRecord = {
+        ...run,
+        status: "blocked",
+        dispatch_status: "blocked",
+        blocking_reason: reason,
+        dispatch_blockers: [reason],
+        updated: now.toISOString(),
+      };
+      await this.persist(
+        record,
+        this.runBody(record, { dispatchStatus: "blocked", blockers: [reason] }),
+      );
+      await this.deps.audit.append({
+        actor: record.created_by,
+        action: "run.reconciled_stale",
+        target: record.id,
+        result: "error",
+        error: reason,
+      });
+      await writeRunOutcomeMemory(this.workspaceRoot, record, { audit: this.deps.audit });
+      reconciled.push(record);
+    }
+    return reconciled;
   }
 
   async attachArtifacts(id: string, artifactIds: readonly string[]): Promise<RunRecord> {
