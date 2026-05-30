@@ -353,7 +353,11 @@ const MemoryConfig = z
         // to a host-injected provider-backed index (no-op fallback otherwise).
         provider: z.enum(["none", "local", "custom"]).default("none"),
         index_path: z.string().default(".bureauos/memory/indexes/semantic"),
-        min_score: z.number().min(0).max(1).default(0.72),
+        // TF-IDF cosine similarities for real queries against markdown memory
+        // sit well below the old 0.72 default, which suppressed essentially every
+        // hit (SER-195). 0.1 keeps near-zero noise out while letting genuine
+        // topical matches through; raise per-workspace for stricter recall.
+        min_score: z.number().min(0).max(1).default(0.1),
       })
       .default({}),
     growth_memory: z
