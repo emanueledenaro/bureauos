@@ -128,6 +128,29 @@ describe("DaemonLifecycleSupervisor", () => {
     });
   });
 
+  it("signals the live lock pid (not the dead status pid) when they diverge (SER-227)", async () => {
+    // Only pid 200 (the lock holder) is alive; the status file still names a
+    // dead pid 100 (e.g. after a crash + partial state update).
+    const state = new DaemonStateStore(dir, (pid) => pid === 200);
+    await state.acquireLock({ pid: 200, message: "running daemon" });
+    await state.markRunning({ pid: 100, apiUrl: "http://127.0.0.1:7777", port: 7777 });
+
+    const killed: Array<{ pid: number; signal: NodeJS.Signals }> = [];
+    const supervisor = new DaemonLifecycleSupervisor({
+      workspaceRoot: dir,
+      state,
+      kill: (pid, signal) => killed.push({ pid, signal }),
+    });
+
+    const result = await supervisor.stop();
+
+    // The live daemon (lock pid 200) is signalled, not the dead status pid 100.
+    expect(result).toMatchObject({ ok: true, status: "stopped", pid: 200 });
+    expect(killed).toEqual([{ pid: 200, signal: "SIGTERM" }]);
+    // Its lock is actually released (releaseLock only matches the holder pid).
+    expect((await state.lockStatus()).state).toBeUndefined();
+  });
+
   it("records actionable diagnostics when startup cannot spawn a process", async () => {
     const state = new DaemonStateStore(dir, () => false);
     const supervisor = new DaemonLifecycleSupervisor({
