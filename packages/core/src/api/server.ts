@@ -49,7 +49,7 @@ import {
   type GitHubRepositoryProvisionClient,
 } from "../github/repository-provisioner.js";
 import { BusinessReportService } from "../reports/business.js";
-import { ClientIntelligenceService } from "../clients/intelligence.js";
+import { ClientIntelligenceService, isOpenOpportunityStatus } from "../clients/intelligence.js";
 import { ClientAccountPlanService } from "../clients/account-plans.js";
 import { ClientSuccessStatusService } from "../clients/success-status.js";
 import { GrowthMemoryService } from "../growth/memory.js";
@@ -742,7 +742,10 @@ const ROUTES: Record<string, RouteHandler> = {
       d.approvals.listPending(),
       d.runs.list(),
     ]);
-    const pipelineValue = opportunities.reduce((acc, o) => acc + (o.expected_value || 0), 0);
+    // Live pipeline excludes closed (won/lost) deals so the figure is truthful
+    // once the book closes, and matches GET /clients/intelligence (SER-203).
+    const openOpportunities = opportunities.filter((o) => isOpenOpportunityStatus(o.status));
+    const pipelineValue = openOpportunities.reduce((acc, o) => acc + (o.expected_value || 0), 0);
     ok(res, {
       organization: options.config.organization.name,
       preset: options.config.setup.preset,
@@ -756,8 +759,7 @@ const ROUTES: Record<string, RouteHandler> = {
       },
       revenue: {
         pipeline_value: pipelineValue,
-        active_opportunities: opportunities.filter((o) => o.status !== "won" && o.status !== "lost")
-          .length,
+        active_opportunities: openOpportunities.length,
       },
     });
   },

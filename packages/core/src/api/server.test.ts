@@ -8,6 +8,8 @@ import { defaultConfig, loadConfig } from "../config/loader.js";
 import { initWorkspace } from "../init/initializer.js";
 import { workspacePaths } from "../paths.js";
 import { ApprovalRegistry } from "../registries/approval.js";
+import { ClientRegistry } from "../registries/client.js";
+import { OpportunityRegistry } from "../registries/opportunity.js";
 import { ArtifactStore } from "../artifacts/store.js";
 import { AuditLog } from "../audit/log.js";
 import { PolicyEngine } from "../policy/engine.js";
@@ -2331,5 +2333,44 @@ describe("API server", () => {
     });
 
     expect(response.status).toBe(401);
+  });
+
+  it("excludes won/lost opportunities from company-pulse pipeline value (SER-203)", async () => {
+    const client = await new ClientRegistry(dir).create({ name: "Pulse Co", status: "active" });
+    const opps = new OpportunityRegistry(dir);
+    await opps.create({
+      title: "Open deal",
+      source: "ref",
+      clientId: client.id,
+      expectedValue: 5000,
+    });
+    const won = await opps.create({
+      title: "Won deal",
+      source: "ref",
+      clientId: client.id,
+      expectedValue: 9000,
+    });
+    const lost = await opps.create({
+      title: "Lost deal",
+      source: "ref",
+      clientId: client.id,
+      expectedValue: 7000,
+    });
+    await opps.update(won.id, { status: "won" });
+    await opps.update(lost.id, { status: "lost" });
+
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const pulse = (await (await fetch(`${server.url}/company-pulse`)).json()) as {
+      revenue: { pipeline_value: number; active_opportunities: number };
+    };
+    // Only the single open deal contributes; won + lost are excluded.
+    expect(pulse.revenue.pipeline_value).toBe(5000);
+    expect(pulse.revenue.active_opportunities).toBe(1);
+
+    const intel = (await (await fetch(`${server.url}/clients/intelligence`)).json()) as {
+      totals: { pipeline_value: number };
+    };
+    expect(intel.totals.pipeline_value).toBe(pulse.revenue.pipeline_value);
   });
 });

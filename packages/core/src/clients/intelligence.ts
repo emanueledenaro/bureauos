@@ -109,13 +109,24 @@ export interface ClientIntelligenceDeps {
 }
 
 const ACTIVE_PROJECT_STATUSES = new Set(["proposal", "approved", "in_progress"]);
-const OPEN_OPPORTUNITY_STATUSES = new Set([
+/**
+ * Opportunity statuses that count toward live pipeline value (everything except
+ * the closed `won`/`lost` states). Exported as the single source of truth so the
+ * company-pulse endpoint and client intelligence report the same pipeline figure
+ * (SER-203 / SER-146).
+ */
+export const OPEN_OPPORTUNITY_STATUSES = new Set([
   "intake",
   "qualified",
   "proposal_draft",
   "proposal_sent",
   "stalled",
 ]);
+
+/** True when an opportunity is still open (contributes to live pipeline value). */
+export function isOpenOpportunityStatus(status: string): boolean {
+  return OPEN_OPPORTUNITY_STATUSES.has(status);
+}
 
 function relativeClientPath(slug: string, file: string): string {
   return join("clients", slug, file).replace(/\\/g, "/");
