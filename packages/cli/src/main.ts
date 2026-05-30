@@ -219,7 +219,13 @@ export function parseFlags(
           }
           const next = args[i + 1];
           if (next === undefined) return `missing value for ${arg}`;
-          out[name] = def.type === "number" ? Number(next) : next;
+          if (def.type === "number") {
+            const n = coerceNumber(next);
+            if (n === null) return `${arg} must be a number`;
+            out[name] = n;
+          } else {
+            out[name] = next;
+          }
           i++;
           continue;
         }
@@ -254,9 +260,24 @@ export function parseFlags(
       value = next;
       i++;
     }
-    out[key] = def.type === "number" ? Number(value) : value;
+    if (def.type === "number") {
+      const n = coerceNumber(value);
+      if (n === null) return `--${key} must be a number`;
+      out[key] = n;
+    } else {
+      out[key] = value;
+    }
   }
   return out;
+}
+
+// Coerce a CLI flag value to a finite number, or null when it is not numeric.
+// `Number("abc")` yields NaN (and `typeof NaN === "number"`), which silently
+// flowed downstream — e.g. `audit tail -n abc` dumped the whole log via
+// `slice(-NaN)`. Rejecting non-finite values keeps numeric flags honest (SER-213).
+function coerceNumber(value: string): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
 }
 
 function err(message: string): number {
