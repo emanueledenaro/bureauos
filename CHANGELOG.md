@@ -25,6 +25,21 @@ messages. Keep public claims conservative and aligned with
   and audit fallback dedupe.
 - Portfolio project cards now surface repository delivery state, PR/check signal
   metadata, and project-ownership agent chips without placeholder GitHub state.
+- CLI reference (`docs/cli.md`) documenting every `bureau` subcommand and flag.
+- Owner-interface tour (`docs/owner-interface.md`) rewritten around the shipped
+  Electron Operating Room views, command palette, and approvals surfaces.
+- v1 packaging decision: source-only release with an opt-in unsigned desktop
+  build configured by `packages/interface/electron-builder.yml`; documented in
+  `docs/release-process.md`.
+
+### Changed
+
+- Reconciled `BACKLOG.md`, `docs/implementation-coverage.md`, and
+  `docs/v1-acceptance-checklist.md` with the verified runtime: `config validate`,
+  `audit search`, SQLite FTS5 memory index, autonomy levels 0..5 presets,
+  coordinator/timeline SSE, revenue sparklines and Top Clients by LTV, agent
+  detail panel, and the bounded autonomous retry loop are marked done with code
+  references.
 
 ### Fixed
 

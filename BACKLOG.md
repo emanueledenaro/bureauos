@@ -33,6 +33,7 @@ Each task is intentionally small enough to land in one focused pull request. Tas
 - [Autonomy Policy](docs/autonomy-policy.md)
 - [Capabilities and Integrations](docs/capabilities-and-integrations.md)
 - [Agent Roles](docs/agents.md)
+- [CLI Reference](docs/cli.md)
 - [Owner Interface](docs/owner-interface.md)
 - [UI Reference: Operating Room](docs/ui-reference/operating-room.md)
 - [Example Configuration](examples/bureauos.example.yaml)
@@ -65,7 +66,7 @@ Goal: a local-first kernel that can initialize a workspace, hold company state, 
 - [x] Implement `loadConfig(path)` that reads, validates, and returns a typed config.
 - [x] Implement defaults so a minimal `bureauos.yaml` still loads.
 - [x] Add tests for valid config, missing fields, type errors, and structurally invalid YAML.
-- [ ] Add a `bureau config validate` CLI subcommand.
+- [x] Add a `bureau config validate` CLI subcommand.
 - [ ] Cover every field of `examples/bureauos.example.yaml` (currently the core fields; secondary sections like triggers, capabilities, business policies are TODO).
 
 ### 1.2 Workspace Initializer
@@ -85,7 +86,7 @@ Goal: a local-first kernel that can initialize a workspace, hold company state, 
 - [x] Implement `bureau memory search "<query>"` CLI command.
 - [ ] Implement daily-note creation and append rules (one file per local date).
 - [ ] Implement decision-record writes (`DECISIONS.md` and `runs/<id>.md` cross-link).
-- [ ] Add SQLite-based keyword index over Markdown files (FTS5).
+- [x] Add SQLite-based keyword index over Markdown files (FTS5). `SqliteFtsMemoryIndex` (`packages/memory/src/sqlite-index.ts`) uses `node:sqlite` when available; `LocalMemoryStore` falls back to a Markdown scan otherwise.
 - [ ] Add a semantic index interface; ship a stub implementation that returns no matches.
 - [ ] Add tests for write-back rules and isolation between project folders.
 
@@ -110,7 +111,7 @@ Goal: a local-first kernel that can initialize a workspace, hold company state, 
 - [x] Implement one-off and standing approvals matching with expiry.
 - [x] Add a `bureau policy explain <action>` CLI command.
 - [x] Tests covering autonomy actions, growth actions, escalation, and approval matching.
-- [ ] Encode the explicit autonomy levels 0..5 as named presets (current implementation uses per-action switches).
+- [x] Encode the explicit autonomy levels 0..5 as named presets. `AutonomyLevel` and `AUTONOMY_LEVEL_NAMES`/`autonomyLevelName` in `packages/core/src/config/schema.ts`; surfaced by `policy explain` and the policy engine. Per-action switches still co-exist.
 
 ### 1.6 Artifact Store
 
@@ -127,7 +128,7 @@ Goal: a local-first kernel that can initialize a workspace, hold company state, 
 - [x] Event shape: timestamp, actor, action, target, capability, policy result, approval id, artifact id, result, error.
 - [x] Wire audit events for client/project/opportunity create, every run.* transition, approval.*, workspace.init, agent.stub_execute.
 - [x] Implement `bureau audit tail [-n N]` CLI command.
-- [ ] Implement `bureau audit search <query>` CLI command.
+- [x] Implement `bureau audit search <query>` CLI command.
 - [ ] Add a tamper-evidence check: rotate the file daily and store a hash of the previous segment in the header of the next one.
 
 ### 1.8 Run Engine (local-only)
@@ -233,15 +234,15 @@ Goal: a local web app that visualizes kernel state, shaped like [docs/ui-referen
 ### 4.4 Live Operations Timeline
 
 - [x] Horizontal timeline component backed by the audit log.
-- [ ] Switch from polling to SSE once the server exposes it.
-- [ ] Event icons by event type.
+- [x] Switch from polling to SSE once the server exposes it. `useDashboard` subscribes to `GET /events` (EventSource) with an audit fallback.
+- [x] Event icons by event type. `TimelineView` maps event kinds to typed Lucide icons.
 
 ### 4.5 Supreme Coordinator Panel
 
 - [x] Chat surface connected to real coordinator intake.
 - [x] Persist coordinator chat history in the workspace and reload it in ElectronJS.
 - [x] Wire conversational memory to the provider router once a provider has credentials.
-- [ ] Stream tokens via SSE.
+- [x] Stream tokens via SSE. `POST /coordinator/messages/stream` plus `coordinatorChatStream` in the renderer.
 
 ### 4.6 Pending Approvals Panel
 
@@ -253,15 +254,15 @@ Goal: a local web app that visualizes kernel state, shaped like [docs/ui-referen
 
 - [x] KPI strip layout with 5 cards.
 - [x] Wired to the opportunity registry through `/company-pulse`.
-- [ ] Sparklines and delta vs previous period.
-- [ ] Top Clients by LTV ranked list.
+- [x] Sparklines and delta vs previous period. `MetricTile` renders a `Sparkline`; `RevenuePulseView` shows delta vs last report.
+- [x] Top Clients by LTV ranked list. `RevenuePulseView` ranks clients by won + pipeline value from client intelligence.
 
 ### 4.8 Agent Layer
 
 - [x] Horizontal role-chip strip at the bottom.
 - [x] One chip per role from `AGENT_ROLES`.
-- [ ] Hover state with current run and capability usage.
-- [ ] Click opens an agent detail panel.
+- [x] Hover state with current run and capability usage. `AgentLayer` chips expose a tooltip with capabilities/activity.
+- [x] Click opens an agent detail panel. `AgentLayer` opens an agent detail sheet on click.
 
 ### 4.9 Adaptive Modes
 
@@ -326,7 +327,7 @@ Goal: scheduler and event watchers so BureauOS works while the owner is offline.
 - [x] Implement memory triggers (follow-ups due).
 - [x] Implement event ingestion from the GitHub adapter.
 - [x] Implement signal classification for GitHub issue, PR, and check-run events.
-- [ ] Implement bounded retries with policy escalation.
+- [x] Implement bounded retries with policy escalation. `AutonomousRetryService` (`packages/core/src/autonomy/retry.ts`), `bureau autonomy retry-scan`, `/autonomy/retries/scan`, scheduler retry scan; escalates to approval at `limits.max_retries_per_task`.
 - [x] Add a `bureau daemon` CLI subcommand (start, stop, status).
 - [x] Add tests for each trigger type.
 
@@ -408,11 +409,11 @@ Goal: connect BureauOS to the systems where the business actually happens. Each 
 
 ### Documentation
 
-- [ ] Quickstart in `README.md` linking to `bureau init`.
-- [ ] CLI reference page under `docs/cli.md`.
+- [x] Quickstart in `README.md` linking to `bureau init` (and `docs/getting-started.md`).
+- [x] CLI reference page under `docs/cli.md`.
 - [x] Provider configuration guide under `docs/providers.md`.
-- [ ] Owner interface tour under `docs/owner-interface.md` once the MVP ships.
-- [ ] Troubleshooting page.
+- [x] Owner interface tour under `docs/owner-interface.md` once the MVP ships.
+- [ ] Troubleshooting page. (A Troubleshooting section exists in `docs/getting-started.md`; a standalone page is still open.)
 
 ### Security
 

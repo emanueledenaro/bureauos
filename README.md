@@ -277,6 +277,7 @@ BureauOS treats GitHub as the operating surface for an AI-native software agency
 - [Protocol](docs/protocol.md)
 - [Operating Model](docs/operating-model.md)
 - [Agent Roles](docs/agents.md)
+- [CLI Reference](docs/cli.md)
 - [Memory Model](docs/memory-model.md)
 - [Executive Memory](docs/executive-memory.md)
 - [Always-On Autonomy](docs/always-on-autonomy.md)

@@ -46,10 +46,26 @@ BUREAUOS_WORKSPACE=/path/to/your/workspace pnpm --filter @bureauos/interface run
 
 ## Build
 
+Build the main, preload, and renderer bundles into `out/`:
+
 ```bash
 pnpm --filter @bureauos/interface run build
-pnpm --filter @bureauos/interface run dist
 ```
+
+### Optional unsigned desktop build
+
+v1 distribution is source-only. An unsigned, local desktop build is available
+opt-in via electron-builder, configured by `electron-builder.yml`. electron-builder
+is not a committed dependency, so install it first:
+
+```bash
+pnpm --filter @bureauos/interface add -D electron-builder
+pnpm --filter @bureauos/interface run pack   # unpacked app in release/
+pnpm --filter @bureauos/interface run dist    # full build via electron-builder.yml
+```
+
+The build is unsigned and not notarized: no code signing, auto-updater, or
+publish target is enabled. See [docs/release-process.md](../../docs/release-process.md).
 
 ## Status
 

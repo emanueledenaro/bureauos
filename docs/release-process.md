@@ -191,6 +191,40 @@ pnpm --filter @bureauos/cli run build
 The current package is marked `private: true`, so v1 packaging is source/build
 oriented until npm/desktop distribution is explicitly enabled.
 
+## v1 Packaging Decision
+
+BureauOS v1 ships **source-only**. The v1 release artifact is the repository at
+a tagged commit, built locally with `pnpm -r run build`. There is no signed
+desktop installer, no auto-updater, and no npm/desktop publish target in v1.
+
+An **unsigned, local desktop build** is available **opt-in** for owners who want
+a runnable app. It is configured by
+[`packages/interface/electron-builder.yml`](../packages/interface/electron-builder.yml),
+which deliberately disables code signing, notarization, the auto-updater, and
+every publish target. The `pack` and `dist` scripts consume this config.
+
+electron-builder is **not** a committed dependency, so the source-only release
+stays lean. Install it only when you want a desktop build:
+
+```bash
+# 1. Build the bundles (electron-vite -> packages/interface/out/)
+pnpm --filter @bureauos/interface run build
+
+# 2. Add electron-builder locally (not committed to the lockfile)
+pnpm --filter @bureauos/interface add -D electron-builder
+
+# 3. Produce an unpacked app in packages/interface/release/
+pnpm --filter @bureauos/interface run pack
+
+# Or a full electron-builder build using electron-builder.yml
+pnpm --filter @bureauos/interface run dist
+```
+
+The resulting app is unsigned: macOS Gatekeeper and Windows SmartScreen will warn
+about an unidentified developer. Signed/notarized distribution and an updater are
+post-v1 work (see the Distribution track in
+[v1 Acceptance Checklist](./v1-acceptance-checklist.md)).
+
 ## Release Candidate Steps
 
 1. Create a release branch.

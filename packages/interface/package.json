@@ -14,8 +14,8 @@
     "test": "vitest run --passWithNoTests",
     "lint": "echo 'lint pending'",
     "start": "electron .",
-    "pack": "electron-builder --dir",
-    "dist": "electron-builder"
+    "pack": "electron-builder --dir --config electron-builder.yml",
+    "dist": "electron-builder --config electron-builder.yml"
   },
   "dependencies": {
     "@bureauos/capabilities": "workspace:*",
