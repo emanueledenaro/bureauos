@@ -217,6 +217,44 @@ describe("RunEngine", () => {
     expect(log).toContain("memory.run_outcome_written");
   });
 
+  it("writes needs_human run outcomes to scoped RUNS.md and RISKS.md (SER-193)", async () => {
+    const config = defaultConfig("freelancer");
+    // A feature run maps to open_pull_requests; disabling it parks the run at
+    // needs_human on start.
+    config.autonomy.open_pull_requests = false;
+    const approvals = new ApprovalRegistry(dir);
+    const policy = new PolicyEngine(config, approvals);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const client = await new ClientRegistry(dir).create({ name: "Parked Client" });
+    const project = await new ProjectRegistry(dir).create({
+      name: "Parked Web",
+      clientId: client.id,
+    });
+    const engine = new RunEngine(dir, { audit, artifacts, policy });
+
+    const run = await engine.start({
+      type: "feature",
+      triggerType: "owner_request",
+      triggerSource: "ser-193-test",
+      scope: "Implement booking flow",
+      clientId: client.id,
+      projectId: project.id,
+    });
+    expect(run.status).toBe("needs_human");
+
+    const paths = workspacePaths(dir);
+    const projectRuns = await readFile(join(paths.projectsDir, project.slug, "RUNS.md"), "utf8");
+    const projectRisks = await readFile(join(paths.projectsDir, project.slug, "RISKS.md"), "utf8");
+    expect(projectRuns).toContain(`Run ${run.id} needs_human`);
+    expect(projectRisks).toContain(`Run ${run.id} needs_human`);
+    const clientRisks = await readFile(join(paths.clientsDir, client.slug, "RISKS.md"), "utf8");
+    expect(clientRisks).toContain(`Run ${run.id} needs_human`);
+
+    const log = await readFile(paths.auditLog, "utf8");
+    expect(log).toContain("memory.run_outcome_written");
+  });
+
   it("writes blocked and failed run outcomes to scoped risk memory", async () => {
     const config = defaultConfig("freelancer");
     const approvals = new ApprovalRegistry(dir);

@@ -235,6 +235,9 @@ export class RunEngine {
                 : "require_approval",
         result: "ok",
       });
+      // Parked-for-owner runs must surface in scoped project/client RISKS.md /
+      // RUNS.md, not just the audit line (SER-193).
+      await writeRunOutcomeMemory(this.workspaceRoot, record, { audit: this.deps.audit });
       await this.recordTerminalDecision(record, {
         status: "needs_human",
         reason: `Policy outcome ${policyDecision.outcome} blocked run start.`,
