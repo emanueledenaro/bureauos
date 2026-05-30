@@ -285,6 +285,7 @@ export class ApprovalRegistry {
     target: string,
     now = new Date(),
     scope?: string,
+    standingOnly = false,
   ): Promise<ApprovalRecord | undefined> {
     const resolved = await this.listResolved();
     const candidates = resolved
@@ -299,6 +300,9 @@ export class ApprovalRegistry {
       // A one-off approval that has already authorized an action is spent and
       // must not grant again; standing approvals (one_off === false) are reusable.
       .filter((r) => !(r.one_off && r.consumed_at))
+      // When the owner has disabled one-off owner approvals for a class of
+      // actions, only standing/recurring approvals may authorize (SER-182).
+      .filter((r) => !standingOnly || r.one_off === false)
       .sort((a, b) => (a.resolved_at > b.resolved_at ? -1 : 1));
     return candidates[0];
   }

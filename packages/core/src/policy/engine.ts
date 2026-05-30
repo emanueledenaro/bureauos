@@ -121,6 +121,7 @@ export class PolicyEngine {
         input.target ?? "*",
         undefined,
         input.capability,
+        this.requireStandingApproval(input.action),
       );
       if (approval) {
         await this.consumeOnGrant(input, approval.id);
@@ -195,6 +196,20 @@ export class PolicyEngine {
     };
   }
 
+  /**
+   * Whether a growth action must be authorized only by a standing/recurring
+   * approval. When the owner sets `growth_autonomy.allow_one_off_owner_approval`
+   * to false, one-off approvals no longer authorize growth actions — honoring
+   * the control instead of the previous fail-open behavior where it had no
+   * runtime effect (SER-182, flag 1).
+   */
+  private requireStandingApproval(action: string): boolean {
+    return (
+      GROWTH_ACTIONS.has(action) &&
+      this.config.growth_autonomy.allow_one_off_owner_approval === false
+    );
+  }
+
   private async requireOrEscalate(
     base: Omit<
       PolicyDecision,
@@ -208,6 +223,7 @@ export class PolicyEngine {
       input.target ?? "*",
       undefined,
       input.capability,
+      this.requireStandingApproval(input.action),
     );
     if (approval) {
       await this.consumeOnGrant(input, approval.id);
