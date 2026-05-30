@@ -128,4 +128,24 @@ describe("CoordinatorIntakeService", () => {
     expect(listed.map((client) => client.name)).toEqual(["Test SER126"]);
     await expect(new ApprovalRegistry(dir).listPending()).resolves.toEqual([]);
   });
+
+  it("persists a non-base64 data-URL attachment with a literal % without crashing (SER-232)", async () => {
+    const service = new CoordinatorIntakeService(dir, { config: defaultConfig("agency") });
+
+    // A literal "%" in a non-base64 data URL used to throw URIError in
+    // decodeURIComponent and reject the whole intake.
+    const result = await service.process({
+      message: "Cliente nuovo, vedi allegato con i dettagli.",
+      source: "owner_chat",
+      clientName: "Percent Co",
+      attachments: [{ name: "promo.txt", dataUrl: "data:text/plain,50% off launch" }],
+    });
+
+    const attachment = result.artifacts.find((artifact) => artifact.type === "owner-attachment");
+    expect(attachment).toBeDefined();
+    const stored = await new ArtifactStore(dir).read(attachment!.id);
+    // Parsed as a data URL (not skipped to metadata_only), proving parseDataUrl
+    // returned a buffer instead of throwing.
+    expect(stored?.body).toContain("Source: data_url");
+  });
 });

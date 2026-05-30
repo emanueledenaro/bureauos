@@ -153,6 +153,18 @@ function sanitizeAttachmentName(input: string): string {
   return cleaned || "attachment";
 }
 
+// Decode the percent-encoded payload of a non-base64 data URL. decodeURIComponent
+// throws a URIError on a malformed or literal `%` (e.g. "50% off"), which would
+// otherwise crash the whole intake attachment loop; fall back to the raw payload
+// so the attachment is stored as-is instead of rejecting (SER-232).
+function decodeDataUrlText(payload: string): string {
+  try {
+    return decodeURIComponent(payload);
+  } catch {
+    return payload;
+  }
+}
+
 function parseDataUrl(value: string): { mimeType: string; buffer: Buffer } | undefined {
   const match = /^data:([^;,]+)?(;base64)?,([\s\S]*)$/.exec(value);
   if (!match) return undefined;
@@ -161,7 +173,7 @@ function parseDataUrl(value: string): { mimeType: string; buffer: Buffer } | und
   const payload = match[3] ?? "";
   const buffer = isBase64
     ? Buffer.from(payload, "base64")
-    : Buffer.from(decodeURIComponent(payload), "utf8");
+    : Buffer.from(decodeDataUrlText(payload), "utf8");
   return { mimeType, buffer };
 }
 
