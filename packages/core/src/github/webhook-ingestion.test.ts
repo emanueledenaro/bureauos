@@ -127,4 +127,63 @@ describe("GitHubWebhookIngestionService", () => {
     const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(audit).toContain("github.webhook.duplicate_skipped");
   });
+
+  it("drops a malformed issue payload without throwing (SER-212)", async () => {
+    const result = await new GitHubWebhookIngestionService(dir).ingest({
+      event: "issues",
+      deliveryId: "malformed-1",
+      payload: {
+        action: "opened",
+        repository: { name: "web", full_name: "acme/web", owner: { login: "acme" } },
+        issue: "not-an-object",
+      },
+    });
+    expect(result.repository).toBe("acme/web");
+    expect(result.issues).toEqual([]);
+    expect(result.createdOpportunities).toEqual([]);
+  });
+
+  it("filters non-string labels off an issue (SER-212)", async () => {
+    const result = await new GitHubWebhookIngestionService(dir).ingest({
+      event: "issues",
+      deliveryId: "labels-1",
+      payload: {
+        action: "opened",
+        repository: { name: "web", full_name: "acme/web", owner: { login: "acme" } },
+        issue: {
+          number: 5,
+          title: "Mixed labels",
+          html_url: "https://github.com/acme/web/issues/5",
+          labels: [{ name: "type:bug" }, 42, null, "raw-string", { nope: true }],
+          state: "open",
+          updated_at: "2026-05-24T10:00:00.000Z",
+        },
+      },
+    });
+    expect(result.issues).toHaveLength(1);
+    expect(result.issues[0]!.labels).toEqual(["type:bug", "raw-string"]);
+  });
+
+  it("normalizes an unknown check_run conclusion/status and does not flag it failing (SER-212)", async () => {
+    const result = await new GitHubWebhookIngestionService(dir).ingest({
+      event: "check_run",
+      deliveryId: "check-unknown-1",
+      payload: {
+        action: "completed",
+        repository: { name: "web", full_name: "acme/web", owner: { login: "acme" } },
+        check_run: {
+          id: 77,
+          name: "weird",
+          html_url: "https://github.com/acme/web/actions/runs/77",
+          status: "bizarre-status",
+          conclusion: "made-up",
+          head_sha: "deadbeef",
+        },
+      },
+    });
+    expect(result.checks).toHaveLength(1);
+    expect(result.checks[0]!.status).toBe("completed");
+    expect(result.checks[0]!.conclusion).toBeNull();
+    expect(result.failingChecks).toEqual([]);
+  });
 });
