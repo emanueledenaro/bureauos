@@ -1,5 +1,6 @@
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createHmac } from "node:crypto";
+import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -37,6 +38,45 @@ function parseSseEvents(raw: string): Array<{ event: string; data: unknown }> {
         .join("\n");
       return { event: event ?? "message", data: JSON.parse(data) as unknown };
     });
+}
+
+interface RawResponse {
+  status: number;
+  headers: Record<string, string | string[] | undefined>;
+  body: string;
+}
+
+/**
+ * Issues a request with arbitrary headers (including ones `fetch` forbids, such
+ * as `Host`) so tests can exercise the loopback/cross-origin guard directly.
+ */
+function rawRequest(
+  url: string,
+  init: { method?: string; headers?: Record<string, string>; body?: string } = {},
+): Promise<RawResponse> {
+  const target = new URL(url);
+  return new Promise((resolve, reject) => {
+    const req = request(
+      {
+        protocol: target.protocol,
+        hostname: target.hostname,
+        port: target.port,
+        path: `${target.pathname}${target.search}`,
+        method: init.method ?? "GET",
+        headers: init.headers ?? {},
+      },
+      (res) => {
+        let body = "";
+        res.on("data", (chunk: Buffer) => {
+          body += chunk.toString("utf8");
+        });
+        res.on("end", () => resolve({ status: res.statusCode ?? 0, headers: res.headers, body }));
+      },
+    );
+    req.on("error", reject);
+    if (init.body) req.write(init.body);
+    req.end();
+  });
 }
 
 class TestGitHubClient implements GitHubIssuePublishClient {
@@ -1965,5 +2005,154 @@ describe("API server", () => {
     });
 
     expect(response.status).toBe(400);
+  });
+
+  it("rejects cross-origin browser requests carrying a foreign Origin", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const response = await fetch(`${server.url}/clients`, {
+      headers: { Origin: "http://evil.example.com" },
+    });
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "forbidden: cross-origin request rejected",
+    });
+    // A rejected foreign origin must never be reflected back.
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("rejects state-changing cross-origin requests carrying a foreign Origin", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const response = await fetch(`${server.url}/memory/daily-note`, {
+      method: "POST",
+      headers: { "content-type": "application/json", Origin: "https://attacker.test" },
+      body: JSON.stringify({ section: "Events", line: "should not be written" }),
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("allows the loopback renderer origin and reflects it without a wildcard", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const response = await fetch(`${server.url}/clients`, {
+      headers: { Origin: "http://localhost:5173" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:5173");
+    expect(response.headers.get("vary")).toContain("Origin");
+    await expect(response.json()).resolves.toEqual([]);
+  });
+
+  it("allows same-process requests without an Origin header", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const response = await fetch(`${server.url}/clients`);
+
+    expect(response.status).toBe(200);
+    // No Origin means no CORS reflection is required.
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("honors explicitly allowed origins", async () => {
+    server = await startApiServer({
+      workspaceRoot: dir,
+      config: defaultConfig("agency"),
+      allowedOrigins: ["https://operating-room.bureauos.app"],
+    });
+
+    const allowed = await fetch(`${server.url}/clients`, {
+      headers: { Origin: "https://operating-room.bureauos.app" },
+    });
+    expect(allowed.status).toBe(200);
+    expect(allowed.headers.get("access-control-allow-origin")).toBe(
+      "https://operating-room.bureauos.app",
+    );
+
+    const denied = await fetch(`${server.url}/clients`, {
+      headers: { Origin: "https://not-allowed.example.com" },
+    });
+    expect(denied.status).toBe(403);
+  });
+
+  it("rejects requests whose Host header is not loopback (anti-DNS-rebinding)", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const response = await rawRequest(`${server.url}/clients`, {
+      headers: { Host: "attacker.example.com" },
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.body).toContain("non-loopback host");
+  });
+
+  it("answers CORS preflight for an allowed origin and blocks a foreign one", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const allowed = await fetch(`${server.url}/approvals/resolve`, {
+      method: "OPTIONS",
+      headers: {
+        Origin: "http://127.0.0.1:5173",
+        "Access-Control-Request-Method": "POST",
+      },
+    });
+    expect(allowed.status).toBe(204);
+    expect(allowed.headers.get("access-control-allow-origin")).toBe("http://127.0.0.1:5173");
+    expect(allowed.headers.get("access-control-allow-methods")).toContain("POST");
+
+    const foreign = await fetch(`${server.url}/approvals/resolve`, {
+      method: "OPTIONS",
+      headers: {
+        Origin: "http://evil.example.com",
+        "Access-Control-Request-Method": "POST",
+      },
+    });
+    // Preflight itself succeeds, but no allow-origin is returned, so the browser
+    // blocks the follow-up request.
+    expect(foreign.status).toBe(204);
+    expect(foreign.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("enforces bearer auth when a token is configured", async () => {
+    server = await startApiServer({
+      workspaceRoot: dir,
+      config: defaultConfig("agency"),
+      token: "owner-api-token",
+    });
+
+    const missing = await fetch(`${server.url}/clients`);
+    expect(missing.status).toBe(401);
+
+    const wrong = await fetch(`${server.url}/clients`, {
+      headers: { authorization: "Bearer nope" },
+    });
+    expect(wrong.status).toBe(401);
+
+    const authorized = await fetch(`${server.url}/clients`, {
+      headers: { authorization: "Bearer owner-api-token" },
+    });
+    expect(authorized.status).toBe(200);
+    await expect(authorized.json()).resolves.toEqual([]);
+  });
+
+  it("rejects GitHub webhooks when no webhook secret is configured", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const response = await fetch(`${server.url}/github/webhook`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-github-event": "issues",
+      },
+      body: JSON.stringify({
+        repository: { name: "web", full_name: "acme/web", owner: { login: "acme" } },
+      }),
+    });
+
+    expect(response.status).toBe(401);
   });
 });
