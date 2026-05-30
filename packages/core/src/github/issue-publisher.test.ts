@@ -39,6 +39,10 @@ class RecordingGitHubClient implements GitHubIssuePublishClient {
     return issue;
   }
 
+  async listIssues(_owner: string, _repo: string): Promise<readonly { title: string }[]> {
+    return this.created.map((issue) => ({ title: issue.title }));
+  }
+
   async ensureLabels(
     _owner: string,
     _repo: string,
@@ -106,6 +110,30 @@ describe("GitHubIssuePublishService", () => {
 
     const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(audit).toContain("github.issue_publish.created");
+  });
+
+  it("does not re-create issues on a second publish or partial-failure retry (SER-233)", async () => {
+    const project = await prepareDrafts();
+    const githubClient = new RecordingGitHubClient();
+    const publish = () =>
+      new GitHubIssuePublishService(dir, {
+        config: defaultConfig("agency"),
+        githubClient,
+      }).publishProjectDrafts({
+        projectSlug: project.slug,
+        owner: "emanueledenaro",
+        repo: "pizzeria-aurora",
+      });
+
+    const first = await publish();
+    expect(first.created).toHaveLength(5);
+    expect(githubClient.created).toHaveLength(5);
+
+    // Second publish: every draft's title already exists on the repo, so none
+    // are re-created (would have duplicated to 10 before the fix).
+    const second = await publish();
+    expect(second.created).toHaveLength(0);
+    expect(githubClient.created).toHaveLength(5);
   });
 
   it("requests approval instead of creating issues when policy blocks issue creation", async () => {

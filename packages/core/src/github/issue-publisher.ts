@@ -23,6 +23,14 @@ export interface GitHubIssuePublishClient {
     repo: string,
     input: { title: string; body: string; labels?: readonly string[] },
   ): Promise<GitHubIssuePublishClientIssue>;
+  // Optional: lets publishing dedupe against existing issues by title so a
+  // re-publish / partial-failure retry never creates duplicates (SER-233).
+  // When absent, publishing falls back to prior best-effort behavior.
+  listIssues?(
+    owner: string,
+    repo: string,
+    filter?: { state?: "open" | "closed" | "all" },
+  ): Promise<readonly { title: string }[]>;
   ensureLabels?(
     owner: string,
     repo: string,
@@ -249,9 +257,22 @@ export class GitHubIssuePublishService {
       );
     }
 
+    // Idempotency: skip a draft whose title already exists as an issue on the
+    // repo, so a re-publish — or a retry after a partial failure that already
+    // created some issues — does not create duplicate issues (SER-233). When the
+    // client cannot list issues, fall back to the prior best-effort behavior.
+    const existingTitles = new Set<string>();
+    if (this.githubClient.listIssues) {
+      const existingIssues = await this.githubClient.listIssues(repository.owner, repository.repo, {
+        state: "all",
+      });
+      for (const issue of existingIssues) existingTitles.add(issue.title);
+    }
+
     const created: GitHubIssuePublishClientIssue[] = [];
     try {
       for (const draft of drafts) {
+        if (existingTitles.has(draft.title)) continue;
         created.push(
           await this.githubClient.createIssue(repository.owner, repository.repo, {
             title: draft.title,
@@ -259,6 +280,8 @@ export class GitHubIssuePublishService {
             labels: draft.labels,
           }),
         );
+        // Guard against duplicate titles within the same draft set too.
+        existingTitles.add(draft.title);
       }
     } catch (e) {
       await this.audit.append({
