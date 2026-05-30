@@ -4,6 +4,7 @@ import { workspacePaths } from "../paths.js";
 import { AuditLog } from "../audit/log.js";
 import { ArtifactStore } from "../artifacts/store.js";
 import { writeRunOutcomeMemory } from "../memory/run-outcomes.js";
+import { recordDecision } from "../memory/decisions.js";
 import { PolicyEngine, type PolicyDecision } from "../policy/engine.js";
 import {
   sourceWorkItemFromFrontMatter,
@@ -121,6 +122,12 @@ export interface RunEngineDeps {
   artifacts: ArtifactStore;
   policy: PolicyEngine;
   dispatcher?: RunDispatcher;
+  /**
+   * When true, the engine appends a structured `DECISIONS.md` decision record
+   * on run completion (honoring `memory.write_decision_records`). Defaults to
+   * off so existing callers keep their current behavior until they opt in.
+   */
+  recordDecisions?: boolean;
 }
 
 export class RunEngine {
@@ -340,8 +347,38 @@ export class RunEngine {
       result: "ok",
     });
     await writeRunOutcomeMemory(this.workspaceRoot, record, { audit: this.deps.audit });
+    await this.recordCompletionDecision(record);
 
     return record;
+  }
+
+  /**
+   * Append a structured decision record on completion so the durable
+   * `DECISIONS.md` reflects what each run decided. Cross-links the run and any
+   * client/project decision logs via {@link recordDecision}. Decision-write
+   * failures are recorded but never fail run completion.
+   */
+  private async recordCompletionDecision(record: RunRecord): Promise<void> {
+    if (!this.deps.recordDecisions) return;
+    try {
+      await recordDecision(this.workspaceRoot, {
+        what: `Run ${record.id} completed: ${record.scope}`,
+        why: `Run type ${record.type} triggered by ${record.trigger_type} (${record.trigger_source}).`,
+        actor: record.created_by,
+        runId: record.id,
+        ...(record.client_id ? { clientId: record.client_id } : {}),
+        ...(record.project_id ? { projectId: record.project_id } : {}),
+        ...(record.artifacts.length ? { evidence: [...record.artifacts] } : {}),
+      });
+    } catch (error) {
+      await this.deps.audit.append({
+        actor: record.created_by,
+        action: "memory.decision_record_failed",
+        target: record.id,
+        result: "error",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   async get(id: string): Promise<RunRecord | undefined> {

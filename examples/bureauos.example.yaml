@@ -327,6 +327,8 @@ memory:
   root_memory_always_loaded: true
   semantic_index:
     enabled: false
+    # none = safe no-op (default). local = offline deterministic TF-IDF index
+    # over the markdown memory (no network). custom = host-injected provider.
     provider: "none"
     index_path: ".bureauos/memory/indexes/semantic"
     min_score: 0.72

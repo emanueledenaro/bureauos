@@ -232,6 +232,7 @@ export class ProjectDispatchService {
         audit: this.audit,
         artifacts: this.artifacts,
         policy: this.policy,
+        recordDecisions: this.config.memory.write_decision_records,
       });
   }
 

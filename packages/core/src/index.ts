@@ -112,6 +112,13 @@ export type { DecisionInput, DecisionWriteResult } from "./memory/decisions.js";
 export { writeRunOutcomeMemory } from "./memory/run-outcomes.js";
 export type { RunOutcomeWritebackDeps, RunOutcomeWritebackResult } from "./memory/run-outcomes.js";
 export {
+  memoryIndexForConfig,
+  memoryStoreForConfig,
+  resolveSearchIndexPath,
+} from "./memory/index-path.js";
+export { createSemanticMemoryIndex } from "./memory/semantic-index.js";
+export type { SemanticMemoryIndexFactoryDeps } from "./memory/semantic-index.js";
+export {
   MEMORY_BOUNDARY_CAPABILITY,
   MEMORY_CAPABILITY,
   MemoryBoundaryService,

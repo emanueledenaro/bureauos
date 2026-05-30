@@ -396,15 +396,28 @@ Memory search should combine:
 Runtime contract:
 
 - Markdown memory remains the source of truth.
-- Keyword search is available locally by default.
+- Keyword search is available locally by default. When the local Node runtime
+  exposes `node:sqlite`, a SQLite FTS5 index accelerates search; otherwise a
+  plain markdown scan is used. The index lives at the configured
+  `supreme_coordinator.memory.search_index` path and is rebuilt automatically
+  when the markdown changes. It can also be inspected and rebuilt with
+  `bureau memory index status` and `bureau memory index rebuild`.
 - Semantic search is accessed through a `SemanticMemoryIndex` contract.
-- The default semantic backend is a safe no-op: no network calls, no provider calls, no matches.
-- Future embedding backends must implement the same contract and stay behind explicit config.
+- The default semantic backend (`provider: none`) is a safe no-op: no network
+  calls, no provider calls, no matches.
+- `provider: local` enables an offline, deterministic TF-IDF index over the
+  markdown memory. It never calls the network or a model provider, so it is safe
+  in a local-first workspace while surfacing topically related memory beyond
+  exact substring matches.
+- `provider: custom` defers to a host-injected, provider-backed index and falls
+  back to the no-op when none is supplied. Future embedding backends must
+  implement the same contract and stay behind explicit config.
 
 ```yaml
 memory:
   semantic_index:
     enabled: false
+    # none = no-op (default); local = offline TF-IDF; custom = host-injected
     provider: "none"
     index_path: ".bureauos/memory/indexes/semantic"
     min_score: 0.72

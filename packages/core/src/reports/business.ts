@@ -403,6 +403,7 @@ export class BusinessReportService {
         audit: this.audit,
         artifacts: this.artifacts,
         policy,
+        recordDecisions: this.config.memory.write_decision_records,
       });
   }
 
