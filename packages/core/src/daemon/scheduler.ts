@@ -96,6 +96,7 @@ const TICKS: Array<Omit<TickJob, "last">> = [
 export class Scheduler {
   private interval: NodeJS.Timeout | undefined;
   private jobs: TickJob[];
+  private running = false;
   private readonly state?: DaemonSchedulerStateStore;
 
   constructor(private readonly options: SchedulerOptions) {
@@ -120,9 +121,27 @@ export class Scheduler {
   }
 
   async tick(now = Date.now()): Promise<void> {
+    // In-flight guard: a tick can run longer than the interval (jobs make
+    // network calls and write files). Without this, the next `setInterval`
+    // fire would overlap the running tick and double-execute due jobs,
+    // producing duplicate reports, runs, and spend. Overlapping ticks are
+    // skipped; the next interval picks up any still-due work.
+    if (this.running) {
+      this.log("scheduler: tick skipped (previous tick still running)");
+      return;
+    }
+    this.running = true;
+    try {
+      await this.runTick(now);
+    } finally {
+      this.running = false;
+    }
+  }
+
+  private async runTick(now: number): Promise<void> {
     for (const job of this.jobs) {
-      const lastSuccess = await this.lastSuccessMs(job);
-      const due = lastSuccess === undefined || now - lastSuccess >= job.everyMs;
+      const lastActivity = await this.lastActivityMs(job);
+      const due = lastActivity === undefined || now - lastActivity >= job.everyMs;
       if (!due) continue;
       await this.state?.markStarted(job.name, new Date(now));
       try {
@@ -220,15 +239,32 @@ export class Scheduler {
     }
   }
 
-  private async lastSuccessMs(job: TickJob): Promise<number | undefined> {
+  /**
+   * Most recent moment this job was either started or succeeded.
+   *
+   * The due-check must consider `last_started_at`, not only `last_success_at`:
+   * a job that has been started but has not yet finished (it is mid-run, or a
+   * prior run crashed before recording success) must not be re-triggered just
+   * because no success was recorded within the interval. Using the later of the
+   * started/success timestamps keeps a long-running or interrupted job from
+   * double-executing.
+   */
+  private async lastActivityMs(job: TickJob): Promise<number | undefined> {
     const cursor = await this.state?.cursor(job.name);
-    const persisted =
+    const candidates: number[] = [];
+    if (job.last !== undefined) candidates.push(job.last);
+    const started =
+      cursor?.last_started_at && Number.isFinite(Date.parse(cursor.last_started_at))
+        ? Date.parse(cursor.last_started_at)
+        : undefined;
+    if (started !== undefined) candidates.push(started);
+    const succeeded =
       cursor?.last_success_at && Number.isFinite(Date.parse(cursor.last_success_at))
         ? Date.parse(cursor.last_success_at)
         : undefined;
-    if (job.last === undefined) return persisted;
-    if (persisted === undefined) return job.last;
-    return Math.max(job.last, persisted);
+    if (succeeded !== undefined) candidates.push(succeeded);
+    if (candidates.length === 0) return undefined;
+    return Math.max(...candidates);
   }
 
   private async markSucceeded(job: TickJob, now: number, runId?: string): Promise<void> {

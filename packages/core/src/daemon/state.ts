@@ -1,6 +1,8 @@
-import { appendFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { randomBytes } from "node:crypto";
 import { workspacePaths } from "../paths.js";
+import { withFileLock } from "../registries/base.js";
 
 export type DaemonStatus = "starting" | "running" | "stopped" | "stale" | "error";
 
@@ -114,7 +116,16 @@ function defaultProcessAlive(pid: number): boolean {
 
 async function writeJson(path: string, value: unknown): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  // Write to a sibling temp file and atomically rename it into place so a
+  // reader never observes a half-written JSON document.
+  const tmp = `${path}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
+  try {
+    await writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+    await rename(tmp, path);
+  } catch (error) {
+    await rm(tmp, { force: true }).catch(() => undefined);
+    throw error;
+  }
 }
 
 export class DaemonStateStore {
@@ -439,22 +450,28 @@ export class DaemonSchedulerStateStore {
     now: Date,
     update: (current: SchedulerCursorRecord) => SchedulerCursorRecord,
   ): Promise<SchedulerCursorRecord> {
-    const state = await this.read();
-    const current: SchedulerCursorRecord = state.cursors[trigger] ?? {
-      trigger,
-      failure_count: 0,
-      updated_at: now.toISOString(),
-    };
-    const next = update(current);
-    const updated: SchedulerStateRecord = {
-      workspace_root: workspacePaths(this.workspaceRoot).root,
-      updated_at: now.toISOString(),
-      cursors: {
-        ...state.cursors,
-        [trigger]: next,
-      },
-    };
-    await writeJson(this.path, updated);
-    return next;
+    // All cursors share a single state file, so concurrent updates for
+    // different triggers must be serialized too. Without this, two jobs writing
+    // their cursors at once would each read the same base state and the second
+    // write would drop the first job's cursor update.
+    return withFileLock(this.path, async () => {
+      const state = await this.read();
+      const current: SchedulerCursorRecord = state.cursors[trigger] ?? {
+        trigger,
+        failure_count: 0,
+        updated_at: now.toISOString(),
+      };
+      const next = update(current);
+      const updated: SchedulerStateRecord = {
+        workspace_root: workspacePaths(this.workspaceRoot).root,
+        updated_at: now.toISOString(),
+        cursors: {
+          ...state.cursors,
+          [trigger]: next,
+        },
+      };
+      await writeJson(this.path, updated);
+      return next;
+    });
   }
 }

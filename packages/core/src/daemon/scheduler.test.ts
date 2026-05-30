@@ -103,6 +103,56 @@ describe("Scheduler", () => {
     expect(lines.some((l) => l.includes("daily_executive_report"))).toBe(true);
   });
 
+  it("does not double-execute jobs when a tick runs longer than the interval (SER-159)", async () => {
+    const config = defaultConfig("freelancer");
+    const approvals = new ApprovalRegistry(dir);
+    const policy = new PolicyEngine(config, approvals);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const runs = new RunEngine(dir, { audit, artifacts, policy });
+
+    // Make every run slow so the first tick is still in-flight when we fire a
+    // second overlapping tick (as setInterval would once a tick runs long).
+    let startCalls = 0;
+    const originalStart = runs.start.bind(runs);
+    runs.start = (async (input) => {
+      startCalls += 1;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      return originalStart(input);
+    }) as typeof runs.start;
+
+    const lines: string[] = [];
+    const scheduler = new Scheduler({
+      config,
+      runs,
+      workspaceRoot: dir,
+      logger: (m) => lines.push(m),
+    });
+
+    const t0 = new Date("2026-05-26T10:00:00.000Z").getTime();
+    const firstTick = scheduler.tick(t0);
+    // Fire a second tick while the first is still running its slow jobs.
+    const secondTick = scheduler.tick(t0 + 1_000);
+    await Promise.all([firstTick, secondTick]);
+
+    // The overlapping second tick must be skipped entirely.
+    expect(lines.some((l) => l.includes("tick skipped"))).toBe(true);
+
+    // Each scheduled run-backed job must have started exactly once. There are
+    // four run-backed jobs in the default tick set (the *_scan jobs short-circuit
+    // without coordinator and do not call runs.start).
+    expect(startCalls).toBe(4);
+
+    const scheduledRuns = await runs.list();
+    const bySource = new Map<string, number>();
+    for (const run of scheduledRuns) {
+      bySource.set(run.trigger_source, (bySource.get(run.trigger_source) ?? 0) + 1);
+    }
+    for (const [source, count] of bySource) {
+      expect(count, `job ${source} ran ${count} times`).toBe(1);
+    }
+  });
+
   it("does not double-run jobs within their interval", async () => {
     const config = defaultConfig("freelancer");
     const approvals = new ApprovalRegistry(dir);
