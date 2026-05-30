@@ -1399,6 +1399,8 @@ const handlePolicyExplain: Handler = async (args) => {
     action,
     actor: typeof flags.actor === "string" ? flags.actor : "owner",
     ...(typeof flags.target === "string" ? { target: flags.target } : {}),
+    // `policy explain` is a read-only preview: never burn a one-off approval.
+    preview: true,
   });
   process.stdout.write(`Action:   ${decision.action}\n`);
   process.stdout.write(`Actor:    ${decision.actor}\n`);
@@ -1784,6 +1786,8 @@ const handleCapabilitiesCheck: Handler = async (args) => {
     ...(typeof flags.issue === "number" ? { linkedIssueNumbers: [flags.issue] } : {}),
     ...(typeof flags.test === "string" ? { testEvidence: [flags.test] } : {}),
     ...(typeof flags.approval === "string" ? { approvalIds: [flags.approval] } : {}),
+    // `capabilities check` is a read-only preview: never burn a one-off approval.
+    preview: true,
   });
 
   process.stdout.write(

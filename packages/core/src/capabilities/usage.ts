@@ -24,6 +24,12 @@ export interface CapabilityUseInput {
   testEvidence?: readonly string[];
   approvalIds?: readonly string[];
   changedFiles?: readonly string[];
+  /**
+   * When true this is a read-only preview (e.g. the `capabilities check`
+   * CLI/API), so a matching one-off approval is NOT consumed. Real agent
+   * capability use leaves this unset so the approval is burned exactly once.
+   */
+  preview?: boolean;
 }
 
 export interface CapabilityUseResult {
@@ -238,6 +244,7 @@ export class CapabilityUseService {
       target,
       capability: `${input.capabilityId}.${input.action}`,
       riskClass: capability.risk_class,
+      ...(input.preview ? { preview: true } : {}),
     });
     const missingGates = capability.allowed
       ? missingEvidenceGates({ policy, linkedIssues, tests, changedFiles, changedFileLimit })

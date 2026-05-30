@@ -974,6 +974,9 @@ const ROUTES: Record<string, RouteHandler> = {
         : {}),
       ...(Array.isArray(body.testEvidence) ? { testEvidence: body.testEvidence } : {}),
       ...(Array.isArray(body.approvalIds) ? { approvalIds: body.approvalIds } : {}),
+      // The capabilities-check endpoint is a read-only preview: do not consume a
+      // matching one-off approval just because an owner inspected the decision.
+      preview: true,
     });
     ok(res, result, result.status === "allowed" ? 200 : 202);
   },

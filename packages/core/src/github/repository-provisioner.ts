@@ -154,6 +154,10 @@ export class GitHubRepositoryProvisionService {
       target,
       capability: "github.repository.create",
       riskClass: "medium",
+      // Preview here so the one-off approval is not burned before we have
+      // actually provisioned the repository (and the public-visibility gate
+      // below can still see it). It is consumed once provisioning succeeds.
+      preview: true,
     });
 
     if (!decision.allowed) {
@@ -180,6 +184,10 @@ export class GitHubRepositoryProvisionService {
         approval,
       };
     }
+
+    // Track the one-off approval (if any) that authorizes this provisioning so
+    // it can be consumed exactly once, after the repository is actually created.
+    let grantApprovalId = decision.approval_id ?? "";
 
     if (!isPrivate) {
       const approval = await this.approvals.match("create_repositories", target);
@@ -215,6 +223,7 @@ export class GitHubRepositoryProvisionService {
           approval: requested,
         };
       }
+      grantApprovalId = grantApprovalId || approval.id;
     }
 
     const created = await this.githubClient.createRepository({
@@ -251,6 +260,10 @@ export class GitHubRepositoryProvisionService {
       policy_result: auditPolicyResult(decision.outcome),
       result: "ok",
     });
+
+    // The repository now exists: burn the one-off approval that authorized it so
+    // it cannot silently authorize a second provisioning.
+    if (grantApprovalId) await this.approvals.consume(grantApprovalId);
 
     return {
       status: "created",

@@ -43,7 +43,7 @@ Every major capability described in the docs must become one of:
 | Run lifecycle | `RunEngine`, injected coordinator dispatcher, `bureau run new --stub` | partial |
 | Artifact store | `ArtifactStore` | partial |
 | Audit log | `AuditLog`, `/audit`, SSE events | implemented |
-| Approval gates | `ApprovalRegistry`, `PolicyEngine`, ElectronJS approvals | partial |
+| Approval gates | `ApprovalRegistry`, `PolicyEngine`, ElectronJS approvals; one-off approvals are single-use (consumed/audited after they authorize an action, `ApprovalRegistry.consume`), standing approvals reuse until expiry | partial |
 
 ## Owner Intake
 
