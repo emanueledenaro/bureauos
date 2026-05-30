@@ -123,6 +123,25 @@ describe("LocalMemoryStore", () => {
     expect(status.document_count).toBe(1);
   });
 
+  it("returns workspace-relative paths on the Markdown scan fallback (SER-209)", async () => {
+    await mkdir(join(dir, "clients", "acme"), { recursive: true });
+    await writeFile(
+      join(dir, "clients", "acme", "CLIENT.md"),
+      "# Acme\nAcme retainer renewal signal.\n",
+      "utf8",
+    );
+
+    const hits = await new LocalMemoryStore(dir).search("retainer", { backend: "scan" });
+
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({
+      relativePath: "clients/acme/CLIENT.md",
+      source: "scan",
+    });
+    // The scan fallback must not leak the absolute workspace prefix.
+    expect(hits[0]?.relativePath).not.toContain(dir);
+  });
+
   it("assembles a context packet from ROOT and search hits", async () => {
     await writeFile(join(dir, "ROOT.md"), "# Root\nMap of memory.\n", "utf8");
     await writeFile(join(dir, "COMPANY.md"), "We sell software services.\n", "utf8");
