@@ -53,6 +53,20 @@ describe("front-matter serializer", () => {
     }
   });
 
+  it("preserves a body that begins with a newline across a round-trip (SER-191)", () => {
+    const bodies = [
+      "\nbody starts with a blank line\n",
+      "\n\ndouble leading newline\n",
+      "no leading newline\n",
+      "",
+    ];
+    for (const body of bodies) {
+      const rendered = renderFrontMatter({ id: "x" }, body);
+      const parsed = parseFrontMatter(rendered);
+      expect(parsed.body, `body: ${JSON.stringify(body)}`).toBe(body);
+    }
+  });
+
   it("keeps booleans and numbers typed across a round-trip", () => {
     const rendered = renderFrontMatter({ flag: true, count: 7, ratio: -2.5, tags: ["a", "b"] }, "");
     const parsed = parseFrontMatter(rendered);

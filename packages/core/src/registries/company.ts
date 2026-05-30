@@ -1,5 +1,5 @@
 import { workspacePaths } from "../paths.js";
-import { fileExists, readDoc, writeDoc, type FrontMatter } from "./base.js";
+import { fileExists, readDoc, withFileLock, writeDoc, type FrontMatter } from "./base.js";
 
 export interface CompanyRecord extends FrontMatter {
   name: string;
@@ -39,16 +39,21 @@ export class CompanyRegistry {
   }
 
   async update(patch: Partial<CompanyRecord>, body?: string): Promise<CompanyRecord> {
-    const existing = await this.get();
-    const updated: CompanyRecord = {
-      ...existing,
-      ...patch,
-      updated: new Date().toISOString(),
-    };
-    const doc = (await fileExists(this.path()))
-      ? await readDoc<CompanyRecord>(this.path())
-      : { front: {}, body: "" };
-    await writeDoc(this.path(), updated, body ?? doc.body);
-    return updated;
+    // Serialize the read-modify-write on the single COMPANY.md record. `get()`
+    // is an unlocked read, so wrapping the whole sequence here does not nest a
+    // lock on the same path.
+    return withFileLock(this.path(), async () => {
+      const existing = await this.get();
+      const updated: CompanyRecord = {
+        ...existing,
+        ...patch,
+        updated: new Date().toISOString(),
+      };
+      const doc = (await fileExists(this.path()))
+        ? await readDoc<CompanyRecord>(this.path())
+        : { front: {}, body: "" };
+      await writeDoc(this.path(), updated, body ?? doc.body);
+      return updated;
+    });
   }
 }

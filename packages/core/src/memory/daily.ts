@@ -1,7 +1,7 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { workspacePaths } from "../paths.js";
-import { ensureDir, fileExists } from "../registries/base.js";
+import { atomicWriteFile, ensureDir, fileExists, withFileLock } from "../registries/base.js";
 
 export type DailyNoteSection = "Events" | "Runs" | "Decisions" | "Follow-ups";
 
@@ -52,7 +52,13 @@ export async function appendDailyNote(
   const paths = workspacePaths(workspaceRoot);
   const path = join(paths.dailyDir, `${iso}.md`);
   await ensureDir(paths.dailyDir);
-  const current = (await fileExists(path)) ? await readFile(path, "utf8") : emptyDailyNote(iso);
-  await writeFile(path, appendToSection(current, section, line), "utf8");
+  // Serialize the read-modify-write so two concurrent section appends for the
+  // same day cannot both read the same base and lose one another's line, and
+  // write atomically (temp+rename) so a crash mid-write cannot truncate the
+  // note. Mirrors the SER-163 hardening applied to RunEngine.patch.
+  await withFileLock(path, async () => {
+    const current = (await fileExists(path)) ? await readFile(path, "utf8") : emptyDailyNote(iso);
+    await atomicWriteFile(path, appendToSection(current, section, line));
+  });
   return path;
 }

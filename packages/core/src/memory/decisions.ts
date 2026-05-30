@@ -3,7 +3,14 @@ import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import { AuditLog } from "../audit/log.js";
 import { workspacePaths } from "../paths.js";
-import { ensureDir, fileExists, listDirs, readDoc, writeDoc } from "../registries/base.js";
+import {
+  ensureDir,
+  fileExists,
+  listDirs,
+  readDoc,
+  withFileLock,
+  writeDoc,
+} from "../registries/base.js";
 import type { ClientRecord } from "../registries/client.js";
 import type { ProjectRecord } from "../registries/project.js";
 import type { RunRecord } from "../runs/engine.js";
@@ -180,14 +187,20 @@ function decisionBlock(
 
 async function appendDecisionBlock(path: string, heading: string, block: string): Promise<void> {
   await ensureDir(dirname(path));
-  if (!(await fileExists(path))) {
-    await appendFile(
-      path,
-      `${heading}\n\nDurable decision records. Append-only by convention.\n`,
-      "utf8",
-    );
-  }
-  await appendFile(path, block, "utf8");
+  // Serialize the heading-then-block append per target file. Without this, two
+  // concurrent decision writes (e.g. several runs completing in one scheduler
+  // tick) could both see the file missing and both emit the heading, or
+  // interleave one caller's block between another's heading and block.
+  await withFileLock(path, async () => {
+    if (!(await fileExists(path))) {
+      await appendFile(
+        path,
+        `${heading}\n\nDurable decision records. Append-only by convention.\n`,
+        "utf8",
+      );
+    }
+    await appendFile(path, block, "utf8");
+  });
 }
 
 async function readRun(

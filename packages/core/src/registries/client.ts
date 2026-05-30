@@ -1,7 +1,15 @@
 import { join } from "node:path";
 import { newId, slugify } from "../ids.js";
 import { workspacePaths } from "../paths.js";
-import { ensureDir, fileExists, listDirs, readDoc, writeDoc, type FrontMatter } from "./base.js";
+import {
+  ensureDir,
+  fileExists,
+  listDirs,
+  readDoc,
+  withFileLock,
+  writeDoc,
+  type FrontMatter,
+} from "./base.js";
 
 export type ClientStatus = "lead" | "active" | "paused" | "churned" | "archived";
 
@@ -117,13 +125,18 @@ export class ClientRegistry {
     if (!(await fileExists(path))) {
       throw new Error(`client not found: ${slug}`);
     }
-    const doc = await readDoc<ClientRecord>(path);
-    const updated: ClientRecord = {
-      ...doc.front,
-      ...patch,
-      updated: new Date().toISOString(),
-    };
-    await writeDoc(path, updated, doc.body);
-    return updated;
+    // Serialize the read-modify-write so concurrent field patches to the same
+    // record do not lose one another (the second writer would otherwise read a
+    // stale base and overwrite the first writer's change).
+    return withFileLock(path, async () => {
+      const doc = await readDoc<ClientRecord>(path);
+      const updated: ClientRecord = {
+        ...doc.front,
+        ...patch,
+        updated: new Date().toISOString(),
+      };
+      await writeDoc(path, updated, doc.body);
+      return updated;
+    });
   }
 }

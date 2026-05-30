@@ -169,7 +169,11 @@ export function renderFrontMatter(front: FrontMatter, body: string): string {
       lines.push(`${k}: ${String(v)}`);
     }
   }
-  lines.push("---", body.startsWith("\n") ? body.slice(1) : body);
+  // Emit the body verbatim. The closing `---` is followed by a single newline
+  // (from `join`), and `parseFrontMatter`'s `\n?` consumes exactly that one
+  // newline, so a body that itself begins with a newline round-trips intact
+  // instead of silently losing its leading blank line.
+  lines.push("---", body);
   return lines.join("\n");
 }
 
@@ -226,7 +230,7 @@ export async function withFileLock<T>(path: string, fn: () => Promise<T>): Promi
  * into place. `rename` is atomic on POSIX filesystems, so a reader never sees a
  * partially written document and a crash mid-write cannot truncate the target.
  */
-async function atomicWriteFile(path: string, contents: string): Promise<void> {
+export async function atomicWriteFile(path: string, contents: string): Promise<void> {
   await ensureDir(dirname(path));
   const tmp = `${path}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
   try {
