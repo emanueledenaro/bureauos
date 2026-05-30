@@ -35,6 +35,68 @@ function parseStringValue(value: string): string {
   return value;
 }
 
+/**
+ * Parse the inner content of a serialized front-matter array.
+ *
+ * `renderFrontMatter` writes arrays as `[${elements.map(JSON.stringify).join(", ")}]`,
+ * so the canonical form is a JSON array of JSON-encoded elements. Parsing must
+ * match that: a naive `split(",")` corrupts any element that itself contains a
+ * comma (e.g. `"b,c"`), splitting one element into two.
+ *
+ * Strategy:
+ *  1. Try `JSON.parse` on the whole `[...]` value. This round-trips everything
+ *     the serializer produces, including commas, quotes, and escapes inside
+ *     elements.
+ *  2. Fall back to a quote-aware splitter for legacy/hand-edited front matter
+ *     whose elements were written without strict JSON quoting (e.g. `[a, b]`).
+ *     This respects quoted segments so commas inside quotes stay attached.
+ */
+function parseArrayValue(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed.map((element) => (typeof element === "string" ? element : String(element)));
+    }
+  } catch {
+    // Not strict JSON (legacy or hand-edited); fall through to quote-aware split.
+  }
+
+  const inner = value.slice(1, -1).trim();
+  if (!inner) return [];
+
+  const elements: string[] = [];
+  let current = "";
+  let quote: '"' | "'" | null = null;
+  for (let i = 0; i < inner.length; i += 1) {
+    const char = inner[i]!;
+    if (quote) {
+      if (char === "\\" && quote === '"' && i + 1 < inner.length) {
+        // Preserve escaped char inside a double-quoted segment.
+        current += char + inner[i + 1]!;
+        i += 1;
+        continue;
+      }
+      current += char;
+      if (char === quote) quote = null;
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      current += char;
+      continue;
+    }
+    if (char === ",") {
+      elements.push(current);
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  elements.push(current);
+
+  return elements.map((element) => parseStringValue(element.trim()));
+}
+
 export function parseFrontMatter<T extends FrontMatter = FrontMatter>(
   raw: string,
 ): ParsedDocument<T> {
@@ -55,8 +117,7 @@ export function parseFrontMatter<T extends FrontMatter = FrontMatter>(
       // JSON-encoded scalar (covers newlines and other YAML-special values).
       front[key] = parseStringValue(value);
     } else if (value.startsWith("[") && value.endsWith("]")) {
-      const inner = value.slice(1, -1).trim();
-      front[key] = inner ? inner.split(",").map((s) => s.trim().replace(/^["']|["']$/g, "")) : [];
+      front[key] = parseArrayValue(value);
     } else if (value === "true" || value === "false") {
       front[key] = value === "true";
     } else if (/^-?\d+(\.\d+)?$/.test(value)) {

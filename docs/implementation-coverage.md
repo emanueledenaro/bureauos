@@ -82,7 +82,7 @@ Every major capability described in the docs must become one of:
 | --- | --- | --- |
 | Agent role catalog | `AGENT_ROLES` | implemented |
 | PM agent per project | concrete PM agent with provider-backed drafting, per-project `OWNERSHIP.md`, and deterministic local template when selected route is unavailable | partial |
-| Delivery agents | concrete/template agents with provider-backed drafting, deterministic local template fallback, and Development Agent runtime execution when Codex runtime plus capability checker are supplied | partial |
+| Delivery agents | concrete/template agents with provider-backed drafting, deterministic local template fallback, Reviewer/QA/Security agents that enrich their narrative via the provider while keeping their deterministic structured gate authoritative, and Development Agent runtime execution when Codex runtime plus capability checker are supplied | partial |
 | Growth agents | template agents with provider-backed drafting and deterministic local template when selected route is unavailable | partial |
 | Compliance agent | concrete compliance agent with provider-backed drafting and deterministic local template when selected route is unavailable | partial |
 | Agent provider routing | `ProviderRouter`, `configureAgentProviderRouting`, dispatcher model capability, per-model capability metadata, budget-tier filtering, and no API fallback from `openai-codex` OAuth | implemented |

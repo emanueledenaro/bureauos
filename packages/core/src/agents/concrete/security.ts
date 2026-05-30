@@ -1,6 +1,7 @@
 import type { ArtifactRecord } from "../../artifacts/store.js";
 import type { AgentDeps, AgentRunInput, AgentRunOutput, AgentRuntime } from "../runtime.js";
 import { AGENT_INDEX } from "../roles.js";
+import { draftAgentArtifact } from "../model-drafting.js";
 import { blockedByInvalidHandoff, validateRequiredHandoff } from "../handoff.js";
 
 export type SecurityRiskLevel = "low" | "medium" | "high" | "critical";
@@ -303,6 +304,17 @@ export class SecurityAgent implements AgentRuntime {
         finding.status === "unresolved" &&
         (finding.severity === "high" || finding.severity === "critical"),
     );
+    // The deterministic risk analysis drives the PR-ready gate, blockers, and
+    // metadata. The provider, when configured, only enriches the narrative; with
+    // no provider the body is the deterministic review, unchanged.
+    const draft = await draftAgentArtifact({
+      input,
+      definition: this.definition,
+      artifactTitle: "Security Review",
+      outputInstructions:
+        "Explain each structured security finding, its required mitigation, and the PR-ready gate. Do not approve merge, deploy, secret rotation, or billing changes.",
+      templateBody: reportBody(input, analysis),
+    });
     const artifact = await this.deps.artifacts.write({
       type: "security-review",
       createdBy: this.definition.id,
@@ -317,13 +329,15 @@ export class SecurityAgent implements AgentRuntime {
         reviewed_files: analysis.reviewedFiles,
         source_artifact_ids: analysis.sourceArtifacts.map((artifact) => artifact.record.id),
       },
-      body: reportBody(input, analysis),
+      body: draft.body,
     });
     await this.deps.audit.append({
       actor: this.definition.id,
       action: "agent.security.executed",
       target: input.context.runId,
       artifact_id: artifact.id,
+      ...(draft.capability ? { capability: draft.capability } : {}),
+      ...(draft.error ? { error: draft.error } : {}),
       result: analysis.blockers.length === 0 ? "ok" : "error",
     });
     return {
