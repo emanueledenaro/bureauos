@@ -1539,6 +1539,11 @@ const ROUTES: Record<string, RouteHandler> = {
       ...(url.searchParams.get("client") ? { clientSlug: url.searchParams.get("client")! } : {}),
       source: "api",
     });
+    // A retried delivery is a no-op: skip re-running signal triggers (SER-176).
+    if (result.status === "duplicate") {
+      ok(res, { status: "duplicate", repository: result.repository, report: result.report }, 202);
+      return;
+    }
     const d = deps(options);
     const triggers = await new GitHubSignalTriggerService({
       runs: d.runs,

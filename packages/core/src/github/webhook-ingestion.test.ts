@@ -91,4 +91,40 @@ describe("GitHubWebhookIngestionService", () => {
     const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(audit).toContain("github.check_failed.detected");
   });
+
+  it("suppresses a re-delivered webhook with the same delivery id (SER-176)", async () => {
+    const service = new GitHubWebhookIngestionService(dir);
+    const payload = {
+      action: "opened",
+      repository: { name: "web", full_name: "acme/web", owner: { login: "acme" } },
+      issue: {
+        number: 9,
+        title: "Retry duplicate signal",
+        html_url: "https://github.com/acme/web/issues/9",
+        labels: [{ name: "type:bug" }],
+        state: "open",
+        updated_at: "2026-05-24T10:00:00.000Z",
+      },
+    };
+
+    const first = await service.ingest({ event: "issues", deliveryId: "delivery-dup", payload });
+    expect(first.status).toBe("ingested");
+
+    const reportsAfterFirst = await new ArtifactStore(dir).list({ type: "github-signal-report" });
+    const opportunitiesAfterFirst = await new OpportunityRegistry(dir).list();
+
+    // Same delivery id arrives again (GitHub retry): no new artifact, no new
+    // opportunity, and the result is flagged duplicate.
+    const second = await service.ingest({ event: "issues", deliveryId: "delivery-dup", payload });
+    expect(second.status).toBe("duplicate");
+    expect(second.report.id).toBe(first.report.id);
+
+    const reportsAfterSecond = await new ArtifactStore(dir).list({ type: "github-signal-report" });
+    expect(reportsAfterSecond).toHaveLength(reportsAfterFirst.length);
+    const opportunitiesAfterSecond = await new OpportunityRegistry(dir).list();
+    expect(opportunitiesAfterSecond).toHaveLength(opportunitiesAfterFirst.length);
+
+    const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(audit).toContain("github.webhook.duplicate_skipped");
+  });
 });
