@@ -168,6 +168,41 @@ describe("bureau cli", () => {
     expect(audit).toContain("memory.daily_note_appended");
   });
 
+  it("manages and searches the FTS5 memory index from the CLI", async () => {
+    await main(["node", "bureau", "init", "--name", "BOS"]);
+    await writeFile(
+      join(dir, ".bureauos", "memory", "ROOT.md"),
+      "# Root\nMargherita landing page index target.\n",
+      "utf8",
+    );
+
+    const status = await captureStdout(() => main(["node", "bureau", "memory", "index", "status"]));
+    expect(status.code).toBe(0);
+    expect(status.output).toContain("memory index:");
+
+    const rebuild = await captureStdout(() =>
+      main(["node", "bureau", "memory", "index", "rebuild"]),
+    );
+    expect(rebuild.code).toBe(0);
+    // node:sqlite may be unavailable in some runtimes; the command must still
+    // exit cleanly. When available, it reports the configured index path.
+    if (rebuild.output.includes("rebuilt")) {
+      expect(rebuild.output).toContain(join("indexes", "memory.sqlite"));
+      // The configured index, not the legacy default location, is written.
+      expect(await exists(join(dir, ".bureauos", "memory", "indexes", "memory.sqlite"))).toBe(true);
+      expect(await exists(join(dir, ".bureauos", "memory", ".index"))).toBe(false);
+    }
+
+    const search = await captureStdout(() =>
+      main(["node", "bureau", "memory", "search", "margherita"]),
+    );
+    expect(search.code).toBe(0);
+    expect(search.output).toContain("ROOT.md");
+
+    const bad = await main(["node", "bureau", "memory", "index", "bogus"]);
+    expect(bad).toBe(1);
+  });
+
   it("runs supreme coordinator intake from a raw owner message", async () => {
     await main(["node", "bureau", "init", "--name", "BOS"]);
     const code = await main([

@@ -1,11 +1,9 @@
 import { stat } from "node:fs/promises";
 import { basename, isAbsolute, relative, sep } from "node:path";
-import {
-  LocalMemoryStore,
-  noopSemanticMemoryIndex,
-  type SemanticMemoryIndex,
-} from "@bureauos/memory";
+import type { SemanticMemoryIndex } from "@bureauos/memory";
 import type { BureauConfig } from "../config/schema.js";
+import { memoryStoreForConfig } from "./index-path.js";
+import { createSemanticMemoryIndex } from "./semantic-index.js";
 import { workspacePaths } from "../paths.js";
 
 export type MemoryBrowserCategory = "client" | "project" | "daily" | "decision";
@@ -113,21 +111,6 @@ function previewFromBody(body: string): string {
   return redactSecretLookingText(visibleBody).slice(0, 260) || "(empty)";
 }
 
-function scoreEntry(entry: MemoryBrowserEntry, body: string, query: string): number {
-  if (!query) return 0;
-  const haystack = `${entry.path}\n${entry.title}\n${body}`.toLowerCase();
-  const needle = query.toLowerCase();
-  let score = 0;
-  let from = 0;
-  while (true) {
-    const index = haystack.indexOf(needle, from);
-    if (index < 0) break;
-    score++;
-    from = index + needle.length;
-  }
-  return score;
-}
-
 export class MemoryBrowserService {
   constructor(
     private readonly workspaceRoot: string,
@@ -139,11 +122,14 @@ export class MemoryBrowserService {
     const query = options.query?.trim() ?? "";
     const limit = Math.min(Math.max(Math.trunc(options.limit ?? 80), 1), 200);
     const paths = workspacePaths(this.workspaceRoot);
-    const store = new LocalMemoryStore(paths.memoryDir);
-    const files = await store.list();
+    // Route keyword retrieval through the shared FTS5-backed store so the
+    // browser and `LocalMemoryStore.search` agree on ranking and honor the
+    // configured `search_index` path instead of a duplicate in-process scan.
+    const store = memoryStoreForConfig(this.workspaceRoot, this.config);
     const entries: MemoryBrowserEntry[] = [];
     const redactedBodies = new Map<string, string>();
-    const semanticIndex = this.deps.semanticIndex ?? noopSemanticMemoryIndex;
+    const semanticIndex =
+      this.deps.semanticIndex ?? createSemanticMemoryIndex(this.workspaceRoot, this.config);
     const semanticHits =
       query && this.config.memory.semantic_index.enabled && semanticIndex.enabled
         ? (
@@ -159,9 +145,24 @@ export class MemoryBrowserService {
         : [];
     const semanticHitsByPath = new Map(semanticHits.map((hit) => [hit.path, hit]));
 
-    for (const file of files) {
-      if (!file.endsWith(".md")) continue;
-      const relativePath = memoryRelativePath(paths.memoryDir, file);
+    // Candidate set: for a query, the FTS5 (or scan fallback) keyword hits plus
+    // any semantic hits; for browse-all, every categorized markdown file.
+    const keywordScores = new Map<string, number>();
+    let candidates: string[];
+    if (query) {
+      const hits = await store.search(query, { limit: Math.min(limit * 4, 200) });
+      for (const hit of hits) {
+        const relativePath = hit.relativePath ?? memoryRelativePath(paths.memoryDir, hit.path);
+        keywordScores.set(relativePath, hit.score);
+      }
+      candidates = Array.from(new Set([...keywordScores.keys(), ...semanticHitsByPath.keys()]));
+    } else {
+      candidates = (await store.list())
+        .filter((file) => file.endsWith(".md"))
+        .map((file) => memoryRelativePath(paths.memoryDir, file));
+    }
+
+    for (const relativePath of candidates) {
       const category = inferCategory(relativePath);
       if (!category) continue;
 
@@ -177,11 +178,11 @@ export class MemoryBrowserService {
         category,
         title: titleFromBody(relativePath, body),
         preview: previewFromBody(body),
-        updated: await stat(file)
+        updated: await stat(store.resolveRelative(relativePath))
           .then((info) => info.mtime.toISOString())
           .catch(() => undefined),
       };
-      const keywordScore = scoreEntry(baseEntry, redactedBody, query);
+      const keywordScore = keywordScores.get(relativePath) ?? 0;
       const semanticHit = semanticHitsByPath.get(relativePath);
       if (query && keywordScore === 0 && !semanticHit) continue;
       const score = keywordScore + (semanticHit?.score ?? 0);

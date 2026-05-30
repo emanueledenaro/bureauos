@@ -428,7 +428,12 @@ function deps(options: ApiServerOptions) {
     artifacts,
     notifications,
     policy,
-    runs: new RunEngine(options.workspaceRoot, { audit, artifacts, policy }),
+    runs: new RunEngine(options.workspaceRoot, {
+      audit,
+      artifacts,
+      policy,
+      recordDecisions: options.config.memory.write_decision_records,
+    }),
   };
 }
 

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -83,6 +83,20 @@ describe("LocalMemoryStore", () => {
 
     expect(hits[0]).toMatchObject({ relativePath: "ROOT.md", source: "sqlite_fts5" });
     expect(hits[0]?.snippet).toContain("retention");
+  });
+
+  it("honors a configured FTS5 index path instead of the default location", async () => {
+    await writeFile(join(dir, "ROOT.md"), "# Root\nConfigured index location test.\n", "utf8");
+    const customIndexPath = join(dir, "custom", "search.sqlite");
+
+    const store = new LocalMemoryStore(dir, { indexPath: customIndexPath });
+    const hits = await store.search("configured", { backend: "sqlite_fts5", limit: 5 });
+    if (hits.length === 0) return; // node:sqlite unavailable in this runtime.
+
+    expect(hits[0]).toMatchObject({ relativePath: "ROOT.md", source: "sqlite_fts5" });
+    // The configured index file must exist and the legacy default must not.
+    await expect(stat(customIndexPath)).resolves.toBeTruthy();
+    await expect(stat(join(dir, ".index", "memory-fts5.sqlite"))).rejects.toBeTruthy();
   });
 
   it("falls back safely when the SQLite index is corrupt", async () => {

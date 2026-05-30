@@ -7,7 +7,13 @@ export {
   assembleContextPacket,
   workspaceExists,
 } from "./store.js";
-export { NoopSemanticMemoryIndex, noopSemanticMemoryIndex } from "./semantic.js";
+export {
+  LocalLexicalSemanticMemoryIndex,
+  NoopSemanticMemoryIndex,
+  noopSemanticMemoryIndex,
+  tokenizeForSemanticIndex,
+} from "./semantic.js";
+export type { LocalLexicalSemanticMemoryIndexOptions } from "./semantic.js";
 export { SqliteFtsMemoryIndex } from "./sqlite-index.js";
 export type {
   ContextAssemblyOptions,

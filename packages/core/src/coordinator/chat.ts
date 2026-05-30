@@ -825,6 +825,7 @@ export class CoordinatorChatService {
         audit: this.audit,
         artifacts: this.artifacts,
         policy: new PolicyEngine(this.config, this.approvals),
+        recordDecisions: this.config.memory.write_decision_records,
       });
     this.tools =
       deps.tools ??

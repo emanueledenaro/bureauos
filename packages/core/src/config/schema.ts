@@ -316,7 +316,10 @@ const MemoryConfig = z
     semantic_index: z
       .object({
         enabled: z.boolean().default(false),
-        provider: z.enum(["none", "custom"]).default("none"),
+        // `none` keeps the safe no-op index. `local` enables the offline,
+        // deterministic TF-IDF index over the markdown memory. `custom` defers
+        // to a host-injected provider-backed index (no-op fallback otherwise).
+        provider: z.enum(["none", "local", "custom"]).default("none"),
         index_path: z.string().default(".bureauos/memory/indexes/semantic"),
         min_score: z.number().min(0).max(1).default(0.72),
       })

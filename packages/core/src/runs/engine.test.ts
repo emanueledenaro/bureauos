@@ -284,6 +284,71 @@ describe("RunEngine", () => {
     expect(clientProjects).toContain("Error: runtime crashed");
   });
 
+  it("records a structured decision record on completion when enabled", async () => {
+    const config = defaultConfig("freelancer");
+    const approvals = new ApprovalRegistry(dir);
+    const policy = new PolicyEngine(config, approvals);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const client = await new ClientRegistry(dir).create({ name: "Decision Client" });
+    const project = await new ProjectRegistry(dir).create({
+      name: "Decision Web",
+      clientId: client.id,
+    });
+    const engine = new RunEngine(dir, { audit, artifacts, policy, recordDecisions: true });
+
+    const run = await engine.start({
+      type: "planning",
+      triggerType: "owner_request",
+      triggerSource: "ser-168-test",
+      scope: "Prepare delivery plan",
+      clientId: client.id,
+      projectId: project.id,
+    });
+    expect(run.status).toBe("completed");
+
+    const paths = workspacePaths(dir);
+    const decisions = await readFile(paths.decisionsLog, "utf8");
+    expect(decisions).toContain(`Run ${run.id} completed: Prepare delivery plan`);
+
+    // The decision cross-links back into the run record.
+    const reloaded = await engine.get(run.id);
+    expect((reloaded?.decisions ?? []).some((id) => id.startsWith("decision_"))).toBe(true);
+    const runFile = await readFile(join(paths.runsDir, `${run.id}.md`), "utf8");
+    expect(runFile).toContain("## Decision Records");
+
+    // The project decision log also receives the record.
+    const projectDecisions = await readFile(
+      join(paths.projectsDir, project.slug, "DECISIONS.md"),
+      "utf8",
+    );
+    expect(projectDecisions).toContain(`Run ${run.id} completed`);
+
+    const log = await readFile(paths.auditLog, "utf8");
+    expect(log).toContain("memory.decision_recorded");
+  });
+
+  it("does not record decision records when the flag is off", async () => {
+    const config = defaultConfig("freelancer");
+    const approvals = new ApprovalRegistry(dir);
+    const policy = new PolicyEngine(config, approvals);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const engine = new RunEngine(dir, { audit, artifacts, policy });
+
+    const run = await engine.start({
+      type: "planning",
+      triggerType: "owner_request",
+      triggerSource: "ser-168-off",
+      scope: "Plan without decision record",
+    });
+    expect(run.status).toBe("completed");
+    expect((run.decisions ?? []).some((id) => id.startsWith("decision_"))).toBe(false);
+
+    const log = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(log).not.toContain("memory.decision_recorded");
+  });
+
   it("blocks a run when policy disallows the underlying action", async () => {
     const config = defaultConfig("freelancer");
     config.autonomy.open_pull_requests = false;

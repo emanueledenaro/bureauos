@@ -35,6 +35,10 @@ Every major capability described in the docs must become one of:
 | Client memory | `ClientRegistry`, per-client memory files | implemented |
 | Client account intelligence | `ClientIntelligenceService`, value score/classification, `/clients/intelligence`, `bureau client intelligence`, ElectronJS Clients page | implemented |
 | Project memory | `ProjectRegistry`, per-project memory files | implemented |
+| Memory keyword search | `LocalMemoryStore.search`, SQLite FTS5 accelerator with scan fallback, configured `search_index` path, `bureau memory search`, `bureau memory index status\|rebuild` | implemented |
+| Semantic memory index | `LocalLexicalSemanticMemoryIndex` (offline TF-IDF over markdown) + `NoopSemanticMemoryIndex` fallback, `createSemanticMemoryIndex` factory, `memory.semantic_index.provider: none\|local\|custom` | partial |
+| Memory browser | `MemoryBrowserService` routed through `LocalMemoryStore.search` (FTS5) and the config semantic index, `GET /memory/browser` | implemented |
+| Run decision records | `RunEngine` auto-appends `DECISIONS.md` records on completion via `recordDecision` (honors `memory.write_decision_records`), cross-linked to runs and client/project decision logs | implemented |
 | Opportunity pipeline | `OpportunityRegistry`, `RevenuePipelineService`, revenue pulse, `revenue-pipeline-report` | partial |
 | Run lifecycle | `RunEngine`, injected coordinator dispatcher, `bureau run new --stub` | partial |
 | Artifact store | `ArtifactStore` | partial |

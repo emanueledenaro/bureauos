@@ -42,6 +42,8 @@ import {
   initWorkspace,
   loadConfig,
   linearIssueSourceWorkItem,
+  memoryIndexForConfig,
+  memoryStoreForConfig,
   recordDecision,
   startApiServer,
   sourceWorkItemFromTriggerSource,
@@ -53,7 +55,6 @@ import {
   type Preset,
   type RunType,
 } from "@bureauos/core";
-import { LocalMemoryStore } from "@bureauos/memory";
 import {
   ProviderAuthStore,
   buildConfiguredProviderRouter,
@@ -79,6 +80,8 @@ Workspace:
 
 Memory:
   memory search <query>                     Search executive and project memory
+  memory index status                       Show the FTS5 search index status (path, count, staleness)
+  memory index rebuild                      Rebuild the FTS5 search index from Markdown memory
 
 Registries:
   client create --name <n> [--status s] [--industry i]
@@ -413,16 +416,42 @@ const handleConfigValidate: Handler = async (args) => {
 const handleMemorySearch: Handler = async (args) => {
   const query = args.join(" ").trim();
   if (!query) return err("memory search: missing query");
-  const store = new LocalMemoryStore(workspacePaths(process.cwd()).memoryDir);
+  const config = await loadWorkspaceConfig(process.cwd());
+  const store = memoryStoreForConfig(process.cwd(), config);
   const hits = await store.search(query, { limit: 20 });
   if (hits.length === 0) {
     process.stdout.write("(no matches)\n");
     return 0;
   }
   for (const h of hits) {
-    process.stdout.write(`${h.score.toString().padStart(4)}  ${h.path}\n`);
+    const label = h.relativePath ?? h.path;
+    process.stdout.write(`${h.score.toString().padStart(4)}  ${label}\n`);
     process.stdout.write(`      ${h.snippet}\n`);
   }
+  return 0;
+};
+
+const handleMemoryIndex: Handler = async (args) => {
+  const subcommand = args[0];
+  if (subcommand !== "status" && subcommand !== "rebuild") {
+    return err('memory index: expected "status" or "rebuild"');
+  }
+  const config = await loadWorkspaceConfig(process.cwd());
+  const index = memoryIndexForConfig(process.cwd(), config);
+  const status = subcommand === "rebuild" ? await index.rebuild() : await index.status();
+  if (!status.available) {
+    process.stdout.write(`memory index: unavailable (${status.reason ?? "unknown"})\n`);
+    process.stdout.write(`  path: ${status.path}\n`);
+    return 0;
+  }
+  if (subcommand === "rebuild") {
+    process.stdout.write(`memory index: rebuilt ${status.document_count} document(s)\n`);
+  } else {
+    process.stdout.write(
+      `memory index: ${status.stale ? "stale" : "fresh"}, ${status.document_count} document(s)\n`,
+    );
+  }
+  process.stdout.write(`  path: ${status.path}\n`);
   return 0;
 };
 
@@ -669,7 +698,12 @@ const handleProjectHealth: Handler = async (args) => {
   const audit = new AuditLog(workspacePaths(process.cwd()).auditLog);
   const artifacts = new ArtifactStore(process.cwd());
   const policy = new PolicyEngine(config, approvals);
-  const runs = new RunEngine(process.cwd(), { audit, artifacts, policy });
+  const runs = new RunEngine(process.cwd(), {
+    audit,
+    artifacts,
+    policy,
+    recordDecisions: config.memory.write_decision_records,
+  });
   const result = await new ProjectHealthReviewService(process.cwd(), {
     audit,
     artifacts,
@@ -873,6 +907,7 @@ const handleRunNew: Handler = async (args) => {
     audit,
     artifacts,
     policy,
+    recordDecisions: config.memory.write_decision_records,
     ...(dispatcher ? { dispatcher } : {}),
   });
   let clientId: string | undefined;
@@ -1265,7 +1300,12 @@ const handleAutonomyRetryScan: Handler = async (args) => {
   const audit = new AuditLog(workspacePaths(process.cwd()).auditLog);
   const artifacts = new ArtifactStore(process.cwd());
   const policy = new PolicyEngine(config, approvals);
-  const runs = new RunEngine(process.cwd(), { audit, artifacts, policy });
+  const runs = new RunEngine(process.cwd(), {
+    audit,
+    artifacts,
+    policy,
+    recordDecisions: config.memory.write_decision_records,
+  });
   const result = await new AutonomousRetryService(process.cwd(), {
     runs,
     audit,
@@ -1303,7 +1343,12 @@ const handleAutonomyMemoryScan: Handler = async () => {
   const audit = new AuditLog(workspacePaths(process.cwd()).auditLog);
   const artifacts = new ArtifactStore(process.cwd());
   const policy = new PolicyEngine(config, approvals);
-  const runs = new RunEngine(process.cwd(), { audit, artifacts, policy });
+  const runs = new RunEngine(process.cwd(), {
+    audit,
+    artifacts,
+    policy,
+    recordDecisions: config.memory.write_decision_records,
+  });
   const result = await new MemoryTriggerService(process.cwd(), {
     runs,
     audit,
@@ -1428,7 +1473,12 @@ const runDaemonForeground: Handler = async (args) => {
   const policy = new PolicyEngine(config, approvals);
   const audit = new AuditLog(workspacePaths(process.cwd()).auditLog);
   const artifacts = new ArtifactStore(process.cwd());
-  const runs = new RunEngine(process.cwd(), { audit, artifacts, policy });
+  const runs = new RunEngine(process.cwd(), {
+    audit,
+    artifacts,
+    policy,
+    recordDecisions: config.memory.write_decision_records,
+  });
   const githubClient = githubClientFromEnv();
   const state = new DaemonStateStore(process.cwd());
   const scheduler = new Scheduler({
@@ -1742,7 +1792,7 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
   status: handleStatus,
   intake: handleIntake,
   config: { validate: handleConfigValidate },
-  memory: { search: handleMemorySearch },
+  memory: { search: handleMemorySearch, index: handleMemoryIndex },
   client: {
     create: handleClientCreate,
     list: handleClientList,
@@ -1910,7 +1960,12 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
       const policy = new PolicyEngine(config, approvals);
       const audit = new AuditLog(workspacePaths(process.cwd()).auditLog);
       const artifacts = new ArtifactStore(process.cwd());
-      const runs = new RunEngine(process.cwd(), { audit, artifacts, policy });
+      const runs = new RunEngine(process.cwd(), {
+        audit,
+        artifacts,
+        policy,
+        recordDecisions: config.memory.write_decision_records,
+      });
 
       const result = await new GitHubSignalSyncService(process.cwd(), {
         githubClient: new OctokitGitHubClient({ token }),

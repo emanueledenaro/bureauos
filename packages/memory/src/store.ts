@@ -109,13 +109,32 @@ function normalizeRule(rule: string | MemoryAccessRule): MemoryAccessRule {
 
 export class LocalMemoryStore {
   protected readonly root: string;
+  protected readonly indexPath: string | undefined;
 
-  constructor(public readonly memoryRoot: string) {
+  /**
+   * @param memoryRoot Absolute path to the workspace memory directory.
+   * @param options Optional configuration. `indexPath` honors the configured
+   *   FTS5 `search_index` location; when omitted, the index defaults to a path
+   *   inside the memory root (see {@link SqliteFtsMemoryIndex}).
+   */
+  constructor(
+    public readonly memoryRoot: string,
+    options: { indexPath?: string } = {},
+  ) {
     this.root = resolve(memoryRoot);
+    this.indexPath = options.indexPath ? resolve(options.indexPath) : undefined;
   }
 
   async read(relativePath: string): Promise<string> {
     return readFile(this.resolveInsideRoot(relativePath), "utf8");
+  }
+
+  /**
+   * Resolve a relative memory path to an absolute path inside the memory root.
+   * Throws {@link MemoryAccessDeniedError} when the path escapes the root.
+   */
+  resolveRelative(relativePath: string): string {
+    return this.resolveInsideRoot(relativePath);
   }
 
   async list(relativeDir = ""): Promise<string[]> {
@@ -135,7 +154,7 @@ export class LocalMemoryStore {
     const backend = options.backend ?? "auto";
     if (backend !== "scan") {
       try {
-        const hits = await new SqliteFtsMemoryIndex(this.root).search(normalizedQuery, { limit });
+        const hits = await this.ftsIndex().search(normalizedQuery, { limit });
         if (backend === "sqlite_fts5" || hits.length > 0) return hits;
       } catch {
         if (backend === "sqlite_fts5") return [];
@@ -144,6 +163,16 @@ export class LocalMemoryStore {
     const needle = normalizedQuery.toLowerCase();
     const files = await this.walk(this.root);
     return this.searchFiles(files, needle, limit);
+  }
+
+  /**
+   * Build an FTS5 index bound to this store's memory root, honoring the
+   * configured `search_index` path when one was supplied to the constructor.
+   */
+  protected ftsIndex(): SqliteFtsMemoryIndex {
+    return this.indexPath
+      ? new SqliteFtsMemoryIndex(this.root, this.indexPath)
+      : new SqliteFtsMemoryIndex(this.root);
   }
 
   protected resolveInsideRoot(relativePath: string): string {
