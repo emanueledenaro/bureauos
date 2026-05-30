@@ -117,11 +117,16 @@ function missingEvidenceGates(args: {
   tests: readonly string[];
   changedFiles?: readonly string[];
   changedFileLimit: number;
+  hasApproval: boolean;
 }): string[] {
   const gates = new Set<string>(args.policy.required_gates);
   const missing: string[] = [];
   if (gates.has("tests_required") && args.tests.length === 0) missing.push("tests_required");
   if (gates.has("linked_issue") && args.linkedIssues.length === 0) missing.push("linked_issue");
+  // Owner-configured security/human gates (SER-181) are satisfied by a granted
+  // approval for the action; until one exists they block capability use.
+  if (gates.has("security_review") && !args.hasApproval) missing.push("security_review");
+  if (gates.has("human_review") && !args.hasApproval) missing.push("human_review");
   if (args.changedFiles !== undefined && args.changedFiles.length > args.changedFileLimit) {
     missing.push("changed_file_limit");
   }
@@ -246,8 +251,16 @@ export class CapabilityUseService {
       riskClass: capability.risk_class,
       ...(input.preview ? { preview: true } : {}),
     });
+    const grantedApproval = await this.approvals.match(policy.action, target);
     const missingGates = capability.allowed
-      ? missingEvidenceGates({ policy, linkedIssues, tests, changedFiles, changedFileLimit })
+      ? missingEvidenceGates({
+          policy,
+          linkedIssues,
+          tests,
+          changedFiles,
+          changedFileLimit,
+          hasApproval: !!grantedApproval,
+        })
       : [];
     const blockedReason = blockedReasonFor({
       capability,

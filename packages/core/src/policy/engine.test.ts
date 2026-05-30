@@ -246,4 +246,66 @@ describe("PolicyEngine", () => {
     });
     expect(after.allowed).toBe(false);
   });
+
+  describe("owner-configured safety gates (SER-181)", () => {
+    it("adds a security_review gate for auth_policy_change only when the flag is on", async () => {
+      const on = defaultConfig("freelancer");
+      on.limits.require_security_review_for_auth_changes = true;
+      const onDecision = await new PolicyEngine(on, new ApprovalRegistry(dir)).evaluate({
+        action: "auth_policy_change",
+        actor: "security",
+      });
+      expect(onDecision.outcome).toBe("escalate");
+      expect(onDecision.required_gates).toContain("security_review");
+
+      const off = defaultConfig("freelancer");
+      off.limits.require_security_review_for_auth_changes = false;
+      const offDecision = await new PolicyEngine(off, new ApprovalRegistry(dir)).evaluate({
+        action: "auth_policy_change",
+        actor: "security",
+      });
+      expect(offDecision.required_gates).not.toContain("security_review");
+      expect(offDecision.required_gates).toContain("human_approval");
+    });
+
+    it("adds a security_review gate for enabled payment actions only when the flag is on", async () => {
+      const on = defaultConfig("freelancer");
+      on.growth_autonomy.change_pricing = true;
+      on.limits.require_security_review_for_payment_changes = true;
+      const onDecision = await new PolicyEngine(on, new ApprovalRegistry(dir)).evaluate({
+        action: "change_pricing",
+        actor: "revenue",
+      });
+      expect(onDecision.allowed).toBe(true);
+      expect(onDecision.required_gates).toContain("security_review");
+
+      const off = defaultConfig("freelancer");
+      off.growth_autonomy.change_pricing = true;
+      off.limits.require_security_review_for_payment_changes = false;
+      const offDecision = await new PolicyEngine(off, new ApprovalRegistry(dir)).evaluate({
+        action: "change_pricing",
+        actor: "revenue",
+      });
+      expect(offDecision.required_gates).not.toContain("security_review");
+    });
+
+    it("adds a human_review gate for destructive actions only when the flag is on", async () => {
+      const on = defaultConfig("freelancer");
+      on.limits.require_human_for_destructive_actions = true;
+      const onDecision = await new PolicyEngine(on, new ApprovalRegistry(dir)).evaluate({
+        action: "delete_data",
+        actor: "development",
+      });
+      expect(onDecision.outcome).toBe("escalate");
+      expect(onDecision.required_gates).toContain("human_review");
+
+      const off = defaultConfig("freelancer");
+      off.limits.require_human_for_destructive_actions = false;
+      const offDecision = await new PolicyEngine(off, new ApprovalRegistry(dir)).evaluate({
+        action: "delete_data",
+        actor: "development",
+      });
+      expect(offDecision.required_gates).not.toContain("human_review");
+    });
+  });
 });
