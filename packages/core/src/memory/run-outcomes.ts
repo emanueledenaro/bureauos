@@ -8,7 +8,15 @@ import type { ClientRecord } from "../registries/client.js";
 import type { ProjectRecord } from "../registries/project.js";
 import type { RunRecord, RunStatus } from "../runs/engine.js";
 
-const WRITEBACK_STATUSES: ReadonlySet<RunStatus> = new Set(["completed", "blocked", "failed"]);
+// `needs_human` is the highest-attention class (parked awaiting an owner
+// decision) and must leave scoped RUNS.md / RISKS.md memory like blocked/failed,
+// not just a raw audit line (SER-193).
+const WRITEBACK_STATUSES: ReadonlySet<RunStatus> = new Set([
+  "completed",
+  "blocked",
+  "failed",
+  "needs_human",
+]);
 
 export interface RunOutcomeWritebackResult {
   written: string[];
@@ -35,7 +43,7 @@ export async function writeRunOutcomeMemory(
       const runsPath = join(projectDir, "RUNS.md");
       await appendMemory(runsPath, `Run ${run.id} ${run.status}`, summary);
       written.push(runsPath);
-      if (run.status === "blocked" || run.status === "failed") {
+      if (run.status === "blocked" || run.status === "failed" || run.status === "needs_human") {
         const risksPath = join(projectDir, "RISKS.md");
         await appendMemory(risksPath, `Run ${run.id} ${run.status}`, riskSummary(run));
         written.push(risksPath);
@@ -49,7 +57,7 @@ export async function writeRunOutcomeMemory(
       const projectsPath = join(clientDir, "PROJECTS.md");
       await appendMemory(projectsPath, `Run ${run.id} ${run.status}`, summary);
       written.push(projectsPath);
-      if (run.status === "blocked" || run.status === "failed") {
+      if (run.status === "blocked" || run.status === "failed" || run.status === "needs_human") {
         const risksPath = join(clientDir, "RISKS.md");
         await appendMemory(risksPath, `Run ${run.id} ${run.status}`, riskSummary(run));
         written.push(risksPath);
