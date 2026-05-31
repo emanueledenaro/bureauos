@@ -477,6 +477,7 @@ export type {
 } from "./execution/project-test-runner.js";
 export { buildCodexRuntimeFromConfig } from "./execution/codex-runtime.js";
 export type { BuildCodexRuntimeOptions } from "./execution/codex-runtime.js";
+export { GitDevelopmentBranchClient } from "./execution/git-development-branch-client.js";
 
 // Provider auth
 export {
