@@ -20,6 +20,7 @@
     "format:write": "prettier --write .",
     "e2e:interface": "pnpm --filter @bureauos/core build && playwright test",
     "private-context:check": "bash scripts/check-private-context.sh",
+    "docs:check-links": "node scripts/check-doc-links.mjs",
     "qa:coordinator": "pnpm --filter @bureauos/core build && node scripts/qa-coordinator-prompt-matrix.mjs",
     "security:scan": "pnpm audit --audit-level high",
     "release:check": "bash scripts/release-check.sh",

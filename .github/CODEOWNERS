@@ -1,0 +1,7 @@
+# Code owners for BureauOS.
+#
+# Minimal by design (SER-40): the repository owner is the default reviewer for
+# everything. This intentionally does not claim per-area expertise ownership —
+# add narrower path rules below as the contributor base grows.
+
+* @emanueledenaro

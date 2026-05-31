@@ -45,6 +45,13 @@ Before opening a public pull request, run:
 pnpm run private-context:check
 ```
 
+If you touched documentation, also check that internal Markdown links resolve
+(the same check runs in the `Docs` CI workflow):
+
+```bash
+pnpm run docs:check-links
+```
+
 See `docs/repository-hygiene.md` for the local-only agent files that must not
 be committed.
 
