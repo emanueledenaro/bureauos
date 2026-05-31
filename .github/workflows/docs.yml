@@ -1,0 +1,23 @@
+name: Docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  link-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # No install step: the checker uses only Node built-ins. Same script as the
+      # local `pnpm docs:check-links` command (single source of truth, SER-40).
+      - name: Check internal documentation links
+        run: node scripts/check-doc-links.mjs
