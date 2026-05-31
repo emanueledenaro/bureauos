@@ -1,32 +1,16 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { isSafeRef, runGit } from "./git.js";
 import type {
   DevelopmentBranchClient,
   DevelopmentBranchCreateRequest,
 } from "./development-branch.js";
 
-const run = promisify(execFile);
-
-/** Bound every git spawn: a hung git (fs lock, hook/credential prompt) must not hang the caller. */
-const GIT_TIMEOUT_MS = 30_000;
-const GIT_MAX_BUFFER = 1024 * 1024;
-
-/**
- * Whether a caller-supplied `baseRef` is safe to pass to git as a start-point.
- * Positive allow-list (not just "doesn't start with -"): only ref/SHA-shaped
- * tokens, no leading dash (option injection) and no `..` (range / traversal).
- */
-function isSafeRef(ref: string): boolean {
-  return /^[A-Za-z0-9._/-]+$/.test(ref) && !ref.startsWith("-") && !ref.includes("..");
-}
-
 /**
  * Concrete git-backed {@link DevelopmentBranchClient}: lets the development run
  * land its real edits on an isolated branch (SER-239).
  *
- * Safety:
- * - git is invoked via `execFile` (`shell: false`) with each token as a
- *   separate argument — no shell string is ever constructed, so there is no
+ * Safety (all provided by the shared {@link runGit} / {@link isSafeRef} helpers):
+ * - git is invoked via `execFile` (`shell: false`) with each token as a separate
+ *   argument — no shell string is ever constructed, so there is no
  *   shell-injection surface.
  * - branch names always come from `branchNameForDevelopmentRun` (slugified to
  *   `[a-z0-9-/]`, never leading `-`), so they cannot be parsed as flags.
@@ -40,17 +24,11 @@ function isSafeRef(ref: string): boolean {
 export class GitDevelopmentBranchClient implements DevelopmentBranchClient {
   constructor(private readonly workspaceRoot: string) {}
 
-  private gitOptions() {
-    return { cwd: this.workspaceRoot, timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER };
-  }
-
   async branchExists(branchName: string): Promise<boolean> {
     try {
-      await run(
-        "git",
-        ["rev-parse", "--verify", "--quiet", `refs/heads/${branchName}`],
-        this.gitOptions(),
-      );
+      await runGit(["rev-parse", "--verify", "--quiet", `refs/heads/${branchName}`], {
+        cwd: this.workspaceRoot,
+      });
       return true;
     } catch {
       // Non-zero exit (with --quiet, no output) means the ref does not exist.
@@ -64,6 +42,6 @@ export class GitDevelopmentBranchClient implements DevelopmentBranchClient {
     }
     const args = ["checkout", "-b", input.branchName];
     if (input.baseRef) args.push(input.baseRef);
-    await run("git", args, this.gitOptions());
+    await runGit(args, { cwd: this.workspaceRoot });
   }
 }
