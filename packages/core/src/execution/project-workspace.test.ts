@@ -202,11 +202,11 @@ describe("ProjectWorkspaceService (SER-243)", () => {
     TIMEOUT_MS,
   );
 
-  it("refuses an unsafe remote url", async () => {
+  it("refuses unsafe remote urls (option injection + git transport RCE vectors)", async () => {
     await service.ensureRepo("acme-app");
-    await expect(service.setProjectRemote("acme-app", "--upload-pack=evil")).rejects.toThrow(
-      /unsafe remote/,
-    );
+    for (const bad of ["--upload-pack=evil", "ext::sh -c whoami", "fd::17", "host:path/repo"]) {
+      await expect(service.setProjectRemote("acme-app", bad)).rejects.toThrow(/unsafe remote/);
+    }
   });
 
   it("refuses unsafe slugs, run ids, and base refs", async () => {
