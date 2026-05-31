@@ -91,15 +91,30 @@ export function ClientAccountCard({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        {memoryPaths.slice(0, 3).map((path) => (
-          <span
-            key={path}
-            className="text-meta max-w-full truncate rounded-md border border-border/60 bg-background/35 px-2 py-1 font-mono"
-            title={path}
-          >
-            {path}
-          </span>
-        ))}
+        {memoryPaths.slice(0, 3).map((path) =>
+          onOpen ? (
+            // Real, honest affordance: the memory-path chips open the Memory
+            // view (consistent with "Open account") rather than looking like
+            // links that do nothing (SER-224).
+            <button
+              key={path}
+              type="button"
+              onClick={onOpen}
+              className="text-meta focus-ring max-w-full truncate rounded-md border border-border/60 bg-background/35 px-2 py-1 font-mono transition-colors hover:border-border hover:text-foreground"
+              title={`Open ${path} in Memory`}
+            >
+              {path}
+            </button>
+          ) : (
+            <span
+              key={path}
+              className="text-meta max-w-full truncate rounded-md border border-border/60 bg-background/35 px-2 py-1 font-mono"
+              title={path}
+            >
+              {path}
+            </span>
+          ),
+        )}
         {onOpen ? (
           <Button variant="ghost" size="sm" className="ml-auto" onClick={onOpen}>
             Open account
