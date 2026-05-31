@@ -246,6 +246,9 @@ policy-gated Codex runtime capability is supplied to this agent.
       capabilityId: "codex",
       action,
       target: input.context.projectId ?? input.context.runId,
+      ...(input.context.linkedWorkItem
+        ? { linkedWorkItemId: input.context.linkedWorkItem.identifier }
+        : {}),
     });
     if (result.status === "allowed") {
       return { allowed: true, reason: "", artifactId: result.artifact?.id };

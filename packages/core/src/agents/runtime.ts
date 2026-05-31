@@ -26,6 +26,11 @@ export interface AgentContext {
   codeWorkspaceRoot?: string;
   clientId?: string;
   projectId?: string;
+  /**
+   * The work item (Linear/GitHub issue) tracking this run, when one is linked.
+   * Satisfies the `linked_issue` capability gate for code work (SER-242).
+   */
+  linkedWorkItem?: { type: string; identifier: string };
   briefing?: string;
   handoffArtifactId?: string;
 }
@@ -50,6 +55,8 @@ export interface AgentCapabilityCheckInput {
   target?: string;
   policyAction?: string;
   linkedIssueNumbers?: readonly number[];
+  /** Identifier of a linked work item (Linear/GitHub) tracking the work (SER-242). */
+  linkedWorkItemId?: string;
   testEvidence?: readonly string[];
   changedFiles?: readonly string[];
 }
