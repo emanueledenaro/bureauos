@@ -2373,4 +2373,32 @@ describe("API server", () => {
     };
     expect(intel.totals.pipeline_value).toBe(pulse.revenue.pipeline_value);
   });
+
+  it("rejects an oversized body on a normal POST route with 413 (SER-177)", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+    // 11 MB > the 10 MB authenticated-route cap.
+    const huge = "x".repeat(11 * 1024 * 1024);
+    const response = await rawRequest(`${server.url}/coordinator/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: huge }),
+    });
+    expect(response.status).toBe(413);
+  });
+
+  it("rejects an oversized webhook body before HMAC work with 413 (SER-177)", async () => {
+    server = await startApiServer({
+      workspaceRoot: dir,
+      config: defaultConfig("agency"),
+      githubWebhookSecret: "shh",
+    });
+    // 3 MB > the stricter 2 MB pre-auth webhook cap; rejected before signature work.
+    const huge = "y".repeat(3 * 1024 * 1024);
+    const response = await rawRequest(`${server.url}/github/webhook`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-github-event": "issues" },
+      body: huge,
+    });
+    expect(response.status).toBe(413);
+  });
 });

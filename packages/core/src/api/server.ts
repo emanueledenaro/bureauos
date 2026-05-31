@@ -257,19 +257,49 @@ function unauthorized(res: ServerResponse): void {
   res.end(JSON.stringify({ error: "unauthorized" }));
 }
 
-async function readJson(req: IncomingMessage): Promise<unknown> {
-  const raw = await readRaw(req);
+// Request-body size caps (SER-177). Without them the API buffered the entire
+// body into memory unbounded. The webhook read happens BEFORE HMAC verification
+// and the route is exempt from the loopback/origin/bearer guard, so it gets a
+// stricter cap than authenticated routes.
+const MAX_REQUEST_BODY_BYTES = 10 * 1024 * 1024;
+const MAX_WEBHOOK_BODY_BYTES = 2 * 1024 * 1024;
+
+export class PayloadTooLargeError extends Error {
+  readonly status = 413;
+  constructor(limit: number) {
+    super(`request body exceeds the ${limit}-byte limit`);
+    this.name = "PayloadTooLargeError";
+  }
+}
+
+async function readJson(req: IncomingMessage, maxBytes = MAX_REQUEST_BODY_BYTES): Promise<unknown> {
+  const raw = await readRaw(req, maxBytes);
   if (!raw) return {};
   return JSON.parse(raw) as unknown;
 }
 
-async function readRaw(req: IncomingMessage): Promise<string> {
+async function readRaw(req: IncomingMessage, maxBytes = MAX_REQUEST_BODY_BYTES): Promise<string> {
+  // Reject before reading a byte when the client declares an oversized body.
+  const declared = Number(req.headers["content-length"]);
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    throw new PayloadTooLargeError(maxBytes);
+  }
   return new Promise((resolve, reject) => {
-    let raw = "";
+    const chunks: Buffer[] = [];
+    let total = 0;
     req.on("data", (chunk: Buffer) => {
-      raw += chunk.toString("utf8");
+      total += chunk.length;
+      if (total > maxBytes) {
+        // Stop accumulating; a lying/absent Content-Length must not let the body
+        // grow past the cap. Drain the rest so the response can still be sent.
+        req.removeAllListeners("data");
+        req.on("data", () => {});
+        reject(new PayloadTooLargeError(maxBytes));
+        return;
+      }
+      chunks.push(chunk);
     });
-    req.on("end", () => resolve(raw));
+    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
     req.on("error", reject);
   });
 }
@@ -1511,7 +1541,8 @@ const ROUTES: Record<string, RouteHandler> = {
   },
 
   "POST /github/webhook": async ({ res, options, req, url }) => {
-    const raw = await readRaw(req);
+    // Stricter pre-auth cap: this read happens before HMAC verification (SER-177).
+    const raw = await readRaw(req, MAX_WEBHOOK_BODY_BYTES);
     // Webhooks are authenticated solely by their HMAC signature. Without a
     // configured secret we cannot verify the sender, so reject rather than
     // accept an unsigned payload.
@@ -1820,7 +1851,7 @@ export async function startApiServer(options: ApiServerOptions): Promise<ApiServ
       }
       await handler({ url, method, req, res, options });
     } catch (e) {
-      res.statusCode = 500;
+      res.statusCode = e instanceof PayloadTooLargeError ? 413 : 500;
       res.setHeader("Content-Type", "application/json");
       res.end(JSON.stringify({ error: (e as Error).message }));
     }
