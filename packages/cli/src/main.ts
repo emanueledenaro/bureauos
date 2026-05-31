@@ -720,7 +720,13 @@ const handleProjectDispatch: Handler = async (args) => {
     return err(`project dispatch: unknown run type "${runType}"`);
   }
   const config = await loadWorkspaceConfig(process.cwd());
-  const result = await new ProjectDispatchService(process.cwd(), { config }).dispatch({
+  // Supply the real Codex runtime (when `runtime.codex.enabled`) so a dispatched
+  // feature/bug run's development agent executes real code (SER-239).
+  const developmentRuntime = buildCodexRuntimeFromConfig(config);
+  const result = await new ProjectDispatchService(process.cwd(), {
+    config,
+    ...(developmentRuntime ? { developmentRuntime } : {}),
+  }).dispatch({
     projectSlug: flags.project,
     runType: runType as RunType,
     ...(typeof flags.scope === "string" ? { scope: flags.scope } : {}),

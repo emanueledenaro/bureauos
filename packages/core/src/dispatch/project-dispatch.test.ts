@@ -1,15 +1,20 @@
+import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ArtifactStore } from "../artifacts/store.js";
 import { defaultConfig } from "../config/loader.js";
 import { CoordinatorIntakeService } from "../coordinator/intake.js";
+import { buildCodexRuntimeFromConfig } from "../execution/codex-runtime.js";
 import { initWorkspace } from "../init/initializer.js";
 import { workspacePaths } from "../paths.js";
 import { ProjectDispatchService, pendingProjectApprovals } from "./project-dispatch.js";
 import type { ApprovalRecord } from "../registries/approval.js";
 import type { ProjectRecord } from "../registries/project.js";
+
+const run = promisify(execFile);
 
 function projectRecord(id: string, name: string): ProjectRecord {
   return {
@@ -83,6 +88,56 @@ describe("ProjectDispatchService", () => {
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
   });
+
+  it("routes a dispatched feature run to the REAL codex runtime and fail-closed-blocks an ungated code change (SER-239)", async () => {
+    const config = defaultConfig("agency");
+    config.runtime.codex.enabled = true;
+    config.runtime.codex.commands = [
+      {
+        command: "node",
+        args: ["-e", "require('fs').writeFileSync('feature.ts','// built by the dev agent\\n')"],
+        label: "edit",
+      },
+    ];
+    // The development agent's gates: edit_code -> push_commits, run_tests -> observe_signals.
+    config.autonomy.push_commits = true;
+    config.autonomy.observe_signals = true;
+
+    const intake = await new CoordinatorIntakeService(dir, { config }).process({
+      clientName: "Pizzeria Aurora",
+      message: "Vuole un sito con prenotazioni.",
+      source: "owner_chat",
+    });
+
+    // Commit a clean baseline AFTER intake so the dev run's diff is just its
+    // own edit (and well under the runtime's changed-file limit).
+    await run("git", ["init", "-q"], { cwd: dir });
+    await run("git", ["config", "user.email", "ci@bureauos.test"], { cwd: dir });
+    await run("git", ["config", "user.name", "BureauOS CI"], { cwd: dir });
+    await run("git", ["add", "."], { cwd: dir });
+    await run("git", ["commit", "-q", "-m", "baseline"], { cwd: dir });
+
+    const developmentRuntime = buildCodexRuntimeFromConfig(config);
+    expect(developmentRuntime).toBeDefined();
+
+    await new ProjectDispatchService(dir, {
+      config,
+      ...(developmentRuntime ? { developmentRuntime } : {}),
+    }).dispatch({
+      projectSlug: intake.project.slug,
+      runType: "feature",
+      scope: "Build the booking page",
+    });
+
+    // The wiring reached the REAL runtime path — not the template-only fallback...
+    const auditLog = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(auditLog).not.toContain("agent.development.template_only");
+    // ...and the fail-closed safety correctly blocked an autonomous code change
+    // that lacks a linked issue + test evidence (the "stop and ask" behavior),
+    // so no real edit was applied.
+    expect(auditLog).toContain("agent.development.runtime_blocked");
+    expect(auditLog).toMatch(/tests_required|linked_issue/);
+  }, 60_000);
 
   it("creates project-scoped dispatch and handoff packets before running specialist agents", async () => {
     const intake = await new CoordinatorIntakeService(dir, {
