@@ -1,6 +1,8 @@
+import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type {
   GenerateTextOptions,
@@ -21,11 +23,14 @@ import { initWorkspace } from "../../init/initializer.js";
 import { workspacePaths } from "../../paths.js";
 import type { AgentCapabilityCheckInput } from "../runtime.js";
 import { MODEL_PROVIDER_CAPABILITY, type AgentModelSelection } from "../provider-routing.js";
+import { buildCodexRuntimeFromConfig } from "../../execution/codex-runtime.js";
 import { DevelopmentAgent } from "./development.js";
 import { buildDefaultAgentRegistry } from "./index.js";
 import { QaAgent } from "./qa.js";
 import { ReviewerAgent } from "./reviewer.js";
 import { SecurityAgent } from "./security.js";
+
+const run = promisify(execFile);
 
 class FakeProvider implements ProviderAdapter {
   readonly id = "openai-default";
@@ -297,6 +302,73 @@ describe("concrete agents", () => {
     const log = await readAudit(dir);
     expect(log).toContain("agent.development.runtime_executed");
   });
+
+  it("drives a REAL codex runtime end-to-end: the development agent writes real code (SER-239)", async () => {
+    // The runtime's diff inspector reads `git status`, so the workspace must be
+    // a git repo with a clean baseline.
+    await run("git", ["init", "-q"], { cwd: dir });
+    await run("git", ["config", "user.email", "ci@bureauos.test"], { cwd: dir });
+    await run("git", ["config", "user.name", "BureauOS CI"], { cwd: dir });
+    await run("git", ["add", "."], { cwd: dir });
+    await run("git", ["commit", "-q", "-m", "baseline"], { cwd: dir });
+
+    const config = defaultConfig("freelancer");
+    config.runtime.codex.enabled = true;
+    // `node` is in the default allow-list; this makes a real file change,
+    // standing in for a Codex edit without needing the Codex CLI.
+    config.runtime.codex.commands = [
+      {
+        command: "node",
+        args: ["-e", "require('fs').writeFileSync('built.ts','// built by the agent\\n')"],
+        label: "edit",
+      },
+    ];
+
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const artifacts = new ArtifactStore(dir);
+    const policy = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
+    // No injected fakes -> the real subprocess executor + git diff run.
+    const runtime = buildCodexRuntimeFromConfig(config);
+    expect(runtime).toBeDefined();
+
+    const agent = new DevelopmentAgent({
+      artifacts,
+      audit,
+      policy,
+      capabilityUse: {
+        async check(input) {
+          const artifact = await artifacts.write({
+            type: "capability-audit",
+            createdBy: input.agent,
+            runId: "run_dev_real",
+            body: `# Gate ${input.action}\n\nAllowed.`,
+          });
+          return { status: "allowed", artifact };
+        },
+      },
+    });
+
+    const out = await agent.execute({
+      context: {
+        workspaceRoot: dir,
+        runId: "run_dev_real",
+        scope: "build a real file",
+        projectId: "project_1",
+      },
+      capabilities: new Map([["codex", runtime!]]),
+    });
+
+    // The agent drove the real runtime to completion (not template-only)...
+    expect(out.ok).toBe(true);
+    expect(out.decisions).toContain("runtime_execution");
+    // ...the real subprocess actually wrote the file to disk...
+    const built = await readFile(join(dir, "built.ts"), "utf8");
+    expect(built).toContain("built by the agent");
+    // ...and it was recorded as a real execution, not a template fallback.
+    const log = await readAudit(dir);
+    expect(log).toContain("agent.development.runtime_executed");
+    expect(log).not.toContain("agent.development.template_only");
+  }, 30_000);
 
   it("blocks development runtime before execution when capability gates fail", async () => {
     const audit = new AuditLog(workspacePaths(dir).auditLog);
