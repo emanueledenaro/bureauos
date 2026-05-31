@@ -402,11 +402,27 @@ export class ProjectDispatchService {
       );
     } finally {
       if (worktree) {
-        // Persist the run's edits onto its branch before tearing down the
-        // worktree — a forced worktree removal would discard uncommitted work.
-        // A no-op when the run changed nothing (e.g. blocked on a gate). The
-        // branch survives for the gated push/PR delivery (SER-241).
-        await workspace.commitRunWork(project.slug, run.id, `bureauos(${project.slug}): ${scope}`);
+        try {
+          // Persist the run's edits onto its branch before tearing down the
+          // worktree — a forced worktree removal would discard uncommitted work.
+          // A no-op when the run changed nothing (e.g. blocked on a gate). The
+          // branch survives for the gated push/PR delivery (SER-241).
+          await workspace.commitRunWork(
+            project.slug,
+            run.id,
+            `bureauos(${project.slug}): ${scope}`,
+          );
+        } catch (error) {
+          // Never let a commit failure mask a dispatch error or skip cleanup:
+          // audit it and still release the worktree below.
+          await this.audit.append({
+            actor: "supreme_coordinator",
+            action: "project.dispatch.worktree_commit_failed",
+            target: run.id,
+            error: error instanceof Error ? error.message : String(error),
+            result: "error",
+          });
+        }
         await workspace.releaseRunWorktree(project.slug, run.id);
       }
     }
