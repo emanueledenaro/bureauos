@@ -251,7 +251,12 @@ export class CapabilityUseService {
       riskClass: capability.risk_class,
       ...(input.preview ? { preview: true } : {}),
     });
-    const grantedApproval = await this.approvals.match(policy.action, target);
+    const grantedApproval = await this.approvals.match(
+      policy.action,
+      target,
+      undefined,
+      `${input.capabilityId}.${input.action}`,
+    );
     const missingGates = capability.allowed
       ? missingEvidenceGates({
           policy,
@@ -372,7 +377,13 @@ export class CapabilityUseService {
   }): Promise<ApprovalRecord> {
     const pending = await this.approvals.listPending();
     const existing = pending.find(
-      (approval) => approval.action === input.action && approval.target === input.target,
+      (approval) =>
+        approval.action === input.action &&
+        approval.target === input.target &&
+        // Reuse a pending request only when it is for the same precise scope, so
+        // a pending approval for one operation does not absorb a request for a
+        // different operation that collapses to the same action (SER-180).
+        approval.scope === input.scope,
     );
     if (existing) return existing;
     return this.approvals.request({

@@ -146,6 +146,40 @@ describe("PolicyEngine", () => {
     expect(d.approval_id).toBe(a.id);
   });
 
+  it("does not let a capability-scoped approval authorize a different operation (SER-180)", async () => {
+    const approvals = new ApprovalRegistry(dir);
+    const a = await approvals.request({
+      action: "change_billing",
+      actor: "owner",
+      target: "stripe://acct/acme",
+      // stripe.refund_payment and stripe.change_price both collapse to
+      // change_billing; the approval is for the refund only.
+      scope: "stripe.refund_payment",
+      oneOff: false,
+    });
+    await approvals.resolve(a.id, "approved", "owner", "refund ok");
+    const engine = new PolicyEngine(defaultConfig("freelancer"), approvals);
+
+    const refund = await engine.evaluate({
+      action: "change_billing",
+      actor: "supreme_coordinator",
+      target: "stripe://acct/acme",
+      capability: "stripe.refund_payment",
+    });
+    expect(refund.allowed).toBe(true);
+    expect(refund.approval_id).toBe(a.id);
+
+    const priceChange = await engine.evaluate({
+      action: "change_billing",
+      actor: "supreme_coordinator",
+      target: "stripe://acct/acme",
+      capability: "stripe.change_price",
+    });
+    expect(priceChange.allowed).toBe(false);
+    expect(priceChange.approval_required).toBe(true);
+    expect(priceChange.approval_id).toBeUndefined();
+  });
+
   it("consumes a one-off approval after it authorizes one action; a second evaluation re-escalates", async () => {
     const approvals = new ApprovalRegistry(dir);
     const a = await approvals.request({

@@ -112,7 +112,16 @@ export class PolicyEngine {
     };
 
     if (ALWAYS_HUMAN.has(input.action)) {
-      const approval = await this.approvals.match(input.action, input.target ?? "*");
+      // `input.capability` is the precise operation scope (e.g.
+      // `stripe.refund_payment`); thread it so an approval granted for one
+      // operation cannot authorize a different one that collapses to the same
+      // action (SER-180). Undefined capability falls back to coarse matching.
+      const approval = await this.approvals.match(
+        input.action,
+        input.target ?? "*",
+        undefined,
+        input.capability,
+      );
       if (approval) {
         await this.consumeOnGrant(input, approval.id);
         return {
@@ -194,7 +203,12 @@ export class PolicyEngine {
     input: PolicyInput,
     matchedRule: string,
   ): Promise<PolicyDecision> {
-    const approval = await this.approvals.match(input.action, input.target ?? "*");
+    const approval = await this.approvals.match(
+      input.action,
+      input.target ?? "*",
+      undefined,
+      input.capability,
+    );
     if (approval) {
       await this.consumeOnGrant(input, approval.id);
       return {

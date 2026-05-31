@@ -244,14 +244,16 @@ describe("CapabilityUseService", () => {
       action: "merge_pull_requests",
       actor: "owner",
       target: "github.com/acme/web/pull/42",
-      scope: "SER-66 explicit merge approval fixture",
+      // Capability approvals must carry the precise operation scope
+      // `${capabilityId}.${action}` (or "*") to match (SER-180).
+      scope: "github.merge_pr",
       oneOff: true,
     });
     const deployApproval = await approvals.request({
       action: "deploy_production",
       actor: "owner",
       target: "vercel://project/acme-web/production",
-      scope: "SER-66 explicit production deploy approval fixture",
+      scope: "deployment.deploy_production",
       oneOff: true,
     });
     await approvals.resolve(mergeApproval.id, "approved", "owner", "SER-66 merge fixture");
