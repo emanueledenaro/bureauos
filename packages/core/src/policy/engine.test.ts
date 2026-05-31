@@ -73,6 +73,41 @@ describe("PolicyEngine", () => {
     expect(deploy.required_gates).toContain("release_readiness_review");
   });
 
+  it("gates tests on the push/PR but not on a local isolated edit (SER-242)", async () => {
+    const config = defaultConfig("freelancer");
+    config.autonomy.push_commits = true;
+    config.autonomy.open_pull_requests = true;
+    config.limits.require_tests_for_code_changes = true;
+    const engine = new PolicyEngine(config, new ApprovalRegistry(dir));
+
+    // A local isolated worktree edit (codex.edit_code): the work is tracked
+    // (linked_issue) but tests are NOT required before the edit — it touches
+    // nothing real until pushed.
+    const edit = await engine.evaluate({
+      action: "push_commits",
+      actor: "development",
+      capability: "codex.edit_code",
+    });
+    expect(edit.required_gates).toContain("linked_issue");
+    expect(edit.required_gates).not.toContain("tests_required");
+
+    // The actual push to the repo: both gates.
+    const push = await engine.evaluate({
+      action: "push_commits",
+      actor: "development",
+      capability: "codex.push_commits",
+    });
+    expect(push.required_gates).toEqual(expect.arrayContaining(["tests_required", "linked_issue"]));
+
+    // Opening a pull request: both gates.
+    const pr = await engine.evaluate({
+      action: "open_pull_requests",
+      actor: "development",
+      capability: "codex.open_pr",
+    });
+    expect(pr.required_gates).toContain("tests_required");
+  });
+
   it("keeps client contact, public publishing, and paid spend approval-gated by default", async () => {
     const config = BureauConfigSchema.parse({ autonomy: { level: 5 } });
     const engine = new PolicyEngine(config, new ApprovalRegistry(dir));
