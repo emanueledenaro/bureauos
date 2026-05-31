@@ -113,6 +113,7 @@ export {
   RootMemoryConsolidationService,
   buildRootMemoryView,
   renderRootMemory,
+  gatherRootConsolidationInputs,
   ROOT_CONSOLIDATION_ACTOR,
 } from "./memory/consolidation.js";
 export type {
@@ -121,6 +122,18 @@ export type {
   RootConsolidationResult,
   RootMemoryConsolidationDeps,
 } from "./memory/consolidation.js";
+export {
+  MorningBriefService,
+  buildMorningBrief,
+  renderMorningBrief,
+} from "./memory/morning-brief.js";
+export type {
+  MorningBrief,
+  MorningBriefState,
+  MorningBriefSignals,
+  MorningBriefResult,
+  MorningBriefDeps,
+} from "./memory/morning-brief.js";
 export { writeRunOutcomeMemory } from "./memory/run-outcomes.js";
 export type { RunOutcomeWritebackDeps, RunOutcomeWritebackResult } from "./memory/run-outcomes.js";
 export {

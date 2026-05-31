@@ -29,6 +29,7 @@ export type ArtifactType =
   | "executive-report"
   | "cross-project-executive-report"
   | "business-operating-report"
+  | "morning-brief"
   | "project-health-report"
   | "repository-verification-report"
   | "autonomy-retry-report"

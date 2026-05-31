@@ -284,26 +284,8 @@ export class RootMemoryConsolidationService {
 
   async consolidate({ now = new Date() }: { now?: Date } = {}): Promise<RootConsolidationResult> {
     const paths = workspacePaths(this.workspaceRoot);
-    const company = await new CompanyRegistry(this.workspaceRoot).get();
-    const [clients, projects, opportunities, pendingApprovals] = await Promise.all([
-      new ClientRegistry(this.workspaceRoot).list(),
-      new ProjectRegistry(this.workspaceRoot).list(),
-      new OpportunityRegistry(this.workspaceRoot).list(),
-      new ApprovalRegistry(this.workspaceRoot).listPending(),
-    ]);
-    const blockedRuns = await this.readBlockedRuns(paths.runsDir);
-    const recentDecisions = await this.readRecentDecisions(paths.decisionsLog);
-
-    const view = buildRootMemoryView({
-      organization: company.name,
-      now,
-      clients,
-      projects,
-      opportunities,
-      pendingApprovals,
-      blockedRuns,
-      recentDecisions,
-    });
+    const inputs = await gatherRootConsolidationInputs(this.workspaceRoot, now);
+    const view = buildRootMemoryView(inputs);
     const content = renderRootMemory(view);
 
     // Serialize against any concurrent writer and replace atomically (temp +
@@ -328,50 +310,84 @@ export class RootMemoryConsolidationService {
       counts: {
         activeClients: view.activeClients.length,
         activeProjects: view.activeProjects.length,
-        openOpportunities: opportunities.filter((o) => !CLOSED_OPPORTUNITY.has(o.status)).length,
+        openOpportunities: inputs.opportunities.filter((o) => !CLOSED_OPPORTUNITY.has(o.status))
+          .length,
         blockers: view.blockers.length,
-        pendingApprovals: pendingApprovals.length,
+        pendingApprovals: inputs.pendingApprovals.length,
         recentDecisions: view.recentDecisions.length,
       },
       audit,
     };
   }
+}
 
-  private async readBlockedRuns(runsDir: string): Promise<RunRecord[]> {
-    let files: string[] = [];
+async function readBlockedRuns(runsDir: string): Promise<RunRecord[]> {
+  let files: string[] = [];
+  try {
+    files = await listDocs(runsDir);
+  } catch {
+    return [];
+  }
+  const blocked: RunRecord[] = [];
+  for (const file of files) {
     try {
-      files = await listDocs(runsDir);
+      const doc = await readDoc<RunRecord>(file);
+      if (doc.front.status === "blocked") blocked.push(doc.front);
     } catch {
-      return [];
+      // Skip unreadable/partial run files; consolidation must never throw.
     }
-    const blocked: RunRecord[] = [];
-    for (const file of files) {
-      try {
-        const doc = await readDoc<RunRecord>(file);
-        if (doc.front.status === "blocked") blocked.push(doc.front);
-      } catch {
-        // Skip unreadable/partial run files; consolidation must never throw.
-      }
-    }
-    return blocked;
   }
+  return blocked;
+}
 
-  private async readRecentDecisions(
-    decisionsLog: string,
-  ): Promise<Array<{ date: string; what: string }>> {
-    if (!(await fileExists(decisionsLog))) return [];
-    const raw = await readFile(decisionsLog, "utf8").catch(() => "");
-    // decisionBlock writes `## <ISO timestamp> - <what>` headers.
-    const entries: Array<{ date: string; what: string }> = [];
-    const re = /^##\s+(\S+)\s+-\s+(.+)$/gm;
-    let match: RegExpExecArray | null;
-    while ((match = re.exec(raw))) {
-      const ts = match[1] ?? "";
-      const what = (match[2] ?? "").trim();
-      if (!what) continue;
-      entries.push({ date: ts.slice(0, 10), what });
-    }
-    // Most recent last in an append-only log; surface the newest first.
-    return entries.reverse().slice(0, DECISIONS_LIMIT);
+async function readRecentDecisions(
+  decisionsLog: string,
+): Promise<Array<{ date: string; what: string }>> {
+  if (!(await fileExists(decisionsLog))) return [];
+  const raw = await readFile(decisionsLog, "utf8").catch(() => "");
+  // decisionBlock writes `## <ISO timestamp> - <what>` headers.
+  const entries: Array<{ date: string; what: string }> = [];
+  const re = /^##\s+(\S+)\s+-\s+(.+)$/gm;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(raw))) {
+    const ts = match[1] ?? "";
+    const what = (match[2] ?? "").trim();
+    if (!what) continue;
+    entries.push({ date: ts.slice(0, 10), what });
   }
+  // Most recent last in an append-only log; surface the newest first.
+  return entries.reverse().slice(0, DECISIONS_LIMIT);
+}
+
+/**
+ * Gather the live workspace inputs that back ROOT consolidation and any other
+ * coordinator digest (e.g. the Morning Brief, SER-235). Offline and read-only:
+ * reads the company, client, project, opportunity, and pending-approval
+ * registries plus blocked runs and recent decisions. Never throws on partial
+ * data — unreadable run/decision files are skipped.
+ */
+export async function gatherRootConsolidationInputs(
+  workspaceRoot: string,
+  now: Date,
+): Promise<RootConsolidationInputs> {
+  const paths = workspacePaths(workspaceRoot);
+  const company = await new CompanyRegistry(workspaceRoot).get();
+  const [clients, projects, opportunities, pendingApprovals] = await Promise.all([
+    new ClientRegistry(workspaceRoot).list(),
+    new ProjectRegistry(workspaceRoot).list(),
+    new OpportunityRegistry(workspaceRoot).list(),
+    new ApprovalRegistry(workspaceRoot).listPending(),
+  ]);
+  const blockedRuns = await readBlockedRuns(paths.runsDir);
+  const recentDecisions = await readRecentDecisions(paths.decisionsLog);
+  return {
+    organization: company.name,
+    now,
+    clients,
+    projects,
+    opportunities,
+    pendingApprovals,
+    blockedRuns,
+    recentDecisions,
+  };
 }
