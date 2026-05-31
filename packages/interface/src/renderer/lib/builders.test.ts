@@ -130,6 +130,7 @@ describe("buildPortfolioLanes", () => {
 
     const stream = lanes[0]?.streams[0];
     expect(stream?.title).toBe("New retainer");
+    expect(stream?.kind).toBe("opportunity");
     expect(stream?.badges).toEqual([]);
   });
 
@@ -189,6 +190,7 @@ describe("buildPortfolioLanes", () => {
     });
 
     const stream = lanes[0]?.streams[0];
+    expect(stream?.kind).toBe("project");
     expect(stream?.badges).toEqual(["PM", "D", "Q", "S"]);
     expect(stream?.delivery).toMatchObject({
       repository: "owner/repo",

@@ -345,6 +345,7 @@ export function buildPortfolioLanes(state: DashboardState): PortfolioLane[] {
     laneMap.get(key)?.streams.push({
       id: project.id,
       title: project.name,
+      kind: "project",
       status: formatLabel(project.status),
       tone: projectTone(project.status),
       progress: projectProgress(project.status),
@@ -360,6 +361,7 @@ export function buildPortfolioLanes(state: DashboardState): PortfolioLane[] {
     laneMap.get(key)?.streams.push({
       id: opportunity.id,
       title: opportunity.title,
+      kind: "opportunity",
       status: formatLabel(opportunity.status),
       tone: opportunityTone(opportunity.status),
       progress: opportunityProgress(opportunity.status),
