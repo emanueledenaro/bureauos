@@ -19,6 +19,15 @@ export interface RunWorktree {
   path: string;
 }
 
+export interface RunCommitResult {
+  /** Whether a commit was created (false when the run changed no files). */
+  committed: boolean;
+  /** The run branch the commit landed on, `bureauos/<slug>/<runId>`. */
+  branch: string;
+  /** The new commit SHA, when one was created. */
+  sha?: string;
+}
+
 const RUN_ID_PATTERN = /^[A-Za-z0-9._-]+$/;
 
 function isSafeRunId(runId: string): boolean {
@@ -130,6 +139,26 @@ export class ProjectWorkspaceService {
     }
   }
 
+  /**
+   * Stage and commit everything the run produced in its worktree onto its
+   * branch, so the work persists before the worktree is released and is ready
+   * for push/PR delivery (SER-241). A no-op (`committed: false`) when the run
+   * changed no files. Local-only — no remote is ever touched here; pushing and
+   * opening a PR are separate, policy-gated steps.
+   */
+  async commitRunWork(slug: string, runId: string, message: string): Promise<RunCommitResult> {
+    const cwd = this.worktreePath(slug, runId);
+    const branch = this.branchForRun(slug, runId);
+    await runGit(["add", "-A"], { cwd });
+    if (await this.nothingStaged(cwd)) return { committed: false, branch };
+    await runGit(
+      ["-c", "user.email=bot@bureauos.local", "-c", "user.name=BureauOS", "commit", "-m", message],
+      { cwd },
+    );
+    const sha = (await runGit(["rev-parse", "HEAD"], { cwd })).stdout.trim();
+    return { committed: true, branch, sha };
+  }
+
   private async isGitRepo(repo: string): Promise<boolean> {
     try {
       await access(join(repo, ".git"));
@@ -146,6 +175,15 @@ export class ProjectWorkspaceService {
     } catch {
       // Non-zero exit (with --quiet, no output) means the branch does not exist.
       return false;
+    }
+  }
+
+  private async nothingStaged(cwd: string): Promise<boolean> {
+    try {
+      await runGit(["diff", "--cached", "--quiet"], { cwd });
+      return true; // exit 0 -> nothing staged
+    } catch {
+      return false; // exit 1 -> staged changes present
     }
   }
 

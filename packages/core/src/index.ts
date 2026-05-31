@@ -481,7 +481,11 @@ export { GitDevelopmentBranchClient } from "./execution/git-development-branch-c
 export { runGit, isSafeRef, isSafeSlug, GIT_TIMEOUT_MS, GIT_MAX_BUFFER } from "./execution/git.js";
 export type { RunGitOptions } from "./execution/git.js";
 export { ProjectWorkspaceService } from "./execution/project-workspace.js";
-export type { ProjectWorkspaceOptions, RunWorktree } from "./execution/project-workspace.js";
+export type {
+  ProjectWorkspaceOptions,
+  RunWorktree,
+  RunCommitResult,
+} from "./execution/project-workspace.js";
 export { buildDevelopmentExecution } from "./execution/development-execution.js";
 export type {
   DevelopmentExecution,
