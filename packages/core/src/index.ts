@@ -57,8 +57,13 @@ export type {
   CreateOpportunityInput,
 } from "./registries/opportunity.js";
 
-export { ApprovalRegistry } from "./registries/approval.js";
-export type { ApprovalRecord, ApprovalStatus, CreateApprovalInput } from "./registries/approval.js";
+export { ApprovalRegistry, approvalType } from "./registries/approval.js";
+export type {
+  ApprovalRecord,
+  ApprovalStatus,
+  ApprovalType,
+  CreateApprovalInput,
+} from "./registries/approval.js";
 
 export { LocalNotificationCenter } from "./notifications/local.js";
 export type {

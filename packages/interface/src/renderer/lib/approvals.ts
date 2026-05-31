@@ -93,6 +93,17 @@ export function approvalRequiresDecisionNote(approval: ApprovalRecord): boolean 
   return risk === "high" || risk === "critical";
 }
 
+export type ApprovalType = "standing" | "one-off";
+
+/**
+ * Whether an approval authorizes a single action ("one-off") or is a durable
+ * standing exception. Mirrors `approvalType` in `@bureauos/core` so CLI/API/UI
+ * label the type identically (SER-55). Single source of truth in the renderer.
+ */
+export function approvalType(approval: Pick<ApprovalRecord, "one_off">): ApprovalType {
+  return approval.one_off ? "one-off" : "standing";
+}
+
 export function isStaleApprovalError(error: unknown): boolean {
   return error instanceof Error && /approval is no longer pending|409/i.test(error.message);
 }

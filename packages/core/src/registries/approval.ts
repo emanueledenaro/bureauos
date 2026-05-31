@@ -136,6 +136,18 @@ export function approvalRequiresDecisionNote(
   return risk === "high" || risk === "critical";
 }
 
+export type ApprovalType = "standing" | "one-off";
+
+/**
+ * Whether an approval authorizes a single action ("one-off") or stands as a
+ * durable policy exception ("standing"). Standing approvals (`one_off: false`)
+ * are reusable until they expire; one-off approvals are burned on first use.
+ * Single source of truth so CLI/API/UI label the type identically (SER-55).
+ */
+export function approvalType(approval: Pick<ApprovalRecord, "one_off">): ApprovalType {
+  return approval.one_off ? "one-off" : "standing";
+}
+
 export class ApprovalRegistry {
   private readonly notifications?: ApprovalNotificationSink;
   private readonly audit?: AuditLog;
