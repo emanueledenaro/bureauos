@@ -321,18 +321,24 @@ function blockedReportBody(args: {
   missingSections: readonly string[];
   pipelineValue: number;
   openOpportunities: number;
+  status?: string;
+  nextActions?: readonly string[];
 }): string {
+  const nextActions = args.nextActions ?? [
+    "Complete brand, offers, and channels memory.",
+    "Then run the content pipeline again to generate draft social, campaign, creative, and ads artifacts.",
+  ];
   return `# Content Pipeline Report
 
 Generated: ${args.generatedAt}
 
 ## Status
 
-Blocked before draft generation because growth memory is incomplete.
+${args.status ?? "Blocked before draft generation because growth memory is incomplete."}
 
 ## Missing Memory
 
-${args.missingSections.map((section) => `- ${section}`).join("\n")}
+${args.missingSections.length ? args.missingSections.map((section) => `- ${section}`).join("\n") : "- (none)"}
 
 ## Revenue Context
 
@@ -341,8 +347,7 @@ ${args.missingSections.map((section) => `- ${section}`).join("\n")}
 
 ## Next Actions
 
-- Complete brand, offers, and channels memory.
-- Then run the content pipeline again to generate draft social, campaign, creative, and ads artifacts.
+${nextActions.map((action) => `- ${action}`).join("\n")}
 
 ## Approval Boundary
 
@@ -464,6 +469,55 @@ export class GrowthContentPipelineService {
         missing_sections: memory.missing_sections,
         pipeline_value: pipelineValue,
         open_opportunities: openOpportunities.length,
+        drafts: [],
+        approvals: [],
+        report,
+        next_actions: nextActions,
+      };
+    }
+
+    // Memory is ready but there is nothing in the pipeline to draft for. Return
+    // a graceful empty result instead of dereferencing `openOpportunities[0]`
+    // (undefined) → `opportunity.client_id` and throwing (SER-231).
+    if (openOpportunities.length === 0) {
+      const nextActions = [
+        "Capture a lead or opportunity (e.g. via coordinator intake), then run the content pipeline again.",
+      ];
+      const report = await this.artifacts.write({
+        type: "content-pipeline-report",
+        createdBy: "growth",
+        ...(input.runId ? { runId: input.runId } : {}),
+        status: "submitted",
+        metadata: {
+          generated_at: generatedAt,
+          memory_ready: true,
+          missing_sections: [],
+          pipeline_value: pipelineValue,
+          open_opportunities: 0,
+          draft_count: 0,
+        },
+        body: blockedReportBody({
+          generatedAt,
+          missingSections: [],
+          pipelineValue,
+          openOpportunities: 0,
+          status: "No draft generated: growth memory is ready but there are no open opportunities.",
+          nextActions,
+        }),
+      });
+      await this.audit.append({
+        actor: "supreme_coordinator",
+        action: "growth.content_pipeline.blocked",
+        target: "growth",
+        artifact_id: report.id,
+        result: "ok",
+      });
+      return {
+        generated_at: generatedAt,
+        memory_ready: true,
+        missing_sections: [],
+        pipeline_value: pipelineValue,
+        open_opportunities: 0,
         drafts: [],
         approvals: [],
         report,

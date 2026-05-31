@@ -133,4 +133,36 @@ describe("GrowthContentPipelineService", () => {
     const log = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(log).toContain("growth.content_pipeline.blocked");
   });
+
+  it("returns a graceful empty result when memory is ready but there are no open opportunities (SER-231)", async () => {
+    // Growth memory configured, but no opportunity captured yet — the
+    // recommended onboarding order. This used to throw on opportunity.client_id.
+    await new GrowthMemoryService(dir).update({
+      brand: "BureauOS is an AAAS operating room for owner-led software companies.",
+      offers: "Autonomous delivery operations, client memory, and growth execution.",
+      channels: "X, LinkedIn, GitHub.",
+      actor: "owner",
+    });
+
+    const result = await new GrowthContentPipelineService(dir).generate({
+      now: new Date("2026-05-25T10:00:00.000Z"),
+    });
+
+    expect(result.memory_ready).toBe(true);
+    expect(result.open_opportunities).toBe(0);
+    expect(result.drafts).toEqual([]);
+    expect(result.report).toMatchObject({
+      type: "content-pipeline-report",
+      status: "submitted",
+      draft_count: 0,
+      memory_ready: true,
+    });
+
+    const report = await new ArtifactStore(dir).read(result.report.id);
+    expect(report?.body).toContain("no open opportunities");
+    expect(report?.body).not.toContain("growth memory is incomplete");
+
+    const log = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(log).toContain("growth.content_pipeline.blocked");
+  });
 });
