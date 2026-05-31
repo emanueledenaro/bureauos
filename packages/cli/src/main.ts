@@ -2149,7 +2149,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     return 1;
   }
   if (typeof entry === "function") {
-    return entry(args.slice(1));
+    return runHandler(command, entry, args.slice(1));
   }
   const sub = args[1];
   if (!sub || !hasOwn.call(entry, sub)) {
@@ -2162,5 +2162,17 @@ export async function main(argv: readonly string[]): Promise<number> {
     process.stderr.write(`bureau ${command}: unknown sub-command "${sub}"\n`);
     return 1;
   }
-  return handler(args.slice(2));
+  return runHandler(`${command} ${sub}`, handler, args.slice(2));
+}
+
+// Run a command handler, converting any uncaught throw into the documented
+// `bureau: <command>: <message>` form. Without this, handlers that do not wrap
+// their own workspace/service calls (e.g. `intake`, `report generate`) leak a
+// raw `bureau: fatal: Error: ...` prefix from the bin entrypoint (SER-210).
+async function runHandler(label: string, handler: Handler, args: string[]): Promise<number> {
+  try {
+    return await handler(args);
+  } catch (error) {
+    return err(`${label}: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
