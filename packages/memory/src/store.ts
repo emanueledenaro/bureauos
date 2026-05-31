@@ -218,6 +218,10 @@ export class LocalMemoryStore {
         const end = Math.min(content.length, idx + needle.length + 80);
         hits.push({
           path: file,
+          // Match the FTS5 backend, which returns a workspace-relative path.
+          // Without this the CLI leaks the owner's absolute home path on the
+          // Markdown-scan fallback (SER-209).
+          relativePath: this.relativeToRoot(file),
           snippet: content.slice(start, end).replace(/\s+/g, " "),
           score,
           source: "scan",
