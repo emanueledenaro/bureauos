@@ -102,42 +102,56 @@ export function GrowthView({
         />
       }
     >
-      {generate.error ? (
-        <ActionBanner
-          tone="danger"
-          title="Content generation failed"
-          detail={generate.error}
-          onDismiss={generate.reset}
-          className="mb-3"
-        />
-      ) : null}
-      {generate.result ? (
-        <ActionBanner
-          tone="success"
-          title={`${generate.result.drafts.length} drafts generated · report ${generate.result.report.id}`}
-          detail="Drafts were created locally; external publishing stays gated."
-          onDismiss={generate.reset}
-          className="mb-3"
-        />
-      ) : null}
-      {review.error ? (
-        <ActionBanner
-          tone="danger"
-          title="Growth review failed"
-          detail={review.error}
-          onDismiss={review.reset}
-          className="mb-3"
-        />
-      ) : null}
-      {review.result ? (
-        <ActionBanner
-          tone="success"
-          title={`Growth review generated · ${review.result.report.id}`}
-          detail={review.result.recommendations[0] ?? "Review is ready locally."}
-          onDismiss={review.reset}
-          className="mb-3"
-        />
-      ) : null}
+      {/*
+        Render the four action banners inside one always-present container so a
+        banner toggling on after "Generate drafts"/"Run review" only mutates
+        this subtree, never reordering the major sections (OperationalFocus,
+        KpiBar, ...) that follow it. Each banner is stably keyed. This isolates
+        the post-action result render that produced a stray insertBefore
+        reconciliation error in this view (SER-216). The empty container has no
+        layout box of its own, so spacing is unchanged. */}
+      <div>
+        {generate.error ? (
+          <ActionBanner
+            key="generate-error"
+            tone="danger"
+            title="Content generation failed"
+            detail={generate.error}
+            onDismiss={generate.reset}
+            className="mb-3"
+          />
+        ) : null}
+        {generate.result ? (
+          <ActionBanner
+            key="generate-result"
+            tone="success"
+            title={`${generate.result.drafts.length} drafts generated · report ${generate.result.report.id}`}
+            detail="Drafts were created locally; external publishing stays gated."
+            onDismiss={generate.reset}
+            className="mb-3"
+          />
+        ) : null}
+        {review.error ? (
+          <ActionBanner
+            key="review-error"
+            tone="danger"
+            title="Growth review failed"
+            detail={review.error}
+            onDismiss={review.reset}
+            className="mb-3"
+          />
+        ) : null}
+        {review.result ? (
+          <ActionBanner
+            key="review-result"
+            tone="success"
+            title={`Growth review generated · ${review.result.report.id}`}
+            detail={review.result.recommendations[0] ?? "Review is ready locally."}
+            onDismiss={review.reset}
+            className="mb-3"
+          />
+        ) : null}
+      </div>
 
       <OperationalFocus
         className="mb-section"
