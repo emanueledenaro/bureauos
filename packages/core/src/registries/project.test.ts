@@ -45,6 +45,21 @@ describe("ProjectRegistry", () => {
     expect(ownershipDoc).toContain("Project Manager owns project memory");
   });
 
+  it("keeps the stable id and slug when a project is renamed (SER-45)", async () => {
+    const r = new ProjectRegistry(dir);
+    const created = await r.create({ name: "Launch Site", clientId: "client_x" });
+    const renamed = await r.update(created.slug, { name: "Launch Site v2" });
+    // Renaming the display field never re-keys the record: id and slug are
+    // excluded from the update patch by type and stay stable, so ownership,
+    // memory paths, and links keyed on them survive the rename.
+    expect(renamed.name).toBe("Launch Site v2");
+    expect(renamed.id).toBe(created.id);
+    expect(renamed.slug).toBe(created.slug);
+    const got = await r.get(created.slug);
+    expect(got?.id).toBe(created.id);
+    expect(got?.name).toBe("Launch Site v2");
+  });
+
   it("lists projects for a given client", async () => {
     const r = new ProjectRegistry(dir);
     await r.create({ name: "P1", clientId: "client_a" });

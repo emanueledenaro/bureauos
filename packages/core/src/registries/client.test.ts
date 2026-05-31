@@ -56,6 +56,21 @@ describe("ClientRegistry", () => {
     expect(updated.status).toBe("active");
   });
 
+  it("keeps the stable id and lookup slug when the display name is renamed (SER-45)", async () => {
+    const r = new ClientRegistry(dir);
+    const created = await r.create({ name: "Renamable Co.", industry: "saas" });
+    const renamed = await r.update("renamable-co", { name: "Renamed Co." });
+    // The display field changed...
+    expect(renamed.name).toBe("Renamed Co.");
+    // ...but the canonical id and the lookup slug are unchanged, so links and
+    // memory paths keyed on them never break.
+    expect(renamed.id).toBe(created.id);
+    expect(renamed.slug).toBe(created.slug);
+    const got = await r.get("renamable-co");
+    expect(got?.id).toBe(created.id);
+    expect(got?.name).toBe("Renamed Co.");
+  });
+
   it("does not lose concurrent updates to distinct fields (SER-187)", async () => {
     const r = new ClientRegistry(dir);
     await r.create({ name: "Delta" });
