@@ -45,6 +45,21 @@ describe("parseSettingsUpdate", () => {
     });
   });
 
+  it("accepts a valid interface language and rejects unknown languages/keys", () => {
+    expect(parseSettingsUpdate({ interface: { language: "it" } }).interface).toEqual({
+      language: "it",
+    });
+    expect(parseSettingsUpdate({ interface: { language: "en" } }).interface).toEqual({
+      language: "en",
+    });
+    expect(() => parseSettingsUpdate({ interface: { language: "fr" } })).toThrow(
+      SettingsUpdateError,
+    );
+    expect(() => parseSettingsUpdate({ interface: { mode: "headless" } })).toThrow(
+      SettingsUpdateError,
+    );
+  });
+
   it("rejects unknown groups, unknown keys, and wrong types", () => {
     expect(() => parseSettingsUpdate({ providers: {} })).toThrow(SettingsUpdateError);
     expect(() => parseSettingsUpdate({ autonomy: { not_a_key: true } })).toThrow(
@@ -98,6 +113,19 @@ describe("applySettingsUpdate", () => {
     expect(reloaded.autonomy.merge_pull_requests).toBe(true);
     expect(reloaded.limits.max_retries_per_task).toBe(6);
     expect(reloaded.growth_autonomy.draft_content).toBe(true);
+  });
+
+  it("persists the interface language and round-trips through the loader", async () => {
+    const result = await applySettingsUpdate(configFile, {
+      interface: { language: "it" },
+    });
+    expect(result.config.interface.language).toBe("it");
+    expect(result.changes).toEqual([{ path: "interface.language", value: "it" }]);
+
+    const reloaded = await loadConfig(configFile);
+    expect(reloaded.interface.language).toBe("it");
+    // Unrelated config is preserved.
+    expect(reloaded.organization.name).toBe("Round Trip Co");
   });
 
   it("rejects a patch that would produce an invalid config without writing", async () => {

@@ -133,6 +133,10 @@ const InterfaceConfig = z
   .object({
     enabled: z.boolean().default(true),
     mode: z.enum(["local_dashboard", "headless"]).default("local_dashboard"),
+    // Owner-facing UI language. "en" is the base; "it" is the second supported
+    // locale (SER-236). The selection is persisted here and editable from the
+    // Settings view.
+    language: z.enum(["en", "it"]).default("en"),
     mobile_first: z.boolean().default(true),
     default_views: z.array(z.string()).default([]),
     notifications: InterfaceNotificationsConfig,

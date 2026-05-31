@@ -125,6 +125,7 @@ export interface SettingsSummary {
   interface: {
     enabled: boolean;
     mode: string;
+    language: "en" | "it";
     mobile_first: boolean;
   };
   supreme_coordinator: {
@@ -940,6 +941,7 @@ export const Api = {
     autonomy?: Record<string, boolean>;
     growth_autonomy?: Record<string, boolean>;
     limits?: Record<string, number | boolean>;
+    interface?: { language?: "en" | "it" };
   }) =>
     api<SettingsSummary>("/settings/autonomy", {
       method: "POST",
