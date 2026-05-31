@@ -37,7 +37,7 @@ import {
   Scheduler,
   VERSION,
   appendDailyNote,
-  buildCodexRuntimeFromConfig,
+  buildDevelopmentExecution,
   createCoordinatorRunDispatcher,
   autonomyLevelName,
   defaultConfig,
@@ -720,12 +720,11 @@ const handleProjectDispatch: Handler = async (args) => {
     return err(`project dispatch: unknown run type "${runType}"`);
   }
   const config = await loadWorkspaceConfig(process.cwd());
-  // Supply the real Codex runtime (when `runtime.codex.enabled`) so a dispatched
-  // feature/bug run's development agent executes real code (SER-239).
-  const developmentRuntime = buildCodexRuntimeFromConfig(config);
+  // The dispatch service builds the real Codex runtime + capability gate from
+  // config internally (when `runtime.codex.enabled`) so a dispatched feature/bug
+  // run's development agent executes real code (SER-239).
   const result = await new ProjectDispatchService(process.cwd(), {
     config,
-    ...(developmentRuntime ? { developmentRuntime } : {}),
   }).dispatch({
     projectSlug: flags.project,
     runType: runType as RunType,
@@ -963,10 +962,12 @@ const handleRunNew: Handler = async (args) => {
   const audit = new AuditLog(workspacePaths(process.cwd()).auditLog);
   const policy = new PolicyEngine(config, approvals);
   const artifacts = new ArtifactStore(process.cwd());
-  const developmentRuntime = buildCodexRuntimeFromConfig(config);
-  const capabilityUse = developmentRuntime
-    ? new CapabilityUseService(process.cwd(), { config, artifacts, approvals, policy, audit })
-    : undefined;
+  const { developmentRuntime, capabilityUse } = buildDevelopmentExecution(process.cwd(), config, {
+    artifacts,
+    approvals,
+    policy,
+    audit,
+  });
   const dispatcher =
     flags.stub === true
       ? undefined

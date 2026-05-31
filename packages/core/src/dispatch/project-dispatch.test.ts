@@ -117,13 +117,12 @@ describe("ProjectDispatchService", () => {
     await run("git", ["add", "."], { cwd: dir });
     await run("git", ["commit", "-q", "-m", "baseline"], { cwd: dir });
 
-    const developmentRuntime = buildCodexRuntimeFromConfig(config);
-    expect(developmentRuntime).toBeDefined();
+    // The dispatch service builds the codex runtime from config internally
+    // (buildDevelopmentExecution); assert the config is actually runtime-enabled
+    // before we rely on that path.
+    expect(buildCodexRuntimeFromConfig(config)).toBeDefined();
 
-    await new ProjectDispatchService(dir, {
-      config,
-      ...(developmentRuntime ? { developmentRuntime } : {}),
-    }).dispatch({
+    await new ProjectDispatchService(dir, { config }).dispatch({
       projectSlug: intake.project.slug,
       runType: "feature",
       scope: "Build the booking page",
