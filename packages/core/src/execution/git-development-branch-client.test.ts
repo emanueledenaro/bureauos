@@ -40,15 +40,13 @@ describe("GitDevelopmentBranchClient (real git, SER-239)", () => {
     expect(await currentBranch(dir)).toBe("bureauos/feature-x");
   }, 30_000);
 
-  it("refuses a baseRef that looks like a flag", async () => {
+  it("refuses an unsafe baseRef (option injection or range/traversal)", async () => {
     const client = new GitDevelopmentBranchClient(dir);
-    await expect(
-      client.createBranch({
-        branchName: "bureauos/x",
-        baseRef: "--upload-pack=evil",
-        force: false,
-      }),
-    ).rejects.toThrow(/looks like a flag/);
+    for (const baseRef of ["--upload-pack=evil", "main..evil", "../escape"]) {
+      await expect(
+        client.createBranch({ branchName: "bureauos/x", baseRef, force: false }),
+      ).rejects.toThrow(/unsafe baseRef/);
+    }
   });
 
   it("DevelopmentBranchService creates a real branch end-to-end when policy allows", async () => {
