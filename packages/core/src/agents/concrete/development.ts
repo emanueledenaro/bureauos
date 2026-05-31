@@ -125,7 +125,10 @@ policy-gated Codex runtime capability is supplied to this agent.
       });
     }
 
-    if (!input.context.workspaceRoot) {
+    // Edit/test real code in the run's isolated worktree when the dispatch
+    // provisioned one (SER-243); otherwise fall back to the workspace root.
+    const codeWorkspaceRoot = input.context.codeWorkspaceRoot ?? input.context.workspaceRoot;
+    if (!codeWorkspaceRoot) {
       return this.blockRuntime(input, {
         planArtifactId: artifact.id,
         capabilityArtifactIds: capabilityArtifacts,
@@ -137,7 +140,7 @@ policy-gated Codex runtime capability is supplied to this agent.
     let runtimeResult: RuntimeResult;
     try {
       await runtime.prepare({
-        workspaceRoot: input.context.workspaceRoot,
+        workspaceRoot: codeWorkspaceRoot,
         runId: input.context.runId,
         ...(input.context.projectId !== undefined ? { projectId: input.context.projectId } : {}),
         ...(input.context.clientId !== undefined ? { clientId: input.context.clientId } : {}),

@@ -303,6 +303,46 @@ describe("concrete agents", () => {
     expect(log).toContain("agent.development.runtime_executed");
   });
 
+  it("runs the codex runtime in the run's isolated worktree when supplied (SER-243)", async () => {
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const artifacts = new ArtifactStore(dir);
+    const policy = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
+    const runtime = new FakeRuntime({ ok: true, artifacts: [] });
+    const agent = new DevelopmentAgent({
+      artifacts,
+      audit,
+      policy,
+      capabilityUse: {
+        async check(input) {
+          const artifact = await artifacts.write({
+            type: "capability-audit",
+            createdBy: input.agent,
+            runId: "run_dev",
+            body: `# Gate ${input.action}\n\nAllowed.`,
+          });
+          return { status: "allowed", artifact };
+        },
+      },
+    });
+
+    const codeWorkspaceRoot = "/tmp/bureauos-some-worktree/run_dev";
+    const out = await agent.execute({
+      context: {
+        // The agency workspace (`.bureauos`) and the code workspace are distinct:
+        // the runtime must edit code in the isolated worktree, not the workspace.
+        workspaceRoot: dir,
+        codeWorkspaceRoot,
+        runId: "run_dev",
+        scope: "implement runtime work",
+      },
+      capabilities: new Map([["codex", runtime]]),
+    });
+
+    expect(out.ok).toBe(true);
+    expect(runtime.prepared?.workspaceRoot).toBe(codeWorkspaceRoot);
+    expect(runtime.prepared?.workspaceRoot).not.toBe(dir);
+  });
+
   it("drives a REAL codex runtime end-to-end: the development agent writes real code (SER-239)", async () => {
     // The runtime's diff inspector reads `git status`, so the workspace must be
     // a git repo with a clean baseline.
