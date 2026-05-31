@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -136,6 +136,36 @@ describe("ProjectDispatchService", () => {
     // so no real edit was applied.
     expect(auditLog).toContain("agent.development.runtime_blocked");
     expect(auditLog).toMatch(/tests_required|linked_issue/);
+  }, 60_000);
+
+  it("provisions an isolated worktree for a dispatched code run and releases it (SER-243/241)", async () => {
+    const config = defaultConfig("agency");
+    config.runtime.codex.enabled = true;
+
+    const intake = await new CoordinatorIntakeService(dir, { config }).process({
+      clientName: "Trattoria Belluno",
+      message: "Vuole un sito con menu e prenotazioni.",
+      source: "owner_chat",
+    });
+
+    const result = await new ProjectDispatchService(dir, { config }).dispatch({
+      projectSlug: intake.project.slug,
+      runType: "feature",
+      scope: "Build the booking page",
+    });
+
+    const repo = join(dir, "workspaces", intake.project.slug);
+    // The per-project repo was provisioned (separate from the .bureauos brain)...
+    expect((await stat(join(repo, ".git"))).isDirectory()).toBe(true);
+    // ...a dedicated run branch was created and survives for later push/PR...
+    const branch = `bureauos/${intake.project.slug}/${result.run.id}`;
+    await expect(
+      run("git", ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], { cwd: repo }),
+    ).resolves.toBeDefined();
+    // ...and the worktree itself was released (no leftover working directory).
+    await expect(
+      stat(join(dir, "workspaces", ".worktrees", intake.project.slug, result.run.id)),
+    ).rejects.toThrow();
   }, 60_000);
 
   it("creates project-scoped dispatch and handoff packets before running specialist agents", async () => {

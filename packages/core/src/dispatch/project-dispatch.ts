@@ -9,6 +9,7 @@ import { configureAgentProviderRouting } from "../agents/provider-routing.js";
 import { ArtifactStore, type ArtifactRecord } from "../artifacts/store.js";
 import { AuditLog } from "../audit/log.js";
 import { buildDevelopmentExecution } from "../execution/development-execution.js";
+import { ProjectWorkspaceService } from "../execution/project-workspace.js";
 import type { BureauConfig } from "../config/schema.js";
 import { defaultConfig } from "../config/loader.js";
 import { workspacePaths } from "../paths.js";
@@ -367,25 +368,64 @@ export class ProjectDispatchService {
         audit: this.audit,
       },
     );
-    const dispatch = await dispatchRun(
-      {
-        audit: this.audit,
-        artifacts: this.artifacts,
-        policy: this.policy,
-        config: this.config,
-        ...(providerRouter ? { providerRouter } : {}),
-        ...(developmentRuntime ? { developmentRuntime } : {}),
-        ...(capabilityUse ? { capabilityUse } : {}),
-      },
-      {
-        workspaceRoot: this.workspaceRoot,
-        run,
-        scope,
-        briefing: `Project dispatch packet: ${packet.id}\n\n${briefing}`,
-        contextArtifactIds: [packet.id],
-        contextArtifactIdsByRole,
-      },
-    );
+    // Provision an isolated git worktree for a code run so the development agent
+    // edits real code off the .bureauos workspace and isolated from other runs
+    // (SER-243/239). Only when a real runtime will actually run a development
+    // step; planning-only runs get no worktree.
+    const workspace = new ProjectWorkspaceService(this.workspaceRoot);
+    const worktree =
+      developmentRuntime && pipeline.includes("development")
+        ? await workspace.acquireRunWorktree(project.slug, run.id)
+        : undefined;
+
+    let dispatch: DispatchOutput;
+    try {
+      dispatch = await dispatchRun(
+        {
+          audit: this.audit,
+          artifacts: this.artifacts,
+          policy: this.policy,
+          config: this.config,
+          ...(providerRouter ? { providerRouter } : {}),
+          ...(developmentRuntime ? { developmentRuntime } : {}),
+          ...(capabilityUse ? { capabilityUse } : {}),
+        },
+        {
+          workspaceRoot: this.workspaceRoot,
+          run,
+          scope,
+          briefing: `Project dispatch packet: ${packet.id}\n\n${briefing}`,
+          contextArtifactIds: [packet.id],
+          contextArtifactIdsByRole,
+          ...(worktree ? { codeWorkspaceRoot: worktree.path } : {}),
+        },
+      );
+    } finally {
+      if (worktree) {
+        try {
+          // Persist the run's edits onto its branch before tearing down the
+          // worktree — a forced worktree removal would discard uncommitted work.
+          // A no-op when the run changed nothing (e.g. blocked on a gate). The
+          // branch survives for the gated push/PR delivery (SER-241).
+          await workspace.commitRunWork(
+            project.slug,
+            run.id,
+            `bureauos(${project.slug}): ${scope}`,
+          );
+        } catch (error) {
+          // Never let a commit failure mask a dispatch error or skip cleanup:
+          // audit it and still release the worktree below.
+          await this.audit.append({
+            actor: "supreme_coordinator",
+            action: "project.dispatch.worktree_commit_failed",
+            target: run.id,
+            error: error instanceof Error ? error.message : String(error),
+            result: "error",
+          });
+        }
+        await workspace.releaseRunWorktree(project.slug, run.id);
+      }
+    }
     const producedArtifactIds = dispatch.steps.flatMap((step) => step.artifactIds);
     const updatedRun = await this.runs.attachArtifacts(run.id, [
       packet.id,

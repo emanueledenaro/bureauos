@@ -72,6 +72,12 @@ export interface DispatchInput {
   briefing?: string;
   contextArtifactIds?: readonly string[];
   contextArtifactIdsByRole?: Readonly<Record<string, readonly string[]>>;
+  /**
+   * Isolated working directory (the run's git worktree, SER-243) the development
+   * agent should edit/test real code in. Threaded only to the development role's
+   * context; other agents are unaffected.
+   */
+  codeWorkspaceRoot?: string;
 }
 
 export interface DispatchStep {
@@ -181,6 +187,9 @@ ${input.briefing ?? "(none supplied)"}
         workspaceRoot: input.workspaceRoot,
         runId: input.run.id,
         scope: input.scope,
+        ...(role === "development" && input.codeWorkspaceRoot
+          ? { codeWorkspaceRoot: input.codeWorkspaceRoot }
+          : {}),
         ...(input.contextArtifactIdsByRole?.[role]?.[0]
           ? { handoffArtifactId: input.contextArtifactIdsByRole[role][0] }
           : {}),
