@@ -161,14 +161,24 @@ export function RiskView({
           <div className="flex flex-wrap justify-end gap-1.5">
             <StatusPill value={`Allow ${policyExplain?.counts.allow ?? 0}`} tone="success" />
             <StatusPill value={`Deny ${policyExplain?.counts.deny ?? 0}`} tone="danger" />
+            {/* "Gated" = recent policy DECISIONS that required approval — distinct
+                from the "Pending approvals" KPI above (the owner's pending queue).
+                Labeled to avoid reading as a contradictory approval count (SER-224). */}
             <StatusPill
-              value={`Approval ${policyExplain?.counts.require_approval ?? 0}`}
+              value={`Gated ${policyExplain?.counts.require_approval ?? 0}`}
               tone="warning"
             />
           </div>
         </div>
 
-        {policyDecisions.length > 0 ? (
+        {!policyExplain ? (
+          <EmptyState
+            className="mt-3"
+            title="Loading policy decisions"
+            description="Fetching recent capability checks and their policy outcomes."
+            icon={ShieldCheck}
+          />
+        ) : policyDecisions.length > 0 ? (
           <div className="mt-3 grid gap-2 lg:grid-cols-3">
             {policyDecisions.map((decision) => (
               <BaseCard key={decision.id} className="min-w-0 gap-2">
