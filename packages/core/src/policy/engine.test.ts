@@ -239,6 +239,49 @@ describe("PolicyEngine", () => {
     expect(second.approval_id).toBe(a.id);
   });
 
+  it("ignores one-off approvals for growth actions when allow_one_off_owner_approval is false (SER-182)", async () => {
+    const approvals = new ApprovalRegistry(dir);
+    const oneOff = await approvals.request({
+      action: "publish_public_content",
+      actor: "owner",
+      target: "post_x",
+      scope: "one-off",
+      oneOff: true,
+    });
+    await approvals.resolve(oneOff.id, "approved", "owner", "go");
+
+    const config = defaultConfig("freelancer");
+    config.growth_autonomy.allow_one_off_owner_approval = false;
+    const engine = new PolicyEngine(config, approvals);
+
+    // With the control disabled, a one-off approval no longer authorizes the
+    // growth action — it stays gated (previously it was honored, fail-open).
+    const blocked = await engine.evaluate({
+      action: "publish_public_content",
+      actor: "social",
+      target: "post_x",
+    });
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.approval_id).toBeUndefined();
+
+    // A standing/recurring approval still authorizes.
+    const standing = await approvals.request({
+      action: "publish_public_content",
+      actor: "owner",
+      target: "post_x",
+      scope: "standing",
+      oneOff: false,
+    });
+    await approvals.resolve(standing.id, "approved", "owner", "standing grant");
+    const allowed = await engine.evaluate({
+      action: "publish_public_content",
+      actor: "social",
+      target: "post_x",
+    });
+    expect(allowed.allowed).toBe(true);
+    expect(allowed.approval_id).toBe(standing.id);
+  });
+
   it("does not consume a one-off approval during a preview evaluation", async () => {
     const approvals = new ApprovalRegistry(dir);
     const a = await approvals.request({
