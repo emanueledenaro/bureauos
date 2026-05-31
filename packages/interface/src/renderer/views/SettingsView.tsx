@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Building2, KeyRound, Loader2, Plug, Shield } from "lucide-react";
+import { Building2, Globe, KeyRound, Loader2, Plug, Shield } from "lucide-react";
 import { SectionShell } from "../components/dashboard/SectionShell";
 import { ResponsiveTable } from "../components/dashboard/ResponsiveTable";
 import { Button } from "../components/ui/button";
@@ -264,6 +264,7 @@ export function SettingsView({
       autonomy?: Record<string, boolean>;
       growth_autonomy?: Record<string, boolean>;
       limits?: Record<string, number | boolean>;
+      interface?: { language?: "en" | "it" };
     },
   ): Promise<void> => {
     if (savingSetting) return;
@@ -554,6 +555,45 @@ export function SettingsView({
             </Grid2>
             <div className="mt-3 text-[10px] text-muted-foreground">
               Overrides: {settings.providers.configured_overrides.join(", ") || "none"}
+            </div>
+          </SettingsCard>
+
+          <SettingsCard
+            icon={Globe}
+            label="Language"
+            title={settings.interface.language === "it" ? "Italiano" : "English"}
+          >
+            <div className="flex gap-2">
+              {(
+                [
+                  ["en", "English"],
+                  ["it", "Italiano"],
+                ] as const
+              ).map(([code, label]) => {
+                const active = settings.interface.language === code;
+                return (
+                  <button
+                    key={code}
+                    type="button"
+                    disabled={savingSetting !== undefined || active}
+                    onClick={() =>
+                      void updateSettings("interface.language", { interface: { language: code } })
+                    }
+                    className={cn(
+                      "rounded-md border px-3 py-1.5 text-[12px] font-medium transition-colors focus-ring disabled:cursor-default",
+                      active
+                        ? "border-primary/60 bg-primary/15 text-foreground"
+                        : "border-border/60 text-muted-foreground hover:border-border hover:text-foreground",
+                    )}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+              Saved to your workspace and applied on next load. English is the complete base;
+              Italian translation of the interface is rolling out.
             </div>
           </SettingsCard>
 

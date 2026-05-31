@@ -62,21 +62,27 @@ const LIMITS_BOOLEAN_KEYS = [
   "require_human_for_destructive_actions",
 ] as const;
 
+// Owner-facing UI language is an enum leaf (not a boolean/number), so it has its
+// own allowlist of accepted values (SER-236).
+const INTERFACE_LANGUAGE_VALUES = ["en", "it"] as const;
+
 export type AutonomyBooleanKey = (typeof AUTONOMY_BOOLEAN_KEYS)[number];
 export type GrowthBooleanKey = (typeof GROWTH_BOOLEAN_KEYS)[number];
 export type LimitsIntegerKey = (typeof LIMITS_INTEGER_KEYS)[number];
 export type LimitsBooleanKey = (typeof LIMITS_BOOLEAN_KEYS)[number];
+export type InterfaceLanguage = (typeof INTERFACE_LANGUAGE_VALUES)[number];
 
 export interface SettingsUpdateInput {
   autonomy?: Partial<Record<AutonomyBooleanKey, boolean>>;
   growth_autonomy?: Partial<Record<GrowthBooleanKey, boolean>>;
   limits?: Partial<Record<LimitsIntegerKey, number>> & Partial<Record<LimitsBooleanKey, boolean>>;
+  interface?: { language?: InterfaceLanguage };
 }
 
 /** Audit-friendly description of one changed leaf, e.g. `autonomy.create_issues`. */
 export interface SettingsChange {
   path: string;
-  value: boolean | number;
+  value: boolean | number | string;
 }
 
 export interface SettingsUpdateResult {
@@ -99,6 +105,7 @@ const AUTONOMY_KEY_SET = new Set<string>(AUTONOMY_BOOLEAN_KEYS);
 const GROWTH_KEY_SET = new Set<string>(GROWTH_BOOLEAN_KEYS);
 const LIMITS_INTEGER_KEY_SET = new Set<string>(LIMITS_INTEGER_KEYS);
 const LIMITS_BOOLEAN_KEY_SET = new Set<string>(LIMITS_BOOLEAN_KEYS);
+const INTERFACE_LANGUAGE_VALUE_SET = new Set<string>(INTERFACE_LANGUAGE_VALUES);
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -114,7 +121,7 @@ export function parseSettingsUpdate(body: unknown): SettingsUpdateInput {
     throw new SettingsUpdateError("request body must be an object");
   }
 
-  const known = new Set(["autonomy", "growth_autonomy", "limits"]);
+  const known = new Set(["autonomy", "growth_autonomy", "limits", "interface"]);
   for (const key of Object.keys(body)) {
     if (!known.has(key)) {
       throw new SettingsUpdateError(`unknown settings group: ${key}`);
@@ -180,10 +187,30 @@ export function parseSettingsUpdate(body: unknown): SettingsUpdateInput {
     result.limits = limits;
   }
 
+  if (body.interface !== undefined) {
+    if (!isPlainObject(body.interface)) {
+      throw new SettingsUpdateError("interface must be an object");
+    }
+    const iface: { language?: InterfaceLanguage } = {};
+    for (const [key, value] of Object.entries(body.interface)) {
+      if (key !== "language") {
+        throw new SettingsUpdateError(`interface.${key} is not editable`);
+      }
+      if (typeof value !== "string" || !INTERFACE_LANGUAGE_VALUE_SET.has(value)) {
+        throw new SettingsUpdateError(
+          `interface.language must be one of: ${INTERFACE_LANGUAGE_VALUES.join(", ")}`,
+        );
+      }
+      iface.language = value as InterfaceLanguage;
+    }
+    result.interface = iface;
+  }
+
   if (
     result.autonomy === undefined &&
     result.growth_autonomy === undefined &&
-    result.limits === undefined
+    result.limits === undefined &&
+    result.interface === undefined
   ) {
     throw new SettingsUpdateError("no editable settings provided");
   }
@@ -194,7 +221,7 @@ export function parseSettingsUpdate(body: unknown): SettingsUpdateInput {
 function patchGroup(
   raw: Record<string, unknown>,
   group: string,
-  patch: Record<string, boolean | number>,
+  patch: Record<string, boolean | number | string>,
   changes: SettingsChange[],
 ): void {
   const existing = isPlainObject(raw[group]) ? (raw[group] as Record<string, unknown>) : {};
@@ -248,6 +275,9 @@ export async function applySettingsUpdate(
   }
   if (update.limits) {
     patchGroup(document, "limits", update.limits, changes);
+  }
+  if (update.interface) {
+    patchGroup(document, "interface", update.interface, changes);
   }
 
   // Validate the fully patched document. This catches both bad patches and any
