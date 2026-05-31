@@ -27,10 +27,28 @@ const SLUG_RE = /[^a-z0-9]+/g;
  * the ID, which is stored inside the folder's `CLIENT.md` or equivalent.
  */
 export function slugify(input: string): string {
-  return input
+  const slug = input
     .toLowerCase()
     .trim()
     .replace(SLUG_RE, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 64);
+  if (slug) return slug;
+  // A name with no [a-z0-9] characters — non-Latin (e.g. "株式会社"), symbol-only
+  // ("!!!"), or empty — would otherwise yield "". Slugs name directories
+  // (clients/<slug>/, projects/<slug>/), so an empty slug writes files into the
+  // registry root and makes every such name collide. Fall back to a
+  // deterministic token so distinct names get distinct, filesystem-safe slugs;
+  // identity still belongs to the ID, not the slug (SER-230).
+  return `item-${stableHash(input)}`;
+}
+
+/** Dependency-free deterministic 32-bit FNV-1a hash, rendered as base36. */
+function stableHash(input: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
 }
