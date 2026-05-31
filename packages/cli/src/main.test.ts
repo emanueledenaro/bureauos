@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ApprovalRegistry, DaemonStateStore } from "@bureauos/core";
-import { main } from "./main.js";
+import { main, parseFlags } from "./main.js";
 
 async function exists(path: string): Promise<boolean> {
   try {
@@ -1101,5 +1101,41 @@ describe("bureau cli", () => {
     } finally {
       if (previousToken) process.env["GITHUB_TOKEN"] = previousToken;
     }
+  });
+});
+
+describe("parseFlags --key=value (SER-178)", () => {
+  const schema = {
+    message: { type: "string" },
+    value: { type: "number" },
+    force: { type: "boolean" },
+  } as const;
+
+  it("parses --key=value for string, number, and boolean flags", () => {
+    expect(parseFlags(["--message=hello world"], schema)).toMatchObject({ message: "hello world" });
+    expect(parseFlags(["--value=1000"], schema)).toMatchObject({ value: 1000 });
+    expect(parseFlags(["--force=true"], schema)).toMatchObject({ force: true });
+    expect(parseFlags(["--force=false"], schema)).toMatchObject({ force: false });
+  });
+
+  it("keeps the space-separated form working and treats bare boolean as true", () => {
+    expect(parseFlags(["--message", "spaced too"], schema)).toMatchObject({
+      message: "spaced too",
+    });
+    expect(parseFlags(["--force"], schema)).toMatchObject({ force: true });
+  });
+
+  it("preserves '=' inside the value (splits on the first '=' only)", () => {
+    expect(parseFlags(["--message=a=b=c"], schema)).toMatchObject({ message: "a=b=c" });
+  });
+
+  it("still errors clearly on an unknown --key=value", () => {
+    expect(parseFlags(["--bogus=1"], schema)).toBe('unknown option "--bogus"');
+  });
+
+  it("rejects a non-boolean value for a boolean flag", () => {
+    expect(parseFlags(["--force=maybe"], schema)).toBe(
+      'invalid boolean value for --force: "maybe"',
+    );
   });
 });
