@@ -54,15 +54,16 @@ export class OctokitGitHubClient implements GitHubClient {
     repo: string,
     filter: { state?: "open" | "closed" | "all" } = {},
   ): Promise<readonly GitHubIssueRef[]> {
-    const r = await this.octokit.issues.listForRepo({
+    // Paginate: `listForRepo` returns issues *and* PRs, and PRs are filtered
+    // out below — a single 100-item page would silently drop real issues on an
+    // active repo (SER-228).
+    const data = (await this.octokit.paginate(this.octokit.issues.listForRepo, {
       owner,
       repo,
       state: filter.state ?? "open",
       per_page: 100,
-    });
-    return (r.data as unknown as RawIssue[])
-      .filter((i) => !i.pull_request)
-      .map((i) => mapIssue(owner, repo, i));
+    })) as unknown as RawIssue[];
+    return data.filter((i) => !i.pull_request).map((i) => mapIssue(owner, repo, i));
   }
 
   async createIssue(
@@ -85,8 +86,14 @@ export class OctokitGitHubClient implements GitHubClient {
     repo: string,
     labels: readonly { name: string; color?: string; description?: string }[],
   ): Promise<void> {
-    const existing = await this.octokit.issues.listLabelsForRepo({ owner, repo, per_page: 100 });
-    const existingNames = new Set(existing.data.map((l) => l.name));
+    // Paginate so a repo with >100 labels yields a complete existing-name set
+    // and ensureLabels does not retry creating labels that already exist (SER-228).
+    const existing = (await this.octokit.paginate(this.octokit.issues.listLabelsForRepo, {
+      owner,
+      repo,
+      per_page: 100,
+    })) as Array<{ name: string }>;
+    const existingNames = new Set(existing.map((l) => l.name));
     for (const label of labels) {
       if (existingNames.has(label.name)) continue;
       await this.octokit.issues.createLabel({
@@ -117,13 +124,15 @@ export class OctokitGitHubClient implements GitHubClient {
     repo: string,
     filter: { state?: "open" | "closed" | "all" } = {},
   ): Promise<readonly GitHubPullRequestRef[]> {
-    const r = await this.octokit.pulls.list({
+    // Paginate so stale-PR detection sees every open PR on an active repo,
+    // not just the first 100 (SER-228).
+    const data = (await this.octokit.paginate(this.octokit.pulls.list, {
       owner,
       repo,
       state: filter.state ?? "open",
       per_page: 100,
-    });
-    return (r.data as unknown as RawPull[]).map((p) => mapPullRequest(owner, repo, p));
+    })) as unknown as RawPull[];
+    return data.map((p) => mapPullRequest(owner, repo, p));
   }
 
   async listCheckRunsForRef(
@@ -131,13 +140,15 @@ export class OctokitGitHubClient implements GitHubClient {
     repo: string,
     ref: string,
   ): Promise<readonly GitHubCheckRunRef[]> {
-    const r = await this.octokit.checks.listForRef({
+    // Paginate the check runs for the ref (octokit.paginate flattens the
+    // check_runs envelope across pages) so none are dropped past 100 (SER-228).
+    const data = (await this.octokit.paginate(this.octokit.checks.listForRef, {
       owner,
       repo,
       ref,
       per_page: 100,
-    });
-    return (r.data.check_runs as unknown as RawCheckRun[]).map((c) => mapCheckRun(owner, repo, c));
+    })) as unknown as RawCheckRun[];
+    return data.map((c) => mapCheckRun(owner, repo, c));
   }
 
   async createPullRequest(
