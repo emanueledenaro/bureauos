@@ -190,6 +190,14 @@ ${input.briefing ?? "(none supplied)"}
         ...(role === "development" && input.codeWorkspaceRoot
           ? { codeWorkspaceRoot: input.codeWorkspaceRoot }
           : {}),
+        ...(role === "development" && input.run.source_work_item_id
+          ? {
+              linkedWorkItem: {
+                type: input.run.source_work_item_type,
+                identifier: input.run.source_work_item_id,
+              },
+            }
+          : {}),
         ...(input.contextArtifactIdsByRole?.[role]?.[0]
           ? { handoffArtifactId: input.contextArtifactIdsByRole[role][0] }
           : {}),

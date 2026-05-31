@@ -16,6 +16,7 @@ import type {
 } from "@bureauos/providers";
 import { ArtifactStore } from "../../artifacts/store.js";
 import { AuditLog } from "../../audit/log.js";
+import { CapabilityUseService } from "../../capabilities/usage.js";
 import { defaultConfig } from "../../config/loader.js";
 import { PolicyEngine } from "../../policy/engine.js";
 import { ApprovalRegistry } from "../../registries/approval.js";
@@ -408,6 +409,63 @@ describe("concrete agents", () => {
     const log = await readAudit(dir);
     expect(log).toContain("agent.development.runtime_executed");
     expect(log).not.toContain("agent.development.template_only");
+  }, 30_000);
+
+  it("executes a real edit when a linked work item satisfies the gate (no tests required for the isolated edit, SER-242)", async () => {
+    // Clean git baseline so the runtime's diff inspector sees only the new edit.
+    await run("git", ["init", "-q"], { cwd: dir });
+    await run("git", ["config", "user.email", "ci@bureauos.test"], { cwd: dir });
+    await run("git", ["config", "user.name", "BureauOS CI"], { cwd: dir });
+    await run("git", ["add", "."], { cwd: dir });
+    await run("git", ["commit", "-q", "-m", "baseline"], { cwd: dir });
+
+    const config = defaultConfig("agency");
+    config.runtime.codex.enabled = true;
+    config.autonomy.push_commits = true; // edit_code -> push_commits
+    config.autonomy.observe_signals = true; // run_tests -> observe_signals
+    config.runtime.codex.commands = [
+      {
+        command: "node",
+        args: ["-e", "require('fs').writeFileSync('feature.ts','// built by the agent\\n')"],
+        label: "edit",
+      },
+    ];
+
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const artifacts = new ArtifactStore(dir);
+    const approvals = new ApprovalRegistry(dir);
+    const policy = new PolicyEngine(config, approvals);
+    // The REAL capability checker (not a fake) — this proves the gate logic:
+    // edit_code passes because a linked work item satisfies linked_issue and the
+    // isolated edit no longer requires tests (SER-242).
+    const capabilityUse = new CapabilityUseService(dir, {
+      config,
+      artifacts,
+      approvals,
+      policy,
+      audit,
+    });
+    const runtime = buildCodexRuntimeFromConfig(config);
+    const agent = new DevelopmentAgent({ artifacts, audit, policy, capabilityUse });
+
+    const out = await agent.execute({
+      context: {
+        workspaceRoot: dir,
+        runId: "run_dev_gate",
+        scope: "implement booking feature",
+        // A linked Linear issue (no numeric GitHub number) tracks the work.
+        linkedWorkItem: { type: "linear_issue", identifier: "SER-242" },
+      },
+      capabilities: new Map([["codex", runtime!]]),
+    });
+
+    expect(out.ok).toBe(true);
+    expect(out.decisions).toContain("runtime_execution");
+    const built = await readFile(join(dir, "feature.ts"), "utf8");
+    expect(built).toContain("built by the agent");
+    const log = await readAudit(dir);
+    expect(log).toContain("agent.development.runtime_executed");
+    expect(log).not.toContain("agent.development.runtime_blocked");
   }, 30_000);
 
   it("blocks development runtime before execution when capability gates fail", async () => {

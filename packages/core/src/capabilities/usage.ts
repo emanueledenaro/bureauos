@@ -21,6 +21,12 @@ export interface CapabilityUseInput {
   target?: string;
   policyAction?: string;
   linkedIssueNumbers?: readonly number[];
+  /**
+   * Identifier of a linked work item (e.g. a Linear issue `SER-242` or a GitHub
+   * issue) tracking this work. Satisfies the `linked_issue` gate even when there
+   * is no numeric GitHub issue number — the run is tracked either way (SER-242).
+   */
+  linkedWorkItemId?: string;
   testEvidence?: readonly string[];
   approvalIds?: readonly string[];
   changedFiles?: readonly string[];
@@ -114,6 +120,7 @@ function auditPolicyResult(
 function missingEvidenceGates(args: {
   policy: PolicyDecision;
   linkedIssues: readonly number[];
+  linkedWorkItemId?: string;
   tests: readonly string[];
   changedFiles?: readonly string[];
   changedFileLimit: number;
@@ -122,7 +129,11 @@ function missingEvidenceGates(args: {
   const gates = new Set<string>(args.policy.required_gates);
   const missing: string[] = [];
   if (gates.has("tests_required") && args.tests.length === 0) missing.push("tests_required");
-  if (gates.has("linked_issue") && args.linkedIssues.length === 0) missing.push("linked_issue");
+  // A linked work item (Linear/GitHub) tracks the work and satisfies linked_issue
+  // even without a numeric GitHub issue number (SER-242).
+  if (gates.has("linked_issue") && args.linkedIssues.length === 0 && !args.linkedWorkItemId) {
+    missing.push("linked_issue");
+  }
   // Owner-configured security/human gates (SER-181) are satisfied by a granted
   // approval for the action; until one exists they block capability use.
   if (gates.has("security_review") && !args.hasApproval) missing.push("security_review");
@@ -261,6 +272,7 @@ export class CapabilityUseService {
       ? missingEvidenceGates({
           policy,
           linkedIssues,
+          ...(input.linkedWorkItemId ? { linkedWorkItemId: input.linkedWorkItemId } : {}),
           tests,
           changedFiles,
           changedFileLimit,
