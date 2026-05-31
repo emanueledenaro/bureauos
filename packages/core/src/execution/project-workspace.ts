@@ -1,6 +1,6 @@
 import { access, mkdir } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
-import { isSafeRef, isSafeSlug, runGit } from "./git.js";
+import { isSafeRef, isSafeRemote, isSafeSlug, runGit } from "./git.js";
 
 export interface ProjectWorkspaceOptions {
   /**
@@ -157,6 +157,43 @@ export class ProjectWorkspaceService {
     );
     const sha = (await runGit(["rev-parse", "HEAD"], { cwd })).stdout.trim();
     return { committed: true, branch, sha };
+  }
+
+  /**
+   * Point the project repo's remote (default `origin`) at its linked repository
+   * — e.g. the GitHub repo provisioned for the project. Idempotent: adds the
+   * remote, or updates its URL if it already exists. The URL is allow-list
+   * validated (defence in depth — it reaches git as a positional argument).
+   */
+  async setProjectRemote(slug: string, remoteUrl: string, name = "origin"): Promise<void> {
+    if (!isSafeRemote(remoteUrl)) throw new Error(`refusing unsafe remote: ${remoteUrl}`);
+    if (!isSafeRef(name)) throw new Error(`refusing unsafe remote name: ${name}`);
+    const repo = this.repoPath(slug);
+    const subcommand = (await this.remoteExists(repo, name)) ? "set-url" : "add";
+    await runGit(["remote", subcommand, name, remoteUrl], { cwd: repo });
+  }
+
+  /**
+   * Push a run's branch (with its committed work) to the project remote so it
+   * can be opened as a pull request. This is the raw git mechanic; the
+   * `push_commits` policy gate is applied by the caller before invoking it.
+   * Returns the pushed branch name.
+   */
+  async pushRunBranch(slug: string, runId: string, name = "origin"): Promise<string> {
+    if (!isSafeRef(name)) throw new Error(`refusing unsafe remote name: ${name}`);
+    const repo = this.repoPath(slug);
+    const branch = this.branchForRun(slug, runId);
+    await runGit(["push", name, branch], { cwd: repo });
+    return branch;
+  }
+
+  private async remoteExists(repo: string, name: string): Promise<boolean> {
+    try {
+      await runGit(["remote", "get-url", name], { cwd: repo });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private async isGitRepo(repo: string): Promise<boolean> {

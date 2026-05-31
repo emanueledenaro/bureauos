@@ -172,6 +172,43 @@ describe("ProjectWorkspaceService (SER-243)", () => {
     TIMEOUT_MS,
   );
 
+  it(
+    "sets the project remote and pushes a run branch to it",
+    async () => {
+      // A local bare repo stands in for the project's remote (real git, no network).
+      const remote = join(root, "remote.git");
+      await runGit(["init", "--bare", remote]);
+
+      await service.ensureRepo("acme-app");
+      const { branch, path } = await service.acquireRunWorktree("acme-app", "run_push");
+      await writeFile(join(path, "f.txt"), "work", "utf8");
+      const commit = await service.commitRunWork("acme-app", "run_push", "feat: work");
+
+      await service.setProjectRemote("acme-app", remote);
+      const pushed = await service.pushRunBranch("acme-app", "run_push");
+      expect(pushed).toBe(branch);
+
+      // The branch (with its commit) now exists in the remote at the same SHA.
+      const remoteSha = (
+        await runGit(["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], { cwd: remote })
+      ).stdout.trim();
+      expect(remoteSha).toBe(commit.sha);
+
+      // setProjectRemote is idempotent (updates the URL when origin already exists).
+      const otherRemote = join(root, "remote2.git");
+      await runGit(["init", "--bare", otherRemote]);
+      await expect(service.setProjectRemote("acme-app", otherRemote)).resolves.toBeUndefined();
+    },
+    TIMEOUT_MS,
+  );
+
+  it("refuses an unsafe remote url", async () => {
+    await service.ensureRepo("acme-app");
+    await expect(service.setProjectRemote("acme-app", "--upload-pack=evil")).rejects.toThrow(
+      /unsafe remote/,
+    );
+  });
+
   it("refuses unsafe slugs, run ids, and base refs", async () => {
     expect(() => service.repoPath("../escape")).toThrow(/unsafe project slug/);
     expect(() => service.branchForRun("ok", "../bad")).toThrow(/unsafe run id/);

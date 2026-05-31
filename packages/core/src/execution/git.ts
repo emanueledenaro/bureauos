@@ -50,3 +50,16 @@ export function isSafeRef(ref: string): boolean {
 export function isSafeSlug(slug: string): boolean {
   return /^[a-z0-9][a-z0-9-]*$/.test(slug);
 }
+
+/**
+ * Whether a remote URL is safe to pass to `git remote add/set-url` as a
+ * positional argument: no leading dash (option injection) and one of the
+ * recognised remote forms (https/http/ssh/git@/file/absolute path). The project
+ * remote comes from the linked repository, but this is defence in depth before
+ * it reaches git.
+ */
+export function isSafeRemote(remote: string): boolean {
+  return (
+    !remote.startsWith("-") && /^(https:\/\/|http:\/\/|ssh:\/\/|git@|file:\/\/|\/)/.test(remote)
+  );
+}

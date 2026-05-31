@@ -478,7 +478,14 @@ export type {
 export { buildCodexRuntimeFromConfig } from "./execution/codex-runtime.js";
 export type { BuildCodexRuntimeOptions } from "./execution/codex-runtime.js";
 export { GitDevelopmentBranchClient } from "./execution/git-development-branch-client.js";
-export { runGit, isSafeRef, isSafeSlug, GIT_TIMEOUT_MS, GIT_MAX_BUFFER } from "./execution/git.js";
+export {
+  runGit,
+  isSafeRef,
+  isSafeSlug,
+  isSafeRemote,
+  GIT_TIMEOUT_MS,
+  GIT_MAX_BUFFER,
+} from "./execution/git.js";
 export type { RunGitOptions } from "./execution/git.js";
 export { ProjectWorkspaceService } from "./execution/project-workspace.js";
 export type {
