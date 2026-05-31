@@ -227,6 +227,43 @@ describe("LocalMemoryStore", () => {
     expect(hits).toEqual([]);
   });
 
+  it("recalls the same in-scope docs for a multi-word query as the global store (SER-197)", async () => {
+    await mkdir(join(dir, "projects", "alpha"), { recursive: true });
+    await mkdir(join(dir, "projects", "beta"), { recursive: true });
+    // Query tokens are present but NOT as a contiguous phrase — the old
+    // whole-query substring scoped scan missed this.
+    await writeFile(
+      join(dir, "projects", "alpha", "PROJECT.md"),
+      "# Alpha\nThe margherita pizza landing page is in design.\n",
+      "utf8",
+    );
+    // An out-of-scope doc that also matches the tokens.
+    await writeFile(
+      join(dir, "projects", "beta", "PROJECT.md"),
+      "# Beta\nA different margherita pizza landing concept.\n",
+      "utf8",
+    );
+
+    const scoped = new ScopedMemoryStore(dir, [{ path: "projects/alpha", kind: "directory" }]);
+    const global = new LocalMemoryStore(dir);
+    const query = "pizza margherita landing";
+
+    const scopedPaths = (await scoped.search(query)).map((h) => h.relativePath).sort();
+    // Finds the in-scope multi-word match, never the out-of-scope sibling.
+    expect(scopedPaths).toEqual(["projects/alpha/PROJECT.md"]);
+
+    // The global store returns the same document among its in-scope results
+    // (whichever backend it uses).
+    const globalInScope = (await global.search(query))
+      .map((h) => h.relativePath)
+      .filter((p) => p === "projects/alpha/PROJECT.md");
+    expect(globalInScope).toEqual(["projects/alpha/PROJECT.md"]);
+
+    // Trailing whitespace must behave identically.
+    const trimmed = (await scoped.search(`${query}   `)).map((h) => h.relativePath).sort();
+    expect(trimmed).toEqual(scopedPaths);
+  });
+
   it("denies cross-scope access via .. path traversal", async () => {
     await mkdir(join(dir, "clients", "acme"), { recursive: true });
     await mkdir(join(dir, "clients", "bravo"), { recursive: true });

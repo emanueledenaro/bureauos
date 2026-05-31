@@ -68,7 +68,7 @@ function normalizeScore(score: number): number {
   return Math.max(Math.round(Math.max(score, 0.000001) * 1000) / 1000, 0.001);
 }
 
-function tokenizeQuery(query: string): string[] {
+export function tokenizeQuery(query: string): string[] {
   return query
     .split(/[^A-Za-z0-9À-ÖØ-öø-ÿ_]+/u)
     .map((token) => token.trim())
