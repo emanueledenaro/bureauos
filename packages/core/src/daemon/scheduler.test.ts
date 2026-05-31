@@ -169,6 +169,38 @@ describe("Scheduler", () => {
     expect(after2).toBe(after1);
   });
 
+  it("backs a failing job off by its interval even without a persistent state store (SER-226)", async () => {
+    const config = defaultConfig("freelancer");
+    const approvals = new ApprovalRegistry(dir);
+    const policy = new PolicyEngine(config, approvals);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const runs = new RunEngine(dir, { audit, artifacts, policy });
+
+    // Force every run-backed job to fail.
+    let startCalls = 0;
+    runs.start = (async () => {
+      startCalls += 1;
+      throw new Error("boom");
+    }) as typeof runs.start;
+
+    // No workspaceRoot and no schedulerState → no persistent cursor, so the
+    // due-check relies solely on the in-memory attempt timestamp.
+    const scheduler = new Scheduler({ config, runs, logger: () => {} });
+    const t0 = 1_700_000_000_000;
+
+    await scheduler.tick(t0);
+    const afterFirst = startCalls;
+    // The four run-backed jobs (health check, daily report, growth + client
+    // reviews) were each attempted once and threw.
+    expect(afterFirst).toBe(4);
+
+    // A second tick one minute later — well within every failing job's interval
+    // (the shortest is the hourly health check) — must NOT re-attempt them.
+    await scheduler.tick(t0 + 60_000);
+    expect(startCalls).toBe(afterFirst);
+  });
+
   it("persists scheduler cursors and does not duplicate processed windows after restart", async () => {
     const config = defaultConfig("freelancer");
     const approvals = new ApprovalRegistry(dir);
