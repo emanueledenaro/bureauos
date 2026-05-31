@@ -150,6 +150,28 @@ describe("ProjectWorkspaceService (SER-243)", () => {
     TIMEOUT_MS,
   );
 
+  it(
+    "commits the run's work onto its branch, then is a no-op when nothing changed",
+    async () => {
+      const repo = await service.ensureRepo("acme-app");
+      const { branch, path } = await service.acquireRunWorktree("acme-app", "run_c");
+      await writeFile(join(path, "feature.ts"), "// built by the dev agent\n", "utf8");
+
+      const committed = await service.commitRunWork("acme-app", "run_c", "feat: booking page");
+      expect(committed.committed).toBe(true);
+      expect(committed.branch).toBe(branch);
+      expect(committed.sha).toMatch(/^[0-9a-f]{40}$/);
+      // The edit is now on the run branch (visible from the repo, not just the worktree).
+      expect(await trackedFiles(repo, branch)).toEqual(["feature.ts"]);
+
+      // Nothing else changed -> a second commit is a no-op.
+      const again = await service.commitRunWork("acme-app", "run_c", "feat: nothing new");
+      expect(again.committed).toBe(false);
+      expect(again.sha).toBeUndefined();
+    },
+    TIMEOUT_MS,
+  );
+
   it("refuses unsafe slugs, run ids, and base refs", async () => {
     expect(() => service.repoPath("../escape")).toThrow(/unsafe project slug/);
     expect(() => service.branchForRun("ok", "../bad")).toThrow(/unsafe run id/);
