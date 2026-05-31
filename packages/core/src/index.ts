@@ -478,6 +478,11 @@ export type {
 export { buildCodexRuntimeFromConfig } from "./execution/codex-runtime.js";
 export type { BuildCodexRuntimeOptions } from "./execution/codex-runtime.js";
 export { GitDevelopmentBranchClient } from "./execution/git-development-branch-client.js";
+export { buildDevelopmentExecution } from "./execution/development-execution.js";
+export type {
+  DevelopmentExecution,
+  DevelopmentExecutionDeps,
+} from "./execution/development-execution.js";
 
 // Provider auth
 export {
