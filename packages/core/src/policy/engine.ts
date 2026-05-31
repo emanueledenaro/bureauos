@@ -263,7 +263,16 @@ export class PolicyEngine {
     const gates: string[] = [];
     const limits = this.config.limits;
     if (input.action === "open_pull_requests" || input.action === "push_commits") {
-      if (limits.require_tests_for_code_changes) gates.push("tests_required");
+      // Tests gate the actual push/PR (when code reaches the repo), not a local
+      // edit in an isolated worktree (SER-242, owner decision): the edit is
+      // reversible and touches nothing real until pushed, so requiring passing
+      // tests before the code is even written was a deadlock. `linked_issue`
+      // (the work is tracked) applies to both; `tests_required` is satisfiable
+      // at push time because tests run after the edit.
+      const isLocalIsolatedEdit = input.capability === "codex.edit_code";
+      if (limits.require_tests_for_code_changes && !isLocalIsolatedEdit) {
+        gates.push("tests_required");
+      }
       gates.push("linked_issue");
     }
     if (input.action === "merge_pull_requests") {
