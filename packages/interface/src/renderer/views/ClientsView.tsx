@@ -12,14 +12,16 @@ import { pipelineValue } from "../lib/builders";
 import { clientRiskTone } from "../lib/tone";
 import { formatLabel, formatMoney, timeAgo } from "../lib/format";
 import type { ClientSuccessStatusResult, MemoryTriggerResult } from "../lib/api";
-import type { DashboardState } from "../lib/types";
+import type { AdaptiveMode, DashboardState } from "../lib/types";
 
 export function ClientsView({
   state,
+  onModeChange,
   onGenerateSuccessStatus,
   onMemoryTriggerScan,
 }: {
   state: DashboardState;
+  onModeChange: (mode: AdaptiveMode) => void;
   onGenerateSuccessStatus: () => Promise<ClientSuccessStatusResult>;
   onMemoryTriggerScan: () => Promise<MemoryTriggerResult>;
 }) {
@@ -165,7 +167,11 @@ export function ClientsView({
 
       <div className="mt-section grid gap-3 xl:grid-cols-2">
         {clients.map((item) => (
-          <ClientAccountCard key={item.client.id} item={item} />
+          <ClientAccountCard
+            key={item.client.id}
+            item={item}
+            onOpen={() => onModeChange("memory")}
+          />
         ))}
         {noClients ? (
           <div className="xl:col-span-2">

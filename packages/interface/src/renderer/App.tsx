@@ -583,6 +583,7 @@ function renderMainView({
       return (
         <ClientsView
           state={state}
+          onModeChange={onModeChange}
           onGenerateSuccessStatus={onGenerateClientSuccessStatus}
           onMemoryTriggerScan={onMemoryTriggerScan}
         />

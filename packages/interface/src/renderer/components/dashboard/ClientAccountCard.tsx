@@ -7,7 +7,13 @@ import { clientRiskTone } from "../../lib/tone";
 import { formatLabel, formatMoney, timeAgo } from "../../lib/format";
 import type { ClientIntelligenceItem } from "../../lib/api";
 
-export function ClientAccountCard({ item }: { item: ClientIntelligenceItem }) {
+export function ClientAccountCard({
+  item,
+  onOpen,
+}: {
+  item: ClientIntelligenceItem;
+  onOpen?: () => void;
+}) {
   const topProject = item.projects[0];
   const topOpportunity = item.opportunities[0];
   const memoryPaths = [
@@ -94,10 +100,12 @@ export function ClientAccountCard({ item }: { item: ClientIntelligenceItem }) {
             {path}
           </span>
         ))}
-        <Button variant="ghost" size="sm" className="ml-auto">
-          Open account
-          <ArrowRight className="h-3 w-3" />
-        </Button>
+        {onOpen ? (
+          <Button variant="ghost" size="sm" className="ml-auto" onClick={onOpen}>
+            Open account
+            <ArrowRight className="h-3 w-3" />
+          </Button>
+        ) : null}
       </div>
     </BaseCard>
   );
