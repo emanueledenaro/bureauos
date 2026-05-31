@@ -45,6 +45,7 @@ import {
   linearIssueSourceWorkItem,
   memoryIndexForConfig,
   memoryStoreForConfig,
+  MorningBriefService,
   recordDecision,
   RootMemoryConsolidationService,
   startApiServer,
@@ -118,6 +119,7 @@ Runs and audit:
 
 Reports:
   report generate                           Generate executive, cross-project, and operating reports
+  brief                                     Generate the coordinator's concise daily Morning Brief
 
 Memory write:
   decision --what "..." --why "..." [--run id]   Append a decision record
@@ -1047,6 +1049,16 @@ const handleReportGenerate: Handler = async () => {
   return 0;
 };
 
+const handleMorningBrief: Handler = async () => {
+  const result = await new MorningBriefService(process.cwd()).generate();
+  process.stdout.write(`bureau: generated morning brief ${result.artifact.id}\n`);
+  process.stdout.write(`  ${result.brief.organization} · ${result.brief.headline}\n`);
+  for (const item of result.brief.lookToday) {
+    process.stdout.write(`  -> ${item}\n`);
+  }
+  return 0;
+};
+
 const handleGrowthMemory: Handler = async (args) => {
   const subcommand = args[0] ?? "show";
   const service = new GrowthMemoryService(process.cwd());
@@ -1887,6 +1899,7 @@ const COMMANDS: Record<string, Handler | Record<string, Handler>> = {
   run: { new: handleRunNew, list: handleRunList },
   autonomy: { "memory-scan": handleAutonomyMemoryScan, "retry-scan": handleAutonomyRetryScan },
   report: { generate: handleReportGenerate },
+  brief: handleMorningBrief,
   audit: {
     tail: handleAuditTail,
     search: async (args: readonly string[]) => {

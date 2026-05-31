@@ -13,6 +13,7 @@ import { OperationalSignalTriggerService } from "../autonomy/operational-trigger
 import { MemoryTriggerService } from "../autonomy/memory-triggers.js";
 import { AutonomousRetryService } from "../autonomy/retry.js";
 import { RootMemoryConsolidationService } from "../memory/consolidation.js";
+import { MorningBriefService } from "../memory/morning-brief.js";
 import { parseGitHubRepository } from "../github/repository-utils.js";
 import { DaemonSchedulerStateStore } from "./state.js";
 
@@ -211,6 +212,14 @@ export class Scheduler {
             this.log(
               `scheduler: generated reports ${report.executive_report.id}, ${report.business_operating_report.id}`,
             );
+            // Also leave the owner a concise Morning Brief (SER-235): the short
+            // proactive digest, complementing the full reports above.
+            const brief = await new MorningBriefService(this.options.workspaceRoot, {
+              artifacts: this.options.coordinator.artifacts,
+              audit: this.options.coordinator.audit,
+            }).generate({ now: new Date(now) });
+            await this.options.runs.attachArtifacts(run.id, [brief.artifact.id]);
+            this.log(`scheduler: generated morning brief ${brief.artifact.id}`);
           }
           if (job.name === "project_health_check") {
             const health = await new ProjectHealthReviewService(this.options.workspaceRoot, {
