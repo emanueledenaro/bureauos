@@ -212,6 +212,32 @@ describe("API server", () => {
     expect(audit).toContain("coordinator_tool.create_intake");
   });
 
+  it("clamps GET /audit ?n and never dumps the whole log for malformed values (SER-229)", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+    // Seed 150 audit lines (> the 100-line default tail) so a whole-log dump is
+    // distinguishable from the clamped default.
+    const lines = Array.from({ length: 150 }, (_, i) =>
+      JSON.stringify({ actor: "test", action: "evt", target: `t${i}`, result: "ok" }),
+    );
+    await writeFile(workspacePaths(dir).auditLog, `${lines.join("\n")}\n`, "utf8");
+
+    const count = async (query: string): Promise<number> => {
+      const r = await fetch(`${server!.url}/audit${query}`);
+      expect(r.status).toBe(200);
+      return ((await r.json()) as unknown[]).length;
+    };
+
+    // Malformed / non-positive n falls back to the default tail (100) or the
+    // minimum (1) — never the whole 150-line log.
+    expect(await count("?n=abc")).toBe(100);
+    expect(await count("?n=0")).toBe(1);
+    expect(await count("?n=-5")).toBe(1);
+    // A huge n is capped at the maximum (1000), which here returns all 150.
+    expect(await count("?n=99999999")).toBe(150);
+    // A valid small n is honored.
+    expect(await count("?n=5")).toBe(5);
+  });
+
   it("moves resolved approvals into history for the ElectronJS approvals page", async () => {
     server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
 
