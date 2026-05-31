@@ -164,13 +164,23 @@ export class DaemonLifecycleSupervisor {
   async stop(): Promise<DaemonStopResult> {
     const snapshot = await this.state.status();
     const lock = await this.state.lockStatus();
-    const pid = snapshot.state?.pid ?? lock.state?.pid;
-    const alive = Boolean(
-      (snapshot.state?.pid && snapshot.alive) || (lock.state?.pid && lock.alive),
-    );
+    // Signal the pid that is actually alive. The status file and the lock can
+    // disagree after a crash or partial state update; signalling the status
+    // pid unconditionally would target a dead (possibly recycled) pid, leave
+    // the live daemon — held under the lock pid — running, and leak its lock,
+    // while still reporting "stopped" (SER-227). `releaseLock(pid)` only
+    // deletes the lock when its holder pid matches, so we must release the live
+    // pid, not the stale one.
+    const livePid =
+      snapshot.state?.pid && snapshot.alive
+        ? snapshot.state.pid
+        : lock.state?.pid && lock.alive
+          ? lock.state.pid
+          : undefined;
 
-    if (!pid || !alive) {
-      await this.state.releaseLock(pid);
+    if (!livePid) {
+      // Nothing alive: clear any stale lock by its holder pid and settle state.
+      await this.state.releaseLock(lock.state?.pid ?? snapshot.state?.pid);
       await this.state.markStopped("not running");
       return {
         ok: true,
@@ -181,28 +191,28 @@ export class DaemonLifecycleSupervisor {
     }
 
     try {
-      this.killProcess(pid, "SIGTERM");
+      this.killProcess(livePid, "SIGTERM");
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
-        const message = `failed to stop daemon pid ${pid}: ${(error as Error).message}`;
+        const message = `failed to stop daemon pid ${livePid}: ${(error as Error).message}`;
         await this.state.markError(message);
         return {
           ok: false,
           status: "failed",
           message,
-          pid,
+          pid: livePid,
           snapshot: await this.state.status(),
         };
       }
     }
 
-    await this.state.releaseLock(pid);
+    await this.state.releaseLock(livePid);
     await this.state.markStopped("owner requested stop");
     return {
       ok: true,
       status: "stopped",
-      message: `stop signal sent to pid ${pid}`,
-      pid,
+      message: `stop signal sent to pid ${livePid}`,
+      pid: livePid,
       snapshot: await this.state.status(),
     };
   }
