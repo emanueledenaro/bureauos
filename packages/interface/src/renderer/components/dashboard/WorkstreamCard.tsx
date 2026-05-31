@@ -23,6 +23,14 @@ export function WorkstreamCard({ item, laneIndex }: { item: Workstream; laneInde
       <div className="group relative z-10 flex flex-col gap-3 rounded-lg border border-border/70 bg-surface-subtle/55 p-3 shadow-[0_8px_18px_-16px_hsl(0_0%_0%/0.6)] transition-colors hover:border-border hover:bg-surface-subtle/75">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
+            <div
+              className={cn(
+                "text-[9px] font-semibold uppercase tracking-[0.08em]",
+                item.kind === "opportunity" ? "text-primary/80" : "text-muted-foreground/70",
+              )}
+            >
+              {item.kind === "opportunity" ? "Opportunity" : "Project"}
+            </div>
             <div className="truncate text-[13px] font-semibold text-foreground">{item.title}</div>
             <div
               className={cn(

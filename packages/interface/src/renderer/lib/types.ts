@@ -70,6 +70,13 @@ export interface DashboardState {
 export interface Workstream {
   id: string;
   title: string;
+  /**
+   * Which facet of a client's work this card represents. The Portfolio Map
+   * lists a client's delivery project AND its revenue opportunity in the same
+   * lane; without this they look like duplicate cards (SER-237). The card shows
+   * it as a label so the two read as distinct facets.
+   */
+  kind: "project" | "opportunity";
   status: string;
   tone: Tone;
   progress: number;
