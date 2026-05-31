@@ -156,6 +156,18 @@ describe("bureau cli", () => {
     }
   });
 
+  it("rejects NaN numeric flags with a clean error and exit 1 (SER-213)", async () => {
+    // `audit tail -n abc` previously dumped the whole log via slice(-NaN).
+    const tail = await captureStderr(() => main(["node", "bureau", "audit", "tail", "-n", "abc"]));
+    expect(tail.code).toBe(1);
+    expect(tail.output).toContain("bureau: audit tail: -n must be a number");
+
+    // `serve --port abc` is rejected before any server starts.
+    const serve = await captureStderr(() => main(["node", "bureau", "serve", "--port", "abc"]));
+    expect(serve.code).toBe(1);
+    expect(serve.output).toContain("bureau: serve: --port must be a number");
+  });
+
   it("records durable decisions and daily notes from CLI", async () => {
     await main(["node", "bureau", "init", "--name", "BOS"]);
 
@@ -1137,5 +1149,16 @@ describe("parseFlags --key=value (SER-178)", () => {
     expect(parseFlags(["--force=maybe"], schema)).toBe(
       'invalid boolean value for --force: "maybe"',
     );
+  });
+
+  it("rejects a non-numeric value for a number flag (SER-213)", () => {
+    const numSchema = { limit: { type: "number", alias: "n" } } as const;
+    expect(parseFlags(["--value=abc"], schema)).toBe("--value must be a number");
+    expect(parseFlags(["--value", "abc"], schema)).toBe("--value must be a number");
+    expect(parseFlags(["-n", "abc"], numSchema)).toBe("-n must be a number");
+    // Non-finite values are also rejected; valid numbers (incl. 0) still parse.
+    expect(parseFlags(["--value=1e999"], schema)).toBe("--value must be a number");
+    expect(parseFlags(["--value=0"], schema)).toMatchObject({ value: 0 });
+    expect(parseFlags(["--value=-12"], schema)).toMatchObject({ value: -12 });
   });
 });
