@@ -4,10 +4,12 @@ import {
   buildConfiguredProviderRouter,
   type ProviderEnv,
   type ProviderRouter,
+  type RuntimeAdapter,
 } from "@bureauos/providers";
 import { configureAgentProviderRouting } from "../agents/provider-routing.js";
 import { ArtifactStore, type ArtifactRecord } from "../artifacts/store.js";
 import { AuditLog } from "../audit/log.js";
+import { CapabilityUseService } from "../capabilities/usage.js";
 import type { BureauConfig } from "../config/schema.js";
 import { defaultConfig } from "../config/loader.js";
 import { workspacePaths } from "../paths.js";
@@ -62,6 +64,12 @@ export interface ProjectDispatchDeps {
   audit?: AuditLog;
   policy?: PolicyEngine;
   runs?: RunEngine;
+  /**
+   * Policy-gated Codex runtime supplied to the development agent so a dispatched
+   * feature/bug run executes real code instead of the template-only fallback
+   * (SER-239). Omitted -> template-only.
+   */
+  developmentRuntime?: RuntimeAdapter;
 }
 
 function artifactList(items: readonly ArtifactRecord[]): string {
@@ -224,6 +232,7 @@ export class ProjectDispatchService {
   private readonly runs: RunEngine;
   private readonly providerRouter?: ProviderRouter;
   private readonly providerEnv: ProviderEnv;
+  private readonly developmentRuntime?: RuntimeAdapter;
 
   constructor(
     private readonly workspaceRoot: string,
@@ -238,6 +247,7 @@ export class ProjectDispatchService {
     this.policy = deps.policy ?? new PolicyEngine(this.config, this.approvals);
     this.providerRouter = deps.providerRouter;
     this.providerEnv = deps.providerEnv ?? process.env;
+    this.developmentRuntime = deps.developmentRuntime;
     this.runs =
       deps.runs ??
       new RunEngine(workspaceRoot, {
@@ -352,6 +362,18 @@ export class ProjectDispatchService {
     }
 
     const providerRouter = await this.agentProviderRouter(pipeline);
+    // When a real Codex runtime is supplied, the development agent needs a
+    // policy-gated capability checker too, or its edit_code/run_tests gates
+    // fail closed (SER-239). Reuse this service's own policy/approvals/audit.
+    const capabilityUse = this.developmentRuntime
+      ? new CapabilityUseService(this.workspaceRoot, {
+          config: this.config,
+          artifacts: this.artifacts,
+          approvals: this.approvals,
+          policy: this.policy,
+          audit: this.audit,
+        })
+      : undefined;
     const dispatch = await dispatchRun(
       {
         audit: this.audit,
@@ -359,6 +381,8 @@ export class ProjectDispatchService {
         policy: this.policy,
         config: this.config,
         ...(providerRouter ? { providerRouter } : {}),
+        ...(this.developmentRuntime ? { developmentRuntime: this.developmentRuntime } : {}),
+        ...(capabilityUse ? { capabilityUse } : {}),
       },
       {
         workspaceRoot: this.workspaceRoot,
