@@ -16,6 +16,14 @@ export interface AgentContext {
   runId: string;
   scope: string;
   workspaceRoot?: string;
+  /**
+   * Isolated working directory where a code-executing agent (the development
+   * agent's Codex runtime) should edit and test real code — the run's per-run
+   * git worktree, when the dispatch provisioned one (SER-243). Falls back to
+   * `workspaceRoot` when absent. Keeps real code edits off the `.bureauos`
+   * agency workspace and isolated from other concurrent runs.
+   */
+  codeWorkspaceRoot?: string;
   clientId?: string;
   projectId?: string;
   briefing?: string;
