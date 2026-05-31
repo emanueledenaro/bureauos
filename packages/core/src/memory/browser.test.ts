@@ -47,12 +47,12 @@ describe("MemoryBrowserService", () => {
           score: 0.91,
         },
       ]);
+      // The fused entry score is reciprocal-rank fusion (SER-196), not the raw
+      // cosine; the cosine itself is asserted on `semantic_hits` above.
       expect(result.entries).toEqual([
-        expect.objectContaining({
-          path: "clients/acme-labs/CLIENT.md",
-          score: 0.91,
-        }),
+        expect.objectContaining({ path: "clients/acme-labs/CLIENT.md" }),
       ]);
+      expect(result.entries[0]?.score).toBeCloseTo(1 / 61, 5);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -82,6 +82,62 @@ describe("MemoryBrowserService", () => {
       expect(result.entries.map((entry) => entry.path)).toEqual(["clients/amodeo/CLIENT.md"]);
       expect(result.entries[0]?.score).toBeGreaterThan(0);
       expect(result.selected?.body).toContain("margherita");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("lets a strong semantic-only hit outrank a marginal keyword hit (SER-196)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-memory-browser-"));
+    try {
+      const paths = workspacePaths(dir);
+      // Dominant keyword doc: the query term many times → top of the keyword
+      // ranking (rank 1), pushing the marginal doc to a lower keyword rank.
+      await mkdir(join(paths.clientsDir, "dominant"), { recursive: true });
+      await writeFile(
+        join(paths.clientsDir, "dominant", "CLIENT.md"),
+        `# Dominant\n\n${"margherita ".repeat(80)}\n`,
+        "utf8",
+      );
+      // Marginal keyword doc: a single occurrence of the query term.
+      await mkdir(join(paths.clientsDir, "marginal"), { recursive: true });
+      await writeFile(
+        join(paths.clientsDir, "marginal", "CLIENT.md"),
+        "# Marginal\n\nOne passing margherita mention and nothing else relevant.\n",
+        "utf8",
+      );
+      // Semantic-only doc: no keyword match, strong cosine similarity.
+      await mkdir(join(paths.clientsDir, "semantic"), { recursive: true });
+      await writeFile(
+        join(paths.clientsDir, "semantic", "CLIENT.md"),
+        "# Semantic\n\nConceptually related pizza redesign and rebrand work.\n",
+        "utf8",
+      );
+
+      const config = defaultConfig("agency");
+      config.memory.semantic_index.enabled = true;
+      config.memory.semantic_index.provider = "custom";
+      const semanticIndex: SemanticMemoryIndex = {
+        kind: "fake",
+        enabled: true,
+        async search() {
+          return [{ path: "clients/semantic/CLIENT.md", snippet: "conceptual match", score: 0.95 }];
+        },
+      };
+
+      const result = await new MemoryBrowserService(dir, config, { semanticIndex }).browse({
+        query: "margherita",
+      });
+
+      const order = result.entries.map((entry) => entry.path);
+      const semanticRank = order.indexOf("clients/semantic/CLIENT.md");
+      const marginalRank = order.indexOf("clients/marginal/CLIENT.md");
+      expect(semanticRank).toBeGreaterThanOrEqual(0);
+      expect(marginalRank).toBeGreaterThanOrEqual(0);
+      // Under reciprocal-rank fusion the strong semantic-only hit (semantic
+      // rank 1) outranks the lower-ranked marginal keyword hit — impossible
+      // under the old additive blend where any keyword hit dominated (SER-196).
+      expect(semanticRank).toBeLessThan(marginalRank);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

@@ -48,6 +48,24 @@ const CATEGORY_LABELS: Record<MemoryBrowserCategory, string> = {
   decision: "Decision",
 };
 
+// Reciprocal-rank-fusion damping constant (the conventional default). Larger
+// values flatten the contribution of top ranks; 60 is the widely used choice.
+const RRF_K = 60;
+
+/**
+ * Rank paths by descending score and return a path -> 1-based rank map. Ties
+ * break by path so ordering is deterministic. Used to fuse the keyword and
+ * semantic channels on a common, scale-free footing (SER-196).
+ */
+function ranksByScore(scores: Map<string, number>): Map<string, number> {
+  const ordered = Array.from(scores.entries()).sort(
+    (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+  );
+  const ranks = new Map<string, number>();
+  ordered.forEach(([path], index) => ranks.set(path, index + 1));
+  return ranks;
+}
+
 const SECRET_PATTERNS: Array<[RegExp, string]> = [
   [/\b(sk-[A-Za-z0-9_-]{8,})\b/g, "[redacted]"],
   [/\b(xox[baprs]-[A-Za-z0-9-]{8,})\b/g, "[redacted]"],
@@ -162,6 +180,18 @@ export class MemoryBrowserService {
         .map((file) => memoryRelativePath(paths.memoryDir, file));
     }
 
+    // Keyword (FTS5 BM25) scores are unbounded and on a much larger scale than
+    // semantic cosine scores (clamped to [0,1]); an additive blend let any
+    // keyword match dominate so a purely-semantic ("conceptually related") hit
+    // could never outrank even a marginal keyword hit. Combine the two channels
+    // with reciprocal-rank fusion instead, which is scale-free: each channel
+    // contributes 1/(k + rank), so a strong semantic-only hit can outrank a
+    // lower-ranked keyword hit (SER-196).
+    const keywordRanks = ranksByScore(keywordScores);
+    const semanticRanks = ranksByScore(
+      new Map(Array.from(semanticHitsByPath, ([path, hit]) => [path, hit.score])),
+    );
+
     for (const relativePath of candidates) {
       const category = inferCategory(relativePath);
       if (!category) continue;
@@ -182,10 +212,12 @@ export class MemoryBrowserService {
           .then((info) => info.mtime.toISOString())
           .catch(() => undefined),
       };
-      const keywordScore = keywordScores.get(relativePath) ?? 0;
-      const semanticHit = semanticHitsByPath.get(relativePath);
-      if (query && keywordScore === 0 && !semanticHit) continue;
-      const score = keywordScore + (semanticHit?.score ?? 0);
+      const keywordRank = keywordRanks.get(relativePath);
+      const semanticRank = semanticRanks.get(relativePath);
+      if (query && keywordRank === undefined && semanticRank === undefined) continue;
+      const score =
+        (keywordRank === undefined ? 0 : 1 / (RRF_K + keywordRank)) +
+        (semanticRank === undefined ? 0 : 1 / (RRF_K + semanticRank));
       entries.push(query ? { ...baseEntry, score } : baseEntry);
       redactedBodies.set(relativePath, redactedBody);
     }
