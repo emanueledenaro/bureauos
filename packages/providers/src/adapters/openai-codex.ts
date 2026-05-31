@@ -168,7 +168,31 @@ function readModel(value: unknown): string | undefined {
   return undefined;
 }
 
-function parseSsePayload(payload: unknown): { delta?: string; done?: unknown } {
+function sseErrorMessage(item: Record<string, unknown>, type: string): string | undefined {
+  const status = typeof item["status"] === "string" ? item["status"] : "";
+  const isErrorFrame =
+    type === "error" ||
+    type === "response.failed" ||
+    type === "response.error" ||
+    status === "failed";
+  const error = item["error"];
+  const errorMessage =
+    error &&
+    typeof error === "object" &&
+    typeof (error as Record<string, unknown>)["message"] === "string"
+      ? ((error as Record<string, unknown>)["message"] as string)
+      : typeof item["message"] === "string"
+        ? (item["message"] as string)
+        : "";
+  if (isErrorFrame) {
+    return errorMessage || "OpenAI Codex backend reported a stream error";
+  }
+  // A bare error object even without an error-typed frame.
+  if (error && typeof error === "object" && errorMessage) return errorMessage;
+  return undefined;
+}
+
+function parseSsePayload(payload: unknown): { delta?: string; done?: unknown; error?: string } {
   if (!payload || typeof payload !== "object") return {};
   const item = payload as Record<string, unknown>;
   const type = typeof item["type"] === "string" ? item["type"] : "";
@@ -177,9 +201,24 @@ function parseSsePayload(payload: unknown): { delta?: string; done?: unknown } {
     return { delta: item["text"] };
   }
   if (type === "response.done" || type === "response.completed") {
-    return { done: item["response"] ?? item };
+    const response = item["response"];
+    // A terminal frame can still carry a failed status / error object (SER-201).
+    if (response && typeof response === "object") {
+      const responseError = sseErrorMessage(response as Record<string, unknown>, "");
+      if (responseError) return { error: responseError };
+    }
+    return { done: response ?? item };
   }
-  if (item["response"] && typeof item["response"] === "object") return { done: item["response"] };
+  // The Codex Responses backend can return HTTP 200 then stream an error frame;
+  // surface it so callers fail with the reason instead of an empty "success"
+  // (SER-201).
+  const error = sseErrorMessage(item, type);
+  if (error) return { error };
+  if (item["response"] && typeof item["response"] === "object") {
+    const responseError = sseErrorMessage(item["response"] as Record<string, unknown>, "");
+    if (responseError) return { error: responseError };
+    return { done: item["response"] };
+  }
   return {};
 }
 
@@ -190,14 +229,17 @@ function parseSseText(value: string): SseParseResult {
     if (!line.startsWith("data: ")) continue;
     const raw = line.slice(6).trim();
     if (!raw || raw === "[DONE]") continue;
+    let parsed: { delta?: string; done?: unknown; error?: string };
     try {
-      const payload = JSON.parse(raw) as unknown;
-      const parsed = parseSsePayload(payload);
-      if (parsed.delta) deltas.push(parsed.delta);
-      if (parsed.done) done = parsed.done;
+      parsed = parseSsePayload(JSON.parse(raw) as unknown);
     } catch {
       // Ignore malformed SSE frames; the final response check will catch empty output.
+      continue;
     }
+    // Surface backend error frames consistently with stream() (SER-201).
+    if (parsed.error) throw new OpenAICodexOAuthError(parsed.error);
+    if (parsed.delta) deltas.push(parsed.delta);
+    if (parsed.done) done = parsed.done;
   }
 
   const finalText = deltas.join("") || readTextContent(done);
@@ -214,6 +256,10 @@ async function readResponseText(response: Response): Promise<SseParseResult> {
   const contentType = response.headers.get("content-type") ?? "";
   if (contentType.includes("application/json")) {
     const json = (await response.json()) as unknown;
+    if (json && typeof json === "object") {
+      const error = sseErrorMessage(json as Record<string, unknown>, "");
+      if (error) throw new OpenAICodexOAuthError(error);
+    }
     const model = readModel(json);
     const usage = readUsage(json);
     return {
@@ -264,6 +310,19 @@ export class OpenAICodexOAuthAdapter implements ProviderAdapter {
   async validateCredentials(): Promise<ValidationResult> {
     if (!this.options.accessToken && !this.options.refreshToken) {
       return { ok: false, reason: "OpenAI Codex OAuth token is not connected" };
+    }
+    // An expired access token with no refresh token deterministically fails at
+    // generation time (`accessToken()` throws "refresh token is not connected").
+    // Report it as not-ok here so the router won't select a route it would call
+    // healthy, and the owner sees "reconnect" instead of "provider failed"
+    // (SER-200). A usable (non-expired) access token or any refresh token is ok.
+    const hasUsableAccessToken =
+      Boolean(this.options.accessToken) && !isExpired(this.options.expiresAt);
+    if (!hasUsableAccessToken && !this.options.refreshToken) {
+      return {
+        ok: false,
+        reason: "OpenAI Codex OAuth token expired and no refresh token is connected",
+      };
     }
     return { ok: true };
   }
@@ -344,6 +403,24 @@ export class OpenAICodexOAuthAdapter implements ProviderAdapter {
     let buffer = "";
     let finalText = "";
     let emittedDelta = false;
+    // Returns the delta to yield (if any) for a single `data: ` line, updating
+    // finalText as a side effect. Throws OpenAICodexOAuthError on backend error
+    // frames (SER-201); swallows malformed JSON so valid frames still flow.
+    const consumeLine = (line: string): string | undefined => {
+      if (!line.startsWith("data: ")) return undefined;
+      const raw = line.slice(6).trim();
+      if (!raw || raw === "[DONE]") return undefined;
+      let parsed: { delta?: string; done?: unknown; error?: string };
+      try {
+        parsed = parseSsePayload(JSON.parse(raw) as unknown);
+      } catch {
+        return undefined;
+      }
+      if (parsed.error) throw new OpenAICodexOAuthError(parsed.error);
+      if (parsed.delta) return parsed.delta;
+      if (parsed.done) finalText = readTextContent(parsed.done);
+      return undefined;
+    };
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -353,20 +430,21 @@ export class OpenAICodexOAuthAdapter implements ProviderAdapter {
         const line = buffer.slice(0, newline).trimEnd();
         buffer = buffer.slice(newline + 1);
         newline = buffer.indexOf("\n");
-        if (!line.startsWith("data: ")) continue;
-        const raw = line.slice(6).trim();
-        if (!raw || raw === "[DONE]") continue;
-        try {
-          const parsed = parseSsePayload(JSON.parse(raw) as unknown);
-          if (parsed.delta) {
-            emittedDelta = true;
-            yield parsed.delta;
-          } else if (parsed.done) {
-            finalText = readTextContent(parsed.done);
-          }
-        } catch {
-          // Ignore malformed frames; callers still get any valid deltas.
+        const delta = consumeLine(line);
+        if (delta !== undefined) {
+          emittedDelta = true;
+          yield delta;
         }
+      }
+    }
+    // Flush a final frame that arrived without a trailing newline (SER-202).
+    buffer += decoder.decode();
+    const tail = buffer.trim();
+    if (tail) {
+      const delta = consumeLine(tail);
+      if (delta !== undefined) {
+        emittedDelta = true;
+        yield delta;
       }
     }
     if (!emittedDelta && finalText) yield finalText;
