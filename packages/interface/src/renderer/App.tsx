@@ -301,6 +301,21 @@ function PendingApprovalsSheet({
   onOpenApprovalsPage: () => void;
 }) {
   const pending = state.approvals.slice(0, 5);
+  const [resolveError, setResolveError] = useState<string | undefined>();
+  // A failing resolve (e.g. 409 "no longer pending", 500) must not become an
+  // unhandled rejection that silently does nothing — surface it (SER-206).
+  const handleResolve = async (
+    id: string,
+    status: "approved" | "rejected",
+    reason?: string,
+  ): Promise<void> => {
+    setResolveError(undefined);
+    try {
+      await onResolve(id, status, reason);
+    } catch (error) {
+      setResolveError(error instanceof Error ? error.message : "Failed to resolve approval.");
+    }
+  };
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="max-h-[82vh] rounded-t-xl p-0 sm:max-h-[70vh]">
@@ -343,14 +358,18 @@ function PendingApprovalsSheet({
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => void onResolve(approval.id, "rejected", "Rejected by owner")}
+                      onClick={() =>
+                        void handleResolve(approval.id, "rejected", "Rejected by owner")
+                      }
                     >
                       <XCircle className="h-3.5 w-3.5" />
                       Reject
                     </Button>
                     <Button
                       size="sm"
-                      onClick={() => void onResolve(approval.id, "approved", "Approved by owner")}
+                      onClick={() =>
+                        void handleResolve(approval.id, "approved", "Approved by owner")
+                      }
                     >
                       <CheckCircle2 className="h-3.5 w-3.5" />
                       Approve
@@ -364,6 +383,14 @@ function PendingApprovalsSheet({
               No pending approvals.
             </div>
           )}
+          {resolveError ? (
+            <div
+              role="alert"
+              className="mt-3 rounded-md border border-danger/40 bg-danger-subtle/30 p-3 text-[11px] text-danger"
+            >
+              {resolveError}
+            </div>
+          ) : null}
         </div>
         <div className="border-t border-border/60 px-4 py-3 sm:px-5">
           <Button variant="outline" className="w-full" onClick={onOpenApprovalsPage}>
