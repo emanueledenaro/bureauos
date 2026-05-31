@@ -105,7 +105,13 @@ export class ProjectWorkspaceService {
     const path = this.worktreePath(slug, runId);
     // `git worktree add` creates the leaf dir but not missing intermediate dirs.
     await mkdir(join(this.projectsRoot, ".worktrees", this.assertSlug(slug)), { recursive: true });
-    await runGit(["worktree", "add", "-b", branch, path, baseRef], { cwd: repo });
+    // A released run keeps its branch, so a re-acquire (retry/resume) must attach
+    // the existing branch at its tip rather than re-create it — `git worktree add
+    // -b` fatals on an existing branch.
+    const args = (await this.branchExists(repo, branch))
+      ? ["worktree", "add", path, branch]
+      : ["worktree", "add", "-b", branch, path, baseRef];
+    await runGit(args, { cwd: repo });
     return { branch, path };
   }
 
@@ -129,6 +135,16 @@ export class ProjectWorkspaceService {
       await access(join(repo, ".git"));
       return true;
     } catch {
+      return false;
+    }
+  }
+
+  private async branchExists(repo: string, branch: string): Promise<boolean> {
+    try {
+      await runGit(["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], { cwd: repo });
+      return true;
+    } catch {
+      // Non-zero exit (with --quiet, no output) means the branch does not exist.
       return false;
     }
   }

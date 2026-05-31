@@ -132,6 +132,24 @@ describe("ProjectWorkspaceService (SER-243)", () => {
     TIMEOUT_MS,
   );
 
+  it(
+    "re-acquires a released run's branch at its tip (retry/resume)",
+    async () => {
+      const repo = await service.ensureRepo("acme-app");
+      const first = await service.acquireRunWorktree("acme-app", "run_r");
+      await commitFile(first.path, "wip.txt", "in progress");
+      await service.releaseRunWorktree("acme-app", "run_r");
+
+      // Re-acquiring the same run reattaches its surviving branch (not a fresh
+      // one), so the prior commit is still there.
+      const second = await service.acquireRunWorktree("acme-app", "run_r");
+      expect(second.branch).toBe(first.branch);
+      expect(await exists(second.path)).toBe(true);
+      expect(await trackedFiles(repo, second.branch)).toEqual(["wip.txt"]);
+    },
+    TIMEOUT_MS,
+  );
+
   it("refuses unsafe slugs, run ids, and base refs", async () => {
     expect(() => service.repoPath("../escape")).toThrow(/unsafe project slug/);
     expect(() => service.branchForRun("ok", "../bad")).toThrow(/unsafe run id/);
