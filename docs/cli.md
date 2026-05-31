@@ -94,6 +94,21 @@ Search executive and project memory and print ranked hits with score, path, and
 a snippet. Uses the SQLite FTS5 index when the Node runtime exposes `node:sqlite`
 and falls back to a Markdown scan otherwise.
 
+### `bureau memory index status` / `bureau memory index rebuild`
+
+Inspect or rebuild the SQLite FTS5 search index over Markdown memory.
+
+- `status` reports whether the index is available, its path, the document count,
+  and whether it is stale relative to the Markdown source of truth.
+- `rebuild` regenerates the index from the Markdown files and reports the
+  document count.
+
+The index lives at the configured `memory.search_index` path (default
+`.bureauos/memory/indexes/memory.sqlite`). When `node:sqlite` is unavailable in
+the runtime, the command exits cleanly and reports the index as unavailable;
+search then falls back to a Markdown scan. Any other subcommand exits non-zero
+with `memory index: expected "status" or "rebuild"`.
+
 ### `bureau memory consolidate`
 
 Regenerate `ROOT.md` — the Supreme Coordinator's always-loaded executive index —
