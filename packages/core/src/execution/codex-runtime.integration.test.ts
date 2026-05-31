@@ -20,6 +20,10 @@ const run = promisify(execFile);
 describe("codex runtime — real subprocess execution (SER-238)", () => {
   let dir: string;
 
+  // Generous timeouts: this hook + test spawn real `git`/`node` subprocesses, so
+  // they must not rely on vitest's 5s default on a loaded CI runner.
+  const TIMEOUT_MS = 30_000;
+
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), "bureauos-codex-exec-"));
     // The diff inspector reads `git status`, so the workspace must be a git repo
@@ -30,7 +34,7 @@ describe("codex runtime — real subprocess execution (SER-238)", () => {
     await writeFile(join(dir, "README.md"), "baseline\n", "utf8");
     await run("git", ["add", "."], { cwd: dir });
     await run("git", ["commit", "-q", "-m", "baseline"], { cwd: dir });
-  });
+  }, TIMEOUT_MS);
 
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
@@ -71,5 +75,5 @@ describe("codex runtime — real subprocess execution (SER-238)", () => {
     // ...and the subprocess really wrote it to disk.
     const written = await readFile(join(dir, "generated.txt"), "utf8");
     expect(written).toContain("built by the agent");
-  });
+  }, TIMEOUT_MS);
 });
