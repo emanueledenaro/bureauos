@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import {
   ApprovalRegistry,
+  approvalType,
   ArtifactStore,
   AuditLog,
   AutonomousRetryService,
@@ -1491,6 +1492,7 @@ const handleApprovalsList: Handler = async () => {
   }
   for (const a of pending) {
     process.stdout.write(`${a.id}  ${a.action.padEnd(24)}  ${a.target}\n`);
+    process.stdout.write(`  type: ${approvalType(a)}${a.recurring ? " (recurring)" : ""}\n`);
     if (a.scope) process.stdout.write(`  scope: ${a.scope}\n`);
     if (a.source) process.stdout.write(`  source: ${a.source}\n`);
     if (a.limit) process.stdout.write(`  limit: ${a.limit}\n`);

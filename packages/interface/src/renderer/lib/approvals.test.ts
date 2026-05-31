@@ -4,6 +4,7 @@ import {
   approvalMatchesRun,
   approvalRequiresDecisionNote,
   approvalRiskLevel,
+  approvalType,
   groupApprovalsByRunAndRisk,
   isStaleApprovalError,
 } from "./approvals";
@@ -27,6 +28,13 @@ const run = (overrides: Partial<RunRecord>): RunRecord => ({
   scope: "Build approval inbox",
   created: "2026-05-26T09:00:00.000Z",
   ...overrides,
+});
+
+describe("approvalType", () => {
+  it("labels one-off vs standing approvals", () => {
+    expect(approvalType(approval({ one_off: true }))).toBe("one-off");
+    expect(approvalType(approval({ one_off: false }))).toBe("standing");
+  });
 });
 
 describe("approval inbox helpers", () => {

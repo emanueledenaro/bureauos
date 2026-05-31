@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { initWorkspace } from "../init/initializer.js";
 import { workspacePaths } from "../paths.js";
-import { ApprovalRegistry, inferApprovalRiskLevel } from "./approval.js";
+import { ApprovalRegistry, approvalType, inferApprovalRiskLevel } from "./approval.js";
 
 async function approvedOneOff(
   approvals: ApprovalRegistry,
@@ -174,5 +174,12 @@ describe("inferApprovalRiskLevel", () => {
     expect(inferApprovalRiskLevel("notify", "client outreach")).toBe("high");
     expect(inferApprovalRiskLevel("update", "github pull request")).toBe("medium");
     expect(inferApprovalRiskLevel("noop", "internal note")).toBe("low");
+  });
+});
+
+describe("approvalType", () => {
+  it("labels one-off vs standing approvals", () => {
+    expect(approvalType({ one_off: true })).toBe("one-off");
+    expect(approvalType({ one_off: false })).toBe("standing");
   });
 });

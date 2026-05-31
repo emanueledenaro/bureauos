@@ -19,6 +19,7 @@ import {
   approvalRequiresDecisionNote,
   approvalRiskLevel,
   approvalRiskTone,
+  approvalType,
   groupApprovalsByRunAndRisk,
   isStaleApprovalError,
 } from "../lib/approvals";
@@ -189,6 +190,7 @@ export function ApprovalsView({
             value={approvalRiskLevel(approval)}
             tone={approvalRiskTone(approvalRiskLevel(approval))}
           />
+          <StatusPill value={approvalType(approval)} tone="neutral" />
         </div>
       ),
     },
@@ -347,6 +349,7 @@ export function ApprovalsView({
                             <span className="truncate text-[12px] font-semibold text-foreground">
                               {formatLabel(approval.action)}
                             </span>
+                            <StatusPill value={approvalType(approval)} tone="neutral" />
                             {approvalRequiresDecisionNote(approval) ? (
                               <span className="inline-flex items-center gap-1 rounded border border-warning/40 bg-warning-subtle/30 px-1.5 py-0.5 text-[10px] text-warning">
                                 <AlertTriangle className="h-3 w-3" />
