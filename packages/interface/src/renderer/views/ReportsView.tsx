@@ -18,6 +18,7 @@ import { sortNewest } from "../lib/builders";
 import { formatLabel, timeAgo } from "../lib/format";
 import { Api, type ArtifactRecord, type BusinessReportResult, type ReportDetail } from "../lib/api";
 import type { DashboardState } from "../lib/types";
+import { useT } from "../i18n/i18n";
 
 const REPORT_TYPES = new Set([
   "executive-report",
@@ -35,6 +36,7 @@ export function ReportsView({
   state: DashboardState;
   onGenerateReport: () => Promise<BusinessReportResult>;
 }) {
+  const t = useT();
   const reports = sortNewest(state.artifacts.filter((artifact) => REPORT_TYPES.has(artifact.type)));
   const generate = useAsyncAction(onGenerateReport);
 
@@ -68,16 +70,19 @@ export function ReportsView({
 
   return (
     <SectionShell
-      title="Reports"
-      description="Executive, client, revenue, and business reports generated from current registries."
+      title={t("reports.title", "Reports")}
+      description={t(
+        "reports.description",
+        "Executive, client, revenue, and business reports generated from current registries.",
+      )}
       action={
         <ViewToolbar
           primary={{
-            label: "Generate report",
+            label: t("reports.generateReport", "Generate report"),
             icon: WandSparkles,
             onClick: () => void generate.run(),
             busy: generate.busy,
-            busyLabel: "Generating",
+            busyLabel: t("reports.generating", "Generating"),
           }}
         />
       }
@@ -85,7 +90,7 @@ export function ReportsView({
       {generate.error ? (
         <ActionBanner
           tone="danger"
-          title="Report generation failed"
+          title={t("reports.generationFailed", "Report generation failed")}
           detail={generate.error}
           onDismiss={generate.reset}
           className="mb-3"
@@ -94,8 +99,11 @@ export function ReportsView({
       {generate.result ? (
         <ActionBanner
           tone="success"
-          title={`Reports generated · ${generate.result.executive_report.id}`}
-          detail="Executive, cross-project, and business operating reports were written locally."
+          title={`${t("reports.reportsGenerated", "Reports generated")} · ${generate.result.executive_report.id}`}
+          detail={t(
+            "reports.reportsGeneratedDetail",
+            "Executive, cross-project, and business operating reports were written locally.",
+          )}
           onDismiss={generate.reset}
           className="mb-3"
         />
@@ -130,15 +138,20 @@ export function ReportsView({
               <Badge variant="muted">{artifact.type.split("-")[0]}</Badge>
             </div>
             <div className="text-meta">
-              {artifact.created ? `Created ${timeAgo(artifact.created)}` : "Created"}
+              {artifact.created
+                ? `${t("reports.created", "Created")} ${timeAgo(artifact.created)}`
+                : t("reports.created", "Created")}
             </div>
           </BaseCard>
         ))}
         {reports.length === 0 ? (
           <div className="md:col-span-2 xl:col-span-3">
             <EmptyState
-              title="No reports yet"
-              description="Use Generate report to write an executive, cross-project, and business operating report from current registries."
+              title={t("reports.emptyState", "No reports yet")}
+              description={t(
+                "reports.emptyStateDescription",
+                "Use Generate report to write an executive, cross-project, and business operating report from current registries.",
+              )}
               icon={FileText}
             />
           </div>
@@ -148,16 +161,20 @@ export function ReportsView({
       <Dialog open={Boolean(openReportId)} onOpenChange={closeReport}>
         <DialogContent className="max-h-[85vh] w-full max-w-3xl gap-3 overflow-hidden">
           <DialogHeader>
-            <DialogTitle>{openReport ? formatLabel(openReport.type) : "Report"}</DialogTitle>
+            <DialogTitle>
+              {openReport ? formatLabel(openReport.type) : t("reports.dialogTitle", "Report")}
+            </DialogTitle>
             <DialogDescription className="font-mono">
               {openReportId}
-              {openReport?.created ? ` · created ${timeAgo(openReport.created)}` : ""}
+              {openReport?.created
+                ? ` · ${t("reports.createdLower", "created")} ${timeAgo(openReport.created)}`
+                : ""}
             </DialogDescription>
           </DialogHeader>
           {detailLoading ? (
             <div className="flex items-center gap-2 rounded-md border border-border/60 bg-surface-raised p-4 text-meta">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Loading report
+              {t("reports.loadingReport", "Loading report")}
             </div>
           ) : detailError ? (
             <div className="rounded-md border border-danger/40 bg-danger-subtle/30 p-4 text-[12px] text-danger">

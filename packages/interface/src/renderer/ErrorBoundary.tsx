@@ -1,4 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { catalog } from "./i18n/catalog";
+import type { AppLang } from "./i18n/types";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -37,6 +39,15 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     this.setState({ error: null });
   };
 
+  // useT() can't be used here: this boundary sits above <I18nProvider>, which
+  // unmounts when the tree throws. Resolve the active language from <html lang>
+  // (kept in sync by App) and read the catalog directly, mirroring the provider's
+  // resolution order: requested lang -> English -> fallback.
+  private t(key: string, fallback: string): string {
+    const lang: AppLang = document.documentElement.lang === "it" ? "it" : "en";
+    return catalog[lang][key] ?? catalog.en[key] ?? fallback;
+  }
+
   override render(): ReactNode {
     const { error } = this.state;
     if (!error) return this.props.children;
@@ -59,11 +70,13 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         }}
       >
         <h1 style={{ fontSize: "1.125rem", fontWeight: 600, margin: 0 }}>
-          The Operating Room hit a display error
+          {this.t("errorBoundary.title", "The Operating Room hit a display error")}
         </h1>
         <p style={{ margin: 0, color: "#9ca3af", lineHeight: 1.5 }}>
-          The view was paused to avoid a blank screen. Your workspace data is safe — the underlying
-          action, if any, already completed. Reload to continue.
+          {this.t(
+            "errorBoundary.body",
+            "The view was paused to avoid a blank screen. Your workspace data is safe — the underlying action, if any, already completed. Reload to continue.",
+          )}
         </p>
         <pre
           style={{
@@ -93,7 +106,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               cursor: "pointer",
             }}
           >
-            Reload
+            {this.t("errorBoundary.reload", "Reload")}
           </button>
           <button
             type="button"
@@ -107,7 +120,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               cursor: "pointer",
             }}
           >
-            Try again
+            {this.t("errorBoundary.tryAgain", "Try again")}
           </button>
         </div>
       </div>

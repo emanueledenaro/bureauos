@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "../components/ui/select";
 import { Badge } from "../components/ui/badge";
+import { useT } from "../i18n/i18n";
 import { cn } from "../lib/utils";
 import { enabledCount } from "../lib/builders";
 import { formatLabel } from "../lib/format";
@@ -71,6 +72,7 @@ export function SettingsView({
   onProviderLogout: (provider: string, id: string) => Promise<void>;
   onRefresh: () => Promise<void>;
 }) {
+  const t = useT();
   const [provider, setProvider] = useState("openai-codex");
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
@@ -172,7 +174,7 @@ export function SettingsView({
   };
 
   const startOpenAICodexOAuth = async (): Promise<void> => {
-    setOauthStatus("Opening OpenAI authorization…");
+    setOauthStatus(t("settings.openingAuthorization", "Opening OpenAI authorization…"));
     const authorization = await Api.providerOAuthAuthorize("openai-codex");
     setOauthAuthorization(authorization);
     await openAuthorizationUrl(authorization.url);
@@ -182,16 +184,21 @@ export function SettingsView({
       return;
     }
 
-    setOauthStatus("Waiting for browser authorization…");
+    setOauthStatus(t("settings.waitingForAuthorization", "Waiting for browser authorization…"));
     const result = await Api.providerOAuthCallback("openai-codex", {
       method: "auto",
       ...(defaultModel.trim() ? { defaultModel: defaultModel.trim() } : {}),
     });
     if (result.status !== "connected") {
-      setOauthStatus("Authorization is still pending. Paste the final redirect URL to complete.");
+      setOauthStatus(
+        t(
+          "settings.authorizationPendingPaste",
+          "Authorization is still pending. Paste the final redirect URL to complete.",
+        ),
+      );
       return;
     }
-    setOauthStatus("OpenAI Codex OAuth connected.");
+    setOauthStatus(t("settings.oauthConnected", "OpenAI Codex OAuth connected."));
     setOauthAuthorization(undefined);
     setOauthCode("");
     setDefaultModel("");
@@ -203,7 +210,7 @@ export function SettingsView({
     if (!code || busy) return;
     setBusy(true);
     setConnectError(undefined);
-    setOauthStatus("Completing OpenAI Codex OAuth…");
+    setOauthStatus(t("settings.completingOauth", "Completing OpenAI Codex OAuth…"));
     try {
       const result = await Api.providerOAuthCallback("openai-codex", {
         method: "code",
@@ -211,16 +218,20 @@ export function SettingsView({
         ...(defaultModel.trim() ? { defaultModel: defaultModel.trim() } : {}),
       });
       if (result.status !== "connected") {
-        setOauthStatus("Authorization is still pending.");
+        setOauthStatus(t("settings.authorizationPending", "Authorization is still pending."));
         return;
       }
-      setOauthStatus("OpenAI Codex OAuth connected.");
+      setOauthStatus(t("settings.oauthConnected", "OpenAI Codex OAuth connected."));
       setOauthAuthorization(undefined);
       setOauthCode("");
       setDefaultModel("");
       await onRefresh();
     } catch (error) {
-      setConnectError(error instanceof Error ? error.message : "Failed to complete OAuth.");
+      setConnectError(
+        error instanceof Error
+          ? error.message
+          : t("settings.failedCompleteOauth", "Failed to complete OAuth."),
+      );
       setOauthStatus(undefined);
     } finally {
       setBusy(false);
@@ -231,11 +242,11 @@ export function SettingsView({
     if (savingModel || !connectedProvider || connectedProvider.source !== "auth") return;
     const next = defaultModel.trim();
     if (!next) {
-      setModelStatus("Pick a model before saving.");
+      setModelStatus(t("settings.pickModelBeforeSaving", "Pick a model before saving."));
       return;
     }
     setSavingModel(true);
-    setModelStatus("Saving model…");
+    setModelStatus(t("settings.savingModel", "Saving model…"));
     try {
       await Api.providerSetDefaultModel({
         provider,
@@ -243,10 +254,14 @@ export function SettingsView({
         defaultModel: next,
       });
       modelTouched.current = false;
-      setModelStatus(`Default model set to ${next}.`);
+      setModelStatus(`${t("settings.defaultModelSetTo", "Default model set to")} ${next}.`);
       await onRefresh();
     } catch (error) {
-      setModelStatus(error instanceof Error ? error.message : "Failed to update model.");
+      setModelStatus(
+        error instanceof Error
+          ? error.message
+          : t("settings.failedUpdateModel", "Failed to update model."),
+      );
     } finally {
       setSavingModel(false);
     }
@@ -274,7 +289,11 @@ export function SettingsView({
       await Api.updateSettings(input);
       await onRefresh();
     } catch (error) {
-      setSettingsError(error instanceof Error ? error.message : "Failed to update settings.");
+      setSettingsError(
+        error instanceof Error
+          ? error.message
+          : t("settings.failedUpdateSettings", "Failed to update settings."),
+      );
     } finally {
       setSavingSetting(undefined);
     }
@@ -306,7 +325,11 @@ export function SettingsView({
       // A rejected authorize/callback/login left the owner staring at a frozen
       // "in progress" status with no error and no retry (SER-205). Surface the
       // failure, clear the fake progress message, and re-enable the buttons.
-      setConnectError(error instanceof Error ? error.message : "Failed to connect provider.");
+      setConnectError(
+        error instanceof Error
+          ? error.message
+          : t("settings.failedConnectProvider", "Failed to connect provider."),
+      );
       setOauthStatus(undefined);
     } finally {
       setBusy(false);
@@ -315,17 +338,20 @@ export function SettingsView({
 
   return (
     <SectionShell
-      title="Settings"
-      description="Provider authentication, autonomy policy, and routing."
+      title={t("settings.title", "Settings")}
+      description={t(
+        "settings.description",
+        "Provider authentication, autonomy policy, and routing.",
+      )}
     >
       <div className="grid gap-3 rounded-lg border border-border/70 bg-surface-subtle/60 p-4 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
         <div className="flex flex-col gap-1">
           <label className="text-[10px] uppercase tracking-wide text-muted-foreground">
-            Provider
+            {t("settings.providerLabel", "Provider")}
           </label>
           <Select value={provider} onValueChange={setProvider}>
             <SelectTrigger>
-              <SelectValue placeholder="Select provider" />
+              <SelectValue placeholder={t("settings.selectProvider", "Select provider")} />
             </SelectTrigger>
             <SelectContent>
               {providerConnectors.map((item) => (
@@ -340,7 +366,7 @@ export function SettingsView({
         {requiresApiKey ? (
           <div className="flex flex-col gap-1">
             <label className="text-[10px] uppercase tracking-wide text-muted-foreground">
-              API key
+              {t("settings.apiKey", "API key")}
             </label>
             <Input
               type="password"
@@ -354,7 +380,7 @@ export function SettingsView({
         {requiresBaseUrl ? (
           <div className="flex flex-col gap-1">
             <label className="text-[10px] uppercase tracking-wide text-muted-foreground">
-              Base URL
+              {t("settings.baseUrl", "Base URL")}
             </label>
             <Input
               value={baseUrl}
@@ -366,11 +392,11 @@ export function SettingsView({
 
         <div className="flex flex-col gap-1">
           <label className="text-[10px] uppercase tracking-wide text-muted-foreground">
-            Default model
+            {t("settings.defaultModel", "Default model")}
           </label>
           <Select value={defaultModel} onValueChange={selectModel}>
             <SelectTrigger>
-              <SelectValue placeholder="Auto" />
+              <SelectValue placeholder={t("settings.auto", "Auto")} />
             </SelectTrigger>
             <SelectContent>
               {modelChoices.map((model) => (
@@ -386,11 +412,11 @@ export function SettingsView({
           {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plug className="h-3 w-3" />}
           {mode === "oauth"
             ? connectedProvider?.source === "auth"
-              ? "Reconnect OAuth"
-              : "Connect OAuth"
+              ? t("settings.reconnectOauth", "Reconnect OAuth")
+              : t("settings.connectOauth", "Connect OAuth")
             : connectedProvider?.source === "auth"
-              ? "Reconnect"
-              : "Connect"}
+              ? t("settings.reconnect", "Reconnect")
+              : t("settings.connect", "Connect")}
         </Button>
       </div>
 
@@ -405,11 +431,11 @@ export function SettingsView({
 
       {connectedProvider?.source === "auth" ? (
         <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-border/70 bg-surface-subtle/40 px-4 py-3">
-          <Badge variant="success">Connected</Badge>
+          <Badge variant="success">{t("settings.connected", "Connected")}</Badge>
           <span className="text-[11px] text-muted-foreground">
-            Current model{" "}
+            {t("settings.currentModel", "Current model")}{" "}
             <span className="font-mono text-foreground">
-              {connectedProvider.default_model || "auto"}
+              {connectedProvider.default_model || t("settings.autoLower", "auto")}
             </span>
           </span>
           <Button
@@ -424,7 +450,9 @@ export function SettingsView({
             className="ml-auto"
           >
             {savingModel ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-            {connectedProvider.default_model ? "Update model" : "Save model"}
+            {connectedProvider.default_model
+              ? t("settings.updateModel", "Update model")
+              : t("settings.saveModelButton", "Save model")}
           </Button>
           {modelStatus ? (
             <span className="w-full text-[11px] text-muted-foreground">{modelStatus}</span>
@@ -442,13 +470,25 @@ export function SettingsView({
               </div>
               <div className="mt-3 flex flex-wrap gap-1.5">
                 <Badge variant="outline">
-                  {connector.source === "config" ? "Config override" : "Built-in connector"}
+                  {connector.source === "config"
+                    ? t("settings.configOverride", "Config override")
+                    : t("settings.builtInConnector", "Built-in connector")}
                 </Badge>
-                <Badge variant="outline">Default {connector.defaultModel}</Badge>
-                <Badge variant="outline">{connector.models.length} models</Badge>
-                {modelList ? <Badge variant="outline">Models from {modelList.source}</Badge> : null}
+                <Badge variant="outline">
+                  {t("settings.default", "Default")} {connector.defaultModel}
+                </Badge>
+                <Badge variant="outline">
+                  {connector.models.length} {t("settings.models", "models")}
+                </Badge>
+                {modelList ? (
+                  <Badge variant="outline">
+                    {t("settings.modelsFrom", "Models from")} {modelList.source}
+                  </Badge>
+                ) : null}
                 {selectedModel ? (
-                  <Badge variant="info">{formatLabel(selectedModel.budgetTier)} budget</Badge>
+                  <Badge variant="info">
+                    {formatLabel(selectedModel.budgetTier)} {t("settings.budget", "budget")}
+                  </Badge>
                 ) : null}
               </div>
               {selectedModel?.capabilities.length ? (
@@ -467,7 +507,10 @@ export function SettingsView({
           </div>
           {connector.noApiFallback ? (
             <div className="mt-3 text-[11px] text-muted-foreground">
-              This connector is isolated from API-key providers and never falls back to API auth.
+              {t(
+                "settings.connectorIsolated",
+                "This connector is isolated from API-key providers and never falls back to API auth.",
+              )}
             </div>
           ) : null}
         </div>
@@ -478,11 +521,14 @@ export function SettingsView({
           <div className="flex items-center gap-2">
             <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
             <div className="text-[12px] font-semibold text-foreground">
-              OpenAI Codex uses browser OAuth only
+              {t("settings.codexOauthOnly", "OpenAI Codex uses browser OAuth only")}
             </div>
           </div>
           <div className="mt-1 text-[11px] text-muted-foreground">
-            This connection is separate from OpenAI API keys and never falls back to API auth.
+            {t(
+              "settings.codexSeparate",
+              "This connection is separate from OpenAI API keys and never falls back to API auth.",
+            )}
           </div>
           {oauthStatus ? (
             <div className="mt-3 rounded-md border border-info/40 bg-info-subtle/30 p-3 text-[11px] text-foreground">
@@ -494,14 +540,17 @@ export function SettingsView({
               <Input
                 value={oauthCode}
                 onChange={(event) => setOauthCode(event.target.value)}
-                placeholder="Final redirect URL or authorization code"
+                placeholder={t(
+                  "settings.redirectUrlPlaceholder",
+                  "Final redirect URL or authorization code",
+                )}
               />
               <Button
                 variant="outline"
                 onClick={() => void completeOpenAICodexOAuth()}
                 disabled={busy || !oauthCode.trim()}
               >
-                Complete
+                {t("settings.complete", "Complete")}
               </Button>
             </div>
           ) : null}
@@ -510,14 +559,22 @@ export function SettingsView({
 
       {settings ? (
         <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <SettingsCard icon={Building2} label="Workspace" title={settings.organization.name}>
+          <SettingsCard
+            icon={Building2}
+            label={t("settings.workspace", "Workspace")}
+            title={settings.organization.name}
+          >
             <Grid2>
-              <Cell label="Preset" value={settings.setup.preset} />
-              <Cell label="Mode" value={settings.setup.mode} />
-              <Cell label="Interface" value={settings.interface.mode} />
+              <Cell label={t("settings.preset", "Preset")} value={settings.setup.preset} />
+              <Cell label={t("settings.mode", "Mode")} value={settings.setup.mode} />
+              <Cell label={t("settings.interface", "Interface")} value={settings.interface.mode} />
               <Cell
-                label="Orientation"
-                value={settings.interface.mobile_first ? "Mobile-first" : "Desktop-first"}
+                label={t("settings.orientation", "Orientation")}
+                value={
+                  settings.interface.mobile_first
+                    ? t("settings.mobileFirst", "Mobile-first")
+                    : t("settings.desktopFirst", "Desktop-first")
+                }
               />
             </Grid2>
             <div className="mt-3 truncate font-mono text-[10px] text-muted-foreground">
@@ -527,40 +584,61 @@ export function SettingsView({
 
           <SettingsCard
             icon={Plug}
-            label="Supreme Coordinator"
+            label={t("settings.supremeCoordinator", "Supreme Coordinator")}
             title={settings.supreme_coordinator.provider}
           >
             <div className="text-[11px] text-muted-foreground">
-              Model{" "}
+              {t("settings.model", "Model")}{" "}
               <span className="font-mono text-foreground">
                 {settings.supreme_coordinator.model}
               </span>
             </div>
             <div className="mt-3 flex flex-wrap gap-1.5">
               <Badge variant="outline">
-                {settings.supreme_coordinator.user_facing ? "Owner-facing" : "Internal only"}
+                {settings.supreme_coordinator.user_facing
+                  ? t("settings.ownerFacing", "Owner-facing")
+                  : t("settings.internalOnly", "Internal only")}
               </Badge>
               <Badge variant={settings.supreme_coordinator.always_on ? "success" : "outline"}>
-                {settings.supreme_coordinator.always_on ? "Always-on" : "Manual"}
+                {settings.supreme_coordinator.always_on
+                  ? t("settings.alwaysOn", "Always-on")
+                  : t("settings.manual", "Manual")}
               </Badge>
             </div>
           </SettingsCard>
 
-          <SettingsCard icon={Plug} label="Organization" title="Roles & capabilities">
+          <SettingsCard
+            icon={Plug}
+            label={t("settings.organization", "Organization")}
+            title={t("settings.rolesCapabilities", "Roles & capabilities")}
+          >
             <Grid2>
-              <Cell label="Agent roles" value={String(settings.agents.roles)} />
-              <Cell label="Configured" value={String(settings.agents.configured)} />
-              <Cell label="Capabilities" value={String(settings.capabilities.catalog)} />
-              <Cell label="Providers" value={String(settings.providers.connectors)} />
+              <Cell
+                label={t("settings.agentRoles", "Agent roles")}
+                value={String(settings.agents.roles)}
+              />
+              <Cell
+                label={t("settings.configured", "Configured")}
+                value={String(settings.agents.configured)}
+              />
+              <Cell
+                label={t("settings.capabilities", "Capabilities")}
+                value={String(settings.capabilities.catalog)}
+              />
+              <Cell
+                label={t("settings.providers", "Providers")}
+                value={String(settings.providers.connectors)}
+              />
             </Grid2>
             <div className="mt-3 text-[10px] text-muted-foreground">
-              Overrides: {settings.providers.configured_overrides.join(", ") || "none"}
+              {t("settings.overrides", "Overrides")}:{" "}
+              {settings.providers.configured_overrides.join(", ") || t("settings.none", "none")}
             </div>
           </SettingsCard>
 
           <SettingsCard
             icon={Globe}
-            label="Language"
+            label={t("settings.language", "Language")}
             title={settings.interface.language === "it" ? "Italiano" : "English"}
           >
             <div className="flex gap-2">
@@ -592,15 +670,17 @@ export function SettingsView({
               })}
             </div>
             <div className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
-              Saved to your workspace and applied on next load. English is the complete base;
-              Italian translation of the interface is rolling out.
+              {t(
+                "settings.languageHelp",
+                "Saved to your workspace and applied on next load. English is the complete base; Italian translation of the interface is rolling out.",
+              )}
             </div>
           </SettingsCard>
 
           <SettingsCard
             icon={Shield}
-            label="Autonomy"
-            title={`Level ${settings.autonomy.level ?? 2} · ${enabledCount(settings.autonomy)} enabled`}
+            label={t("settings.autonomy", "Autonomy")}
+            title={`${t("settings.level", "Level")} ${settings.autonomy.level ?? 2} · ${enabledCount(settings.autonomy)} ${t("settings.enabled", "enabled")}`}
           >
             <ToggleList
               values={settings.autonomy}
@@ -614,8 +694,8 @@ export function SettingsView({
 
           <SettingsCard
             icon={Shield}
-            label="Growth Policy"
-            title={`${enabledCount(settings.growth_autonomy)} / ${Object.keys(settings.growth_autonomy).length} enabled`}
+            label={t("settings.growthPolicy", "Growth Policy")}
+            title={`${enabledCount(settings.growth_autonomy)} / ${Object.keys(settings.growth_autonomy).length} ${t("settings.enabled", "enabled")}`}
           >
             <ToggleList
               values={settings.growth_autonomy}
@@ -629,10 +709,14 @@ export function SettingsView({
             />
           </SettingsCard>
 
-          <SettingsCard icon={Shield} label="Limits & Signals" title="Operational guards">
+          <SettingsCard
+            icon={Shield}
+            label={t("settings.limitsSignals", "Limits & Signals")}
+            title={t("settings.operationalGuards", "Operational guards")}
+          >
             <div className="space-y-1.5 text-[11px]">
               <NumberRow
-                label="Max retries"
+                label={t("settings.maxRetries", "Max retries")}
                 value={settings.limits.max_retries_per_task as number}
                 savingKey={savingSetting}
                 fieldKey="limits.max_retries_per_task"
@@ -643,7 +727,7 @@ export function SettingsView({
                 }
               />
               <NumberRow
-                label="Files before review"
+                label={t("settings.filesBeforeReview", "Files before review")}
                 value={settings.limits.max_files_changed_without_human_review as number}
                 savingKey={savingSetting}
                 fieldKey="limits.max_files_changed_without_human_review"
@@ -653,14 +737,21 @@ export function SettingsView({
                   })
                 }
               />
-              <Row label="Stale PR hours" value={settings.triggers.thresholds.stale_pr_hours} />
               <Row
-                label="Blocked issue hours"
+                label={t("settings.stalePrHours", "Stale PR hours")}
+                value={settings.triggers.thresholds.stale_pr_hours}
+              />
+              <Row
+                label={t("settings.blockedIssueHours", "Blocked issue hours")}
                 value={settings.triggers.thresholds.blocked_issue_hours}
               />
               <Row
-                label="Memory global access"
-                value={settings.memory.coordinator_has_global_access === true ? "on" : "off"}
+                label={t("settings.memoryGlobalAccess", "Memory global access")}
+                value={
+                  settings.memory.coordinator_has_global_access === true
+                    ? t("settings.on", "on")
+                    : t("settings.off", "off")
+                }
                 tone={
                   settings.memory.coordinator_has_global_access === true ? "success" : "neutral"
                 }
@@ -678,16 +769,16 @@ export function SettingsView({
 
       <ResponsiveTable className="mt-5" minWidth={780}>
         <div className="grid grid-cols-[140px_100px_minmax(0,1fr)_80px_90px_100px] bg-surface-subtle/60 px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          <span>Provider</span>
-          <span>Mode</span>
-          <span>Credential</span>
-          <span>Source</span>
-          <span>Status</span>
+          <span>{t("settings.colProvider", "Provider")}</span>
+          <span>{t("settings.colMode", "Mode")}</span>
+          <span>{t("settings.colCredential", "Credential")}</span>
+          <span>{t("settings.colSource", "Source")}</span>
+          <span>{t("settings.colStatus", "Status")}</span>
           <span />
         </div>
         {providers.length === 0 ? (
           <div className="border-t border-border/60 px-4 py-6 text-center text-[11px] text-muted-foreground">
-            No provider connected yet.
+            {t("settings.noProviderConnected", "No provider connected yet.")}
           </div>
         ) : null}
         {providers.map((item) => (
@@ -715,7 +806,7 @@ export function SettingsView({
                 size="sm"
                 onClick={() => void onProviderLogout(item.provider, item.id)}
               >
-                Disconnect
+                {t("settings.disconnect", "Disconnect")}
               </Button>
             ) : (
               <span />
@@ -839,6 +930,7 @@ function PolicyToggle({
   saving: boolean;
   onClick: () => void;
 }) {
+  const t = useT();
   return (
     <button
       type="button"
@@ -854,7 +946,7 @@ function PolicyToggle({
           : "bg-surface-subtle/60 text-muted-foreground/70 hover:bg-surface-subtle",
       )}
     >
-      {on ? "on" : "off"}
+      {on ? t("settings.on", "on") : t("settings.off", "off")}
     </button>
   );
 }

@@ -18,6 +18,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
+import { useT } from "../../i18n/i18n";
 import { MODE_LABELS } from "../../lib/modes";
 import type { AdaptiveMode, DashboardState } from "../../lib/types";
 import { Badge } from "../ui/badge";
@@ -89,6 +90,7 @@ function SidebarContent({
   mode: AdaptiveMode;
   onModeChange: (mode: AdaptiveMode) => void;
 }) {
+  const t = useT();
   const badges = computeBadges(state);
   const connecting = !state.hasLoaded && !state.error;
   const systemHealthy = !state.error && state.hasLoaded;
@@ -102,21 +104,21 @@ function SidebarContent({
         <div className="leading-tight">
           <div className="text-[14px] font-semibold text-foreground">BureauOS</div>
           <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-            Operating Room
+            {t("shell.brandSubtitle", "Operating Room")}
           </div>
         </div>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         <NavGroup
-          label="Command"
+          label={t("shell.command", "Command")}
           items={COMMAND}
           badges={badges}
           mode={mode}
           onModeChange={onModeChange}
         />
         <NavGroup
-          label="Business"
+          label={t("shell.business", "Business")}
           items={BUSINESS}
           badges={badges}
           mode={mode}
@@ -124,7 +126,7 @@ function SidebarContent({
           className="mt-4"
         />
         <NavGroup
-          label="Control"
+          label={t("shell.control", "Control")}
           items={CONTROL}
           badges={badges}
           mode={mode}
@@ -135,7 +137,7 @@ function SidebarContent({
 
       <div className="m-3 rounded-lg border border-border/60 bg-background/35 p-3">
         <div className="flex items-center justify-between">
-          <div className="label-eyebrow">System Status</div>
+          <div className="label-eyebrow">{t("shell.systemStatus", "System Status")}</div>
           <Activity className="h-3 w-3 text-muted-foreground" />
         </div>
         <div className="mt-2 flex items-center gap-2 text-[11px]">
@@ -150,11 +152,16 @@ function SidebarContent({
             )}
           />
           <span className="text-foreground">
-            {state.error ? "API offline" : connecting ? "Connecting" : "All systems online"}
+            {state.error
+              ? t("shell.apiOffline", "API offline")
+              : connecting
+                ? t("shell.connecting", "Connecting")
+                : t("shell.allSystemsOnline", "All systems online")}
           </span>
         </div>
         <div className="mt-1 text-[10px] text-muted-foreground">
-          {state.agents.length} agents · {state.runs.length} runs
+          {state.agents.length} {t("shell.agentsLabel", "agents")} · {state.runs.length}{" "}
+          {t("shell.runsLabel", "runs")}
         </div>
       </div>
     </div>
@@ -190,11 +197,14 @@ export function SidebarDrawer({
   onOpenChange: (open: boolean) => void;
   onModeChange: (mode: AdaptiveMode) => void;
 }) {
+  const t = useT();
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="left" className="w-[260px] p-0" hideClose>
-        <SheetTitle className="sr-only">Navigation</SheetTitle>
-        <SheetDescription className="sr-only">Primary Operating Room navigation.</SheetDescription>
+        <SheetTitle className="sr-only">{t("shell.navTitle", "Navigation")}</SheetTitle>
+        <SheetDescription className="sr-only">
+          {t("shell.navAria", "Primary Operating Room navigation.")}
+        </SheetDescription>
         <SidebarContent
           state={state}
           mode={mode}
@@ -254,6 +264,7 @@ function SidebarItem({
   badge?: number;
   onClick: () => void;
 }) {
+  const t = useT();
   const Icon = item.icon;
   return (
     <button
@@ -279,7 +290,7 @@ function SidebarItem({
             active ? "text-foreground" : "text-muted-foreground/80 group-hover:text-foreground",
           )}
         />
-        <span className="font-medium">{MODE_LABELS[item.id]}</span>
+        <span className="font-medium">{t(`shell.${item.id}`, MODE_LABELS[item.id])}</span>
       </div>
       {badge !== undefined && badge > 0 ? (
         <Badge

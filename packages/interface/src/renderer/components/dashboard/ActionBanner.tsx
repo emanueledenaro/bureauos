@@ -2,6 +2,7 @@ import { AlertTriangle, CheckCircle2, Info, X, type LucideIcon } from "lucide-re
 import type { ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import type { Tone } from "../../lib/tone";
+import { useT } from "../../i18n/i18n";
 import { Button } from "../ui/button";
 
 const TONE_STYLE: Record<Tone, { container: string; icon: string; defaultIcon: LucideIcon }> = {
@@ -54,6 +55,7 @@ export function ActionBanner({
   className?: string;
   children?: ReactNode;
 }) {
+  const t = useT();
   const palette = TONE_STYLE[tone];
   const ResolvedIcon = Icon ?? palette.defaultIcon;
   return (
@@ -76,7 +78,7 @@ export function ActionBanner({
           variant="ghost"
           size="icon-sm"
           onClick={onDismiss}
-          aria-label="Dismiss notification"
+          aria-label={t("actionBanner.dismiss", "Dismiss notification")}
           className="shrink-0"
         >
           <X className="h-3.5 w-3.5" />

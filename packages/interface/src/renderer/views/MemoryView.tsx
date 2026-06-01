@@ -16,10 +16,12 @@ import {
   type MemoryBrowserResult,
 } from "../lib/api";
 import type { DashboardState } from "../lib/types";
+import { useT } from "../i18n/i18n";
 
 const DEFAULT_MEMORY_QUERY = "company clients projects revenue growth";
 
 export function MemoryView({ state }: { state: DashboardState }) {
+  const t = useT();
   const [query, setQuery] = useState(DEFAULT_MEMORY_QUERY);
   const [packet, setPacket] = useState<CoordinatorGlobalMemoryPacket | undefined>();
   const [browser, setBrowser] = useState<MemoryBrowserResult | undefined>();
@@ -92,8 +94,8 @@ export function MemoryView({ state }: { state: DashboardState }) {
 
   return (
     <SectionShell
-      title="Memory"
-      description="The durable company memory written by the kernel."
+      title={t("memory.title", "Memory")}
+      description={t("memory.description", "The durable company memory written by the kernel.")}
       action={
         <div className="flex w-full min-w-0 max-w-md flex-1 items-center gap-2">
           <div className="relative flex-1">
@@ -105,7 +107,7 @@ export function MemoryView({ state }: { state: DashboardState }) {
                 if (event.key === "Enter") void search();
               }}
               className="h-8 pl-7"
-              placeholder="Search company memory"
+              placeholder={t("memory.searchPlaceholder", "Search company memory")}
             />
           </div>
           <Button size="sm" onClick={() => void search()} disabled={loading || !query.trim()}>
@@ -114,34 +116,34 @@ export function MemoryView({ state }: { state: DashboardState }) {
             ) : (
               <Search className="h-3 w-3" />
             )}
-            {loading ? "Searching" : "Search"}
+            {loading ? t("memory.searching", "Searching") : t("memory.search", "Search")}
           </Button>
         </div>
       }
     >
       <KpiBar columns={4}>
         <MetricTile
-          label="Clients"
+          label={t("memory.clients", "Clients")}
           value={String(state.clients.length)}
-          detail="Profiles"
+          detail={t("memory.profiles", "Profiles")}
           icon={Database}
         />
         <MetricTile
-          label="Projects"
+          label={t("memory.projects", "Projects")}
           value={String(state.projects.length)}
-          detail="Project memories"
+          detail={t("memory.projectMemories", "Project memories")}
           icon={Database}
         />
         <MetricTile
-          label="Artifacts"
+          label={t("memory.artifacts", "Artifacts")}
           value={String(state.artifacts.length)}
-          detail="Generated records"
+          detail={t("memory.generatedRecords", "Generated records")}
           icon={FileText}
         />
         <MetricTile
-          label="Audit events"
+          label={t("memory.auditEvents", "Audit events")}
           value={String(state.audit.length)}
-          detail="Recent stream"
+          detail={t("memory.recentStream", "Recent stream")}
           icon={Database}
         />
       </KpiBar>
@@ -150,18 +152,26 @@ export function MemoryView({ state }: { state: DashboardState }) {
         <div className="min-w-0 overflow-hidden rounded-lg border border-border/70 bg-surface-subtle/60 p-4">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="text-[12px] font-semibold text-foreground">Local Memory Browser</div>
+              <div className="text-[12px] font-semibold text-foreground">
+                {t("memory.localMemoryBrowser", "Local Memory Browser")}
+              </div>
               <div className="mt-1 text-[10px] text-muted-foreground">
                 {browser
-                  ? `${browser.entries.length} entries · semantic ${
+                  ? `${browser.entries.length} ${t("memory.entries", "entries")} · ${t(
+                      "memory.semantic",
+                      "semantic",
+                    )} ${
                       browser.semantic_index.enabled
-                        ? `${browser.semantic_index.provider} · ${browser.semantic_hits.length} hits`
-                        : "off"
+                        ? `${browser.semantic_index.provider} · ${browser.semantic_hits.length} ${t(
+                            "memory.hits",
+                            "hits",
+                          )}`
+                        : t("memory.off", "off")
                     }`
-                  : "Loading memory entries"}
+                  : t("memory.loadingMemoryEntries", "Loading memory entries")}
               </div>
             </div>
-            <StatusPill value="Redacted" tone="success" />
+            <StatusPill value={t("memory.redacted", "Redacted")} tone="success" />
           </div>
 
           {browser ? (
@@ -208,19 +218,24 @@ export function MemoryView({ state }: { state: DashboardState }) {
             ))}
             {browser && browser.entries.length === 0 ? (
               <EmptyState
-                title="No memory entries"
-                description="No client, project, daily, or decision memory matched the current search."
+                title={t("memory.noMemoryEntries", "No memory entries")}
+                description={t(
+                  "memory.noMemoryEntriesDescription",
+                  "No client, project, daily, or decision memory matched the current search.",
+                )}
               />
             ) : null}
           </div>
         </div>
 
         <div className="min-w-0 overflow-hidden rounded-lg border border-border/70 bg-surface-subtle/60 p-4">
-          <div className="text-[12px] font-semibold text-foreground">Entry Detail</div>
+          <div className="text-[12px] font-semibold text-foreground">
+            {t("memory.entryDetail", "Entry Detail")}
+          </div>
           <div className="mt-1 text-[10px] text-muted-foreground">
             {browser?.selected
               ? `${browser.selected.category} · ${browser.selected.path}`
-              : "Select a memory entry"}
+              : t("memory.selectAMemoryEntry", "Select a memory entry")}
           </div>
           {browser?.selected ? (
             <>
@@ -238,9 +253,14 @@ export function MemoryView({ state }: { state: DashboardState }) {
             </>
           ) : (
             <div className="mt-3 rounded-md border border-dashed border-border/60 p-4">
-              <div className="text-[12px] font-semibold text-foreground">No entry selected</div>
+              <div className="text-[12px] font-semibold text-foreground">
+                {t("memory.noEntrySelected", "No entry selected")}
+              </div>
               <div className="mt-1 text-[10px] text-muted-foreground">
-                Client, project, daily, and decision memory details appear here.
+                {t(
+                  "memory.noEntrySelectedDescription",
+                  "Client, project, daily, and decision memory details appear here.",
+                )}
               </div>
             </div>
           )}
@@ -252,15 +272,17 @@ export function MemoryView({ state }: { state: DashboardState }) {
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="text-[12px] font-semibold text-foreground">
-                Supreme Coordinator Memory Packet
+                {t("memory.supremeCoordinatorMemoryPacket", "Supreme Coordinator Memory Packet")}
               </div>
               <div className="mt-1 text-[10px] text-muted-foreground">
                 {packet
-                  ? `${packet.topHits.length} hits · ${timeAgo(packet.generatedAt)}`
-                  : "Waiting for memory packet"}
+                  ? `${packet.topHits.length} ${t("memory.hits", "hits")} · ${timeAgo(
+                      packet.generatedAt,
+                    )}`
+                  : t("memory.waitingForMemoryPacket", "Waiting for memory packet")}
               </div>
             </div>
-            {packet ? <StatusPill value="Audited" tone="success" /> : null}
+            {packet ? <StatusPill value={t("memory.audited", "Audited")} tone="success" /> : null}
           </div>
           {error ? (
             <div className="mt-3 rounded-md border border-danger/40 bg-danger-subtle/30 p-3 text-[11px] text-danger">
@@ -274,10 +296,13 @@ export function MemoryView({ state }: { state: DashboardState }) {
           ) : (
             <div className="mt-3 rounded-md border border-dashed border-border/60 p-4">
               <div className="text-[12px] font-semibold text-foreground">
-                No memory packet loaded
+                {t("memory.noMemoryPacketLoaded", "No memory packet loaded")}
               </div>
               <div className="mt-1 text-[10px] text-muted-foreground">
-                Global memory appears here after the coordinator assembles a packet.
+                {t(
+                  "memory.noMemoryPacketLoadedDescription",
+                  "Global memory appears here after the coordinator assembles a packet.",
+                )}
               </div>
             </div>
           )}
@@ -301,9 +326,14 @@ export function MemoryView({ state }: { state: DashboardState }) {
               ))}
               {packet.topHits.length === 0 ? (
                 <div className="rounded-md border border-dashed border-border/60 p-4 sm:col-span-2">
-                  <div className="text-[12px] font-semibold text-foreground">No memory hits</div>
+                  <div className="text-[12px] font-semibold text-foreground">
+                    {t("memory.noMemoryHits", "No memory hits")}
+                  </div>
                   <div className="mt-1 text-[10px] text-muted-foreground">
-                    The query did not match any current workspace memory.
+                    {t(
+                      "memory.noMemoryHitsDescription",
+                      "The query did not match any current workspace memory.",
+                    )}
                   </div>
                 </div>
               ) : null}
@@ -312,23 +342,35 @@ export function MemoryView({ state }: { state: DashboardState }) {
         </div>
 
         <div className="rounded-lg border border-border/70 bg-surface-subtle/60 p-4">
-          <div className="text-[12px] font-semibold text-foreground">Audit Trail</div>
+          <div className="text-[12px] font-semibold text-foreground">
+            {t("memory.auditTrail", "Audit Trail")}
+          </div>
           <div className="mt-3 space-y-2 text-[11px]">
-            <AuditRow label="Actor" value={packet?.audit.actor ?? "supreme_coordinator"} />
-            <AuditRow label="Action" value={packet?.audit.action ?? "memory.global.search"} />
             <AuditRow
-              label="Result"
-              value={packet?.audit.result ?? "pending"}
+              label={t("memory.actor", "Actor")}
+              value={packet?.audit.actor ?? "supreme_coordinator"}
+            />
+            <AuditRow
+              label={t("memory.action", "Action")}
+              value={packet?.audit.action ?? "memory.global.search"}
+            />
+            <AuditRow
+              label={t("memory.result", "Result")}
+              value={packet?.audit.result ?? t("memory.pending", "pending")}
               tone={packet?.audit.result === "ok" ? "success" : "neutral"}
             />
             <AuditRow
-              label="Timestamp"
-              value={packet?.audit.timestamp ? timeAgo(packet.audit.timestamp) : "not loaded"}
+              label={t("memory.timestamp", "Timestamp")}
+              value={
+                packet?.audit.timestamp
+                  ? timeAgo(packet.audit.timestamp)
+                  : t("memory.notLoaded", "not loaded")
+              }
             />
           </div>
           <div className="mt-4 border-t border-border/60 pt-4">
             <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-              Recent memory artifacts
+              {t("memory.recentMemoryArtifacts", "Recent memory artifacts")}
             </div>
             <div className="mt-2 space-y-2">
               {sortNewest(state.artifacts)
@@ -348,7 +390,7 @@ export function MemoryView({ state }: { state: DashboardState }) {
                 ))}
               {state.artifacts.length === 0 ? (
                 <div className="rounded-md border border-dashed border-border/60 p-3 text-[10px] text-muted-foreground">
-                  No artifacts yet.
+                  {t("memory.noArtifactsYetShort", "No artifacts yet.")}
                 </div>
               ) : null}
             </div>
@@ -371,15 +413,18 @@ export function MemoryView({ state }: { state: DashboardState }) {
                 {formatLabel(artifact.type)}
               </div>
               <div className="mt-2 text-[10px] text-muted-foreground">
-                {artifact.created ? timeAgo(artifact.created) : "created"}
+                {artifact.created ? timeAgo(artifact.created) : t("memory.created", "created")}
               </div>
             </div>
           ))}
         {state.artifacts.length === 0 ? (
           <div className="md:col-span-3">
             <EmptyState
-              title="No artifacts yet"
-              description="Reports, briefs, dispatch packets, and GitHub signal reports will appear here."
+              title={t("memory.noArtifactsYet", "No artifacts yet")}
+              description={t(
+                "memory.noArtifactsYetDescription",
+                "Reports, briefs, dispatch packets, and GitHub signal reports will appear here.",
+              )}
             />
           </div>
         ) : null}

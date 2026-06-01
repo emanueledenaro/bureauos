@@ -15,6 +15,7 @@ import {
   type CoordinatorMessageRecord,
 } from "../../lib/api";
 import type { ChatAttachment, DashboardState } from "../../lib/types";
+import { useT } from "../../i18n/i18n";
 
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
@@ -72,6 +73,7 @@ export function CoordinatorPanel({
    */
   headerSlot?: ReactNode;
 }) {
+  const t = useT();
   const [messages, setMessages] = useState<CoordinatorMessageRecord[]>([]);
   const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
@@ -84,9 +86,15 @@ export function CoordinatorPanel({
   const pendingActions = buildTodayActions(state);
   const activeRuns = state.runs.filter((run) => !["completed", "cancelled"].includes(run.status));
   const suggestedIntents = [
-    pendingActions[0] ? `Take over: ${pendingActions[0].title}` : "Decide today's operating focus",
-    state.projects.length > 0 ? "Reprioritize delivery work" : "Prepare the operating plan",
-    state.clients.length > 0 ? "Review clients and follow-ups" : "Set up the first client",
+    pendingActions[0]
+      ? `${t("coordinatorPanel.takeOverPrefix", "Take over: ")}${pendingActions[0].title}`
+      : t("coordinatorPanel.decideOperatingFocus", "Decide today's operating focus"),
+    state.projects.length > 0
+      ? t("coordinatorPanel.reprioritizeDelivery", "Reprioritize delivery work")
+      : t("coordinatorPanel.prepareOperatingPlan", "Prepare the operating plan"),
+    state.clients.length > 0
+      ? t("coordinatorPanel.reviewClients", "Review clients and follow-ups")
+      : t("coordinatorPanel.setUpFirstClient", "Set up the first client"),
   ];
 
   useEffect(() => {
@@ -167,7 +175,7 @@ export function CoordinatorPanel({
       {
         id: optimisticId,
         role: "owner",
-        text: messageText || "Attached files",
+        text: messageText || t("coordinatorPanel.attachedFiles", "Attached files"),
         created: submittedAt,
         attachments: attachmentMeta,
       },
@@ -178,26 +186,33 @@ export function CoordinatorPanel({
       );
       let streamedText = "";
       const result = onStreamMessage
-        ? await onStreamMessage(messageText || "Attached files", payload, {
-            onDelta: (text) => {
-              streamedText += text;
-              setStreamingMessageId(assistantStreamId);
-              setMessages((current) => {
-                const existing = current.some((message) => message.id === assistantStreamId);
-                const next = {
-                  id: assistantStreamId,
-                  role: "coordinator" as const,
-                  text: streamedText,
-                  created: new Date().toISOString(),
-                  meta: { streaming: true },
-                };
-                return existing
-                  ? current.map((message) => (message.id === assistantStreamId ? next : message))
-                  : [...current, next];
-              });
+        ? await onStreamMessage(
+            messageText || t("coordinatorPanel.attachedFiles", "Attached files"),
+            payload,
+            {
+              onDelta: (text) => {
+                streamedText += text;
+                setStreamingMessageId(assistantStreamId);
+                setMessages((current) => {
+                  const existing = current.some((message) => message.id === assistantStreamId);
+                  const next = {
+                    id: assistantStreamId,
+                    role: "coordinator" as const,
+                    text: streamedText,
+                    created: new Date().toISOString(),
+                    meta: { streaming: true },
+                  };
+                  return existing
+                    ? current.map((message) => (message.id === assistantStreamId ? next : message))
+                    : [...current, next];
+                });
+              },
             },
-          })
-        : await onMessage(messageText || "Attached files", payload);
+          )
+        : await onMessage(
+            messageText || t("coordinatorPanel.attachedFiles", "Attached files"),
+            payload,
+          );
       setMessages((current) => [
         ...current.filter(
           (message) => message.id !== optimisticId && message.id !== assistantStreamId,
@@ -231,20 +246,31 @@ export function CoordinatorPanel({
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0 leading-tight">
-            <div className="truncate text-section-title">Supreme Coordinator</div>
+            <div className="truncate text-section-title">
+              {t("coordinatorPanel.title", "Supreme Coordinator")}
+            </div>
             <div className="text-meta mt-0.5 flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse-soft" />
-              Company command thread · {messages.length} messages
+              {t(
+                "coordinatorPanel.commandThread",
+                "Company command thread · {count} messages",
+              ).replace("{count}", String(messages.length))}
             </div>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <StatusPill
-            value={`${state.approvals.length} approvals`}
+            value={t("coordinatorPanel.approvals", "{count} approvals").replace(
+              "{count}",
+              String(state.approvals.length),
+            )}
             tone={state.approvals.length > 0 ? "warning" : "success"}
           />
           <StatusPill
-            value={`${activeRuns.length} active runs`}
+            value={t("coordinatorPanel.activeRuns", "{count} active runs").replace(
+              "{count}",
+              String(activeRuns.length),
+            )}
             tone={activeRuns.length > 0 ? "info" : "success"}
           />
           {headerSlot}
@@ -255,9 +281,14 @@ export function CoordinatorPanel({
         {messages.length === 0 && !busy ? (
           <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center py-10">
             <div className="rounded-lg border border-border/70 bg-surface-subtle/40 p-5">
-              <div className="text-eyebrow">Executive channel</div>
+              <div className="text-eyebrow">
+                {t("coordinatorPanel.executiveChannel", "Executive channel")}
+              </div>
               <h2 className="mt-2 text-[20px] font-semibold leading-7 text-foreground">
-                Bring decisions, clients, projects, and priorities here.
+                {t(
+                  "coordinatorPanel.emptyHeadline",
+                  "Bring decisions, clients, projects, and priorities here.",
+                )}
               </h2>
               <div className="mt-4 grid gap-2 sm:grid-cols-3">
                 {suggestedIntents.map((intent) => (
@@ -286,7 +317,7 @@ export function CoordinatorPanel({
             </Avatar>
             <div className="flex items-center gap-2 rounded-lg border-l-2 border-primary/55 bg-transparent px-3 py-2 text-body text-muted-foreground">
               <Loader2 className="h-3 w-3 animate-spin" />
-              Reading company context...
+              {t("coordinatorPanel.readingContext", "Reading company context...")}
             </div>
           </div>
         ) : null}
@@ -294,7 +325,7 @@ export function CoordinatorPanel({
         {error ? (
           <ActionBanner
             tone="danger"
-            title="Coordinator request failed"
+            title={t("coordinatorPanel.requestFailed", "Coordinator request failed")}
             detail={error}
             onDismiss={() => setError(undefined)}
           />
@@ -309,7 +340,10 @@ export function CoordinatorPanel({
         onRemoveAttachment={removeAttachment}
         onSubmit={() => void submit()}
         busy={busy}
-        placeholder="Message a decision, client, project, or priority..."
+        placeholder={t(
+          "coordinatorPanel.composerPlaceholder",
+          "Message a decision, client, project, or priority...",
+        )}
       />
     </Card>
   );

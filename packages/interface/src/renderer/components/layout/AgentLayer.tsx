@@ -21,6 +21,7 @@ import { cn } from "../../lib/utils";
 import { agentAbbr, runTone } from "../../lib/tone";
 import { formatLabel, timeAgo } from "../../lib/format";
 import type { AgentDefinition, CapabilityDefinition, RunRecord } from "../../lib/api";
+import { type TFunction, useT } from "../../i18n/i18n";
 
 const ROLE_ICON: Record<string, LucideIcon> = {
   project_manager: Users,
@@ -75,9 +76,11 @@ function latestRunForAgent(agent: AgentDefinition, runs: RunRecord[]): RunRecord
     .sort((a, b) => (b.updated ?? b.created ?? "").localeCompare(a.updated ?? a.created ?? ""))[0];
 }
 
-function runLabel(run?: RunRecord): string {
-  if (!run) return "No recent run";
-  return ACTIVE_RUN_STATUSES.has(run.status) ? "Current run" : "Recent run";
+function runLabel(t: TFunction, run?: RunRecord): string {
+  if (!run) return t("agentLayer.noRecentRun", "No recent run");
+  return ACTIVE_RUN_STATUSES.has(run.status)
+    ? t("agentLayer.currentRun", "Current run")
+    : t("agentLayer.recentRun", "Recent run");
 }
 
 export function AgentLayer({
@@ -91,6 +94,7 @@ export function AgentLayer({
   runs: RunRecord[];
   onOpenAgents: () => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [selectedAgentId, setSelectedAgentId] = useState<string | undefined>();
   const visible = agents.slice(0, 10);
@@ -117,15 +121,22 @@ export function AgentLayer({
         >
           <span className="flex items-center gap-2">
             <Bot className="h-3.5 w-3.5" />
-            Agent Layer
+            {t("agentLayer.title", "Agent Layer")}
           </span>
           <span className="text-muted-foreground">{agents.length}</span>
         </Button>
       </div>
       <div className="hidden h-10 min-w-0 items-center gap-4 sm:flex">
         <div className="hidden min-w-[180px] shrink-0 md:block">
-          <div className="text-[12px] font-semibold text-foreground">Agent Layer</div>
-          <div className="text-[10px] text-muted-foreground">{agents.length} autonomous roles</div>
+          <div className="text-[12px] font-semibold text-foreground">
+            {t("agentLayer.title", "Agent Layer")}
+          </div>
+          <div className="text-[10px] text-muted-foreground">
+            {t("agentLayer.autonomousRoles", "{n} autonomous roles").replace(
+              "{n}",
+              String(agents.length),
+            )}
+          </div>
         </div>
         <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto no-scrollbar gradient-mask-fade">
           {visible.length > 0 ? (
@@ -162,22 +173,28 @@ export function AgentLayer({
                     <div className="font-medium">{formatLabel(agent.role)}</div>
                     <div className="mt-0.5 text-muted-foreground">{agent.category}</div>
                     <div className="mt-1 text-muted-foreground">
-                      {run ? `${runLabel(run)}: ${formatLabel(run.type)}` : "No recent run"}
+                      {run
+                        ? `${runLabel(t, run)}: ${formatLabel(run.type)}`
+                        : t("agentLayer.noRecentRun", "No recent run")}
                     </div>
                     <div className="mt-0.5 text-muted-foreground">
                       {assigned.length}{" "}
-                      {assigned.length === 1 ? "assigned capability" : "assigned capabilities"}
+                      {assigned.length === 1
+                        ? t("agentLayer.assignedCapability", "assigned capability")
+                        : t("agentLayer.assignedCapabilities", "assigned capabilities")}
                     </div>
                   </TooltipContent>
                 </Tooltip>
               );
             })
           ) : (
-            <div className="text-[11px] text-muted-foreground">No agents loaded</div>
+            <div className="text-[11px] text-muted-foreground">
+              {t("agentLayer.noAgentsLoaded", "No agents loaded")}
+            </div>
           )}
         </div>
         <Button variant="outline" size="sm" className="shrink-0" onClick={onOpenAgents}>
-          Manage agents
+          {t("agentLayer.manageAgents", "Manage agents")}
           <ChevronRight className="h-3 w-3" />
         </Button>
       </div>
@@ -198,8 +215,13 @@ export function AgentLayer({
           ) : (
             <>
               <SheetHeader>
-                <SheetTitle>Agent Layer</SheetTitle>
-                <SheetDescription>{agents.length} autonomous roles available.</SheetDescription>
+                <SheetTitle>{t("agentLayer.title", "Agent Layer")}</SheetTitle>
+                <SheetDescription>
+                  {t(
+                    "agentLayer.autonomousRolesAvailable",
+                    "{n} autonomous roles available.",
+                  ).replace("{n}", String(agents.length))}
+                </SheetDescription>
               </SheetHeader>
               <div className="grid max-h-[calc(100vh-92px)] gap-2 overflow-y-auto px-4 py-4">
                 {agents.length > 0 ? (
@@ -222,7 +244,9 @@ export function AgentLayer({
                             {formatLabel(agent.role)}
                           </div>
                           <div className="truncate text-[10px] text-muted-foreground">
-                            {run ? `${runLabel(run)} · ${formatLabel(run.status)}` : agent.category}
+                            {run
+                              ? `${runLabel(t, run)} · ${formatLabel(run.status)}`
+                              : agent.category}
                           </div>
                         </div>
                         <span className="shrink-0 rounded bg-surface-raised px-1.5 py-0.5 text-[9px] text-muted-foreground">
@@ -233,7 +257,7 @@ export function AgentLayer({
                   })
                 ) : (
                   <div className="rounded-lg border border-border/60 bg-surface-subtle p-3 text-[11px] text-muted-foreground">
-                    No agents loaded
+                    {t("agentLayer.noAgentsLoaded", "No agents loaded")}
                   </div>
                 )}
               </div>
@@ -258,6 +282,7 @@ function AgentDetailPanel({
   onBack: () => void;
   onOpenAgents: () => void;
 }) {
+  const t = useT();
   const Icon = roleIcon(agent.id);
   return (
     <>
@@ -267,7 +292,7 @@ function AgentDetailPanel({
             <Icon className="h-4 w-4" />
           </span>
           <div className="min-w-0">
-            <SheetTitle>Agent Detail</SheetTitle>
+            <SheetTitle>{t("agentLayer.agentDetail", "Agent Detail")}</SheetTitle>
             <SheetDescription>
               {formatLabel(agent.role)} · {agent.category} · {agent.scope}
             </SheetDescription>
@@ -281,7 +306,7 @@ function AgentDetailPanel({
           className="mb-3 inline-flex items-center gap-1 rounded-md border border-border/60 px-2 py-1 text-[10px] text-muted-foreground transition hover:text-foreground focus-ring"
         >
           <ChevronLeft className="h-3 w-3" />
-          Agent list
+          {t("agentLayer.agentList", "Agent list")}
         </button>
 
         <div className="rounded-lg border border-border/70 bg-surface-subtle p-4">
@@ -294,11 +319,11 @@ function AgentDetailPanel({
         <div className="mt-3 rounded-lg border border-border/70 bg-surface-subtle p-4">
           <div className="flex items-center justify-between gap-2">
             <div>
-              <div className="text-[12px] font-semibold text-foreground">{runLabel(run)}</div>
+              <div className="text-[12px] font-semibold text-foreground">{runLabel(t, run)}</div>
               <div className="mt-1 text-[10px] text-muted-foreground">
                 {run
                   ? `${formatLabel(run.type)} · ${timeAgo(run.updated ?? run.created)}`
-                  : "No active or recent run for this agent."}
+                  : t("agentLayer.noActiveOrRecentRun", "No active or recent run for this agent.")}
               </div>
             </div>
             {run ? (
@@ -329,16 +354,21 @@ function AgentDetailPanel({
             </>
           ) : (
             <div className="mt-3 rounded-md border border-dashed border-border/60 p-3 text-[11px] text-muted-foreground">
-              No active run. The coordinator has not assigned work to this role yet.
+              {t(
+                "agentLayer.noActiveRunCoordinator",
+                "No active run. The coordinator has not assigned work to this role yet.",
+              )}
             </div>
           )}
         </div>
 
         <div className="mt-3 rounded-lg border border-border/70 bg-surface-subtle p-4">
           <div className="flex items-center justify-between gap-2">
-            <div className="text-[12px] font-semibold text-foreground">Capability Usage</div>
+            <div className="text-[12px] font-semibold text-foreground">
+              {t("agentLayer.capabilityUsage", "Capability Usage")}
+            </div>
             <span className="text-[10px] text-muted-foreground">
-              {capabilities.length} assigned
+              {t("agentLayer.assigned", "{n} assigned").replace("{n}", String(capabilities.length))}
             </span>
           </div>
           <div className="mt-3 grid gap-2">
@@ -375,29 +405,32 @@ function AgentDetailPanel({
                         ))
                       ) : (
                         <span className="text-[10px] text-muted-foreground">
-                          No enabled actions
+                          {t("agentLayer.noEnabledActions", "No enabled actions")}
                         </span>
                       )}
                     </div>
                     <div className="mt-2 text-[10px] text-muted-foreground">
-                      Approval gates:{" "}
+                      {t("agentLayer.approvalGates", "Approval gates:")}{" "}
                       {capability.required_approvals.length
                         ? capability.required_approvals.join(", ")
-                        : "none"}
+                        : t("agentLayer.none", "none")}
                     </div>
                   </div>
                 );
               })
             ) : (
               <div className="rounded-md border border-dashed border-border/60 p-3 text-[11px] text-muted-foreground">
-                No capability assigned through `/capabilities` for this agent.
+                {t(
+                  "agentLayer.noCapabilityAssigned",
+                  "No capability assigned through `/capabilities` for this agent.",
+                )}
               </div>
             )}
           </div>
         </div>
 
         <Button variant="outline" size="sm" className="mt-3 w-full" onClick={onOpenAgents}>
-          Manage agents
+          {t("agentLayer.manageAgents", "Manage agents")}
           <ChevronRight className="h-3 w-3" />
         </Button>
       </div>

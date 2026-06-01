@@ -4,9 +4,11 @@ import { Button } from "../ui/button";
 import { StatusPill } from "./StatusPill";
 import { cn } from "../../lib/utils";
 import { toneProgressClass } from "../../lib/tone";
+import { useT } from "../../i18n/i18n";
 import type { GoalItem } from "../../lib/types";
 
 export function GoalCard({ goal, onOpen }: { goal: GoalItem; onOpen: () => void }) {
+  const t = useT();
   return (
     <BaseCard className="gap-4">
       <BaseCardHeader title={goal.title} subtitle={goal.description}>
@@ -22,18 +24,18 @@ export function GoalCard({ goal, onOpen }: { goal: GoalItem; onOpen: () => void 
         </div>
         <div className="mt-3 grid grid-cols-2 gap-3 border-t border-border/60 pt-3 text-micro">
           <div>
-            <div className="text-eyebrow">Current</div>
+            <div className="text-eyebrow">{t("goalCard.current", "Current")}</div>
             <div className="text-body-secondary mt-1 truncate text-foreground">{goal.current}</div>
           </div>
           <div>
-            <div className="text-eyebrow">Target</div>
+            <div className="text-eyebrow">{t("goalCard.target", "Target")}</div>
             <div className="text-body-secondary mt-1 truncate text-foreground">{goal.target}</div>
           </div>
         </div>
       </div>
 
       <div className="border-t border-border/60 pt-3">
-        <div className="text-eyebrow">Next action</div>
+        <div className="text-eyebrow">{t("goalCard.nextAction", "Next action")}</div>
         <div className="text-body mt-1 leading-relaxed text-foreground">{goal.nextAction}</div>
       </div>
 
@@ -47,7 +49,7 @@ export function GoalCard({ goal, onOpen }: { goal: GoalItem; onOpen: () => void 
           </span>
         ))}
         <Button variant="ghost" size="sm" onClick={onOpen} className="ml-auto">
-          Open
+          {t("goalCard.open", "Open")}
           <ArrowRight className="h-3 w-3" />
         </Button>
       </div>
