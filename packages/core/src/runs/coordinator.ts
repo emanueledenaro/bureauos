@@ -1,7 +1,7 @@
 import { AgentRegistry } from "../agents/runtime.js";
 import { buildDefaultAgentRegistry } from "../agents/concrete/index.js";
 import { MODEL_PROVIDER_CAPABILITY, selectAgentModel } from "../agents/provider-routing.js";
-import type { AgentCapabilityChecker } from "../agents/runtime.js";
+import type { AgentCapabilityChecker, ProjectTestRunnerFactory } from "../agents/runtime.js";
 import type { ArtifactStore } from "../artifacts/store.js";
 import type { AuditLog } from "../audit/log.js";
 import type { BureauConfig } from "../config/schema.js";
@@ -36,6 +36,13 @@ export interface CoordinatorDeps {
   providerRouter?: ProviderRouter;
   capabilityUse?: AgentCapabilityChecker;
   developmentRuntime?: RuntimeAdapter;
+  /**
+   * Factory for the project test runner the QA agent uses to run real tests in
+   * the development worktree (SER-240/242). Threaded into the default agent
+   * registry so an end-to-end test can inject a deterministic pass/fail runner
+   * without a subprocess. Defaults to the real runner when omitted.
+   */
+  projectTestRunnerFactory?: ProjectTestRunnerFactory;
   registry?: AgentRegistry;
   memory?: MemoryBoundaryService;
 }
@@ -112,6 +119,9 @@ export async function dispatchRun(
       audit: deps.audit,
       policy: deps.policy,
       ...(deps.capabilityUse ? { capabilityUse: deps.capabilityUse } : {}),
+      ...(deps.projectTestRunnerFactory
+        ? { projectTestRunnerFactory: deps.projectTestRunnerFactory }
+        : {}),
     });
   const memory = deps.memory ?? new MemoryBoundaryService(input.workspaceRoot);
   const pipeline = pipelineForRunType(input.run.type);
