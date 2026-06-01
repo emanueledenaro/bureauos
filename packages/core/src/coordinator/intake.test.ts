@@ -129,6 +129,25 @@ describe("CoordinatorIntakeService", () => {
     await expect(new ApprovalRegistry(dir).listPending()).resolves.toEqual([]);
   });
 
+  it("honors an explicit project name and a named tech stack (giovanniprova / Flutter)", async () => {
+    const service = new CoordinatorIntakeService(dir, { config: defaultConfig("agency") });
+
+    const result = await service.process({
+      message:
+        "Voglio un'app mobile in Flutter per prenotare un tavolo in una pizzeria. Nome del progetto: giovanniprova.",
+      source: "owner_chat",
+    });
+
+    // The owner's explicit name is used verbatim — for the project and, since no
+    // business name was given, the client — instead of a generic placeholder.
+    expect(result.project.name).toBe("giovanniprova");
+    expect(result.client.name).toBe("giovanniprova");
+    expect(result.summary).not.toContain("Restaurant Lead");
+    expect(result.summary).not.toContain("Mobile App Lead");
+    // The named framework leads the technical stack.
+    expect(result.classification.stack).toContain("Flutter");
+  });
+
   it("persists a non-base64 data-URL attachment with a literal % without crashing (SER-232)", async () => {
     const service = new CoordinatorIntakeService(dir, { config: defaultConfig("agency") });
 
