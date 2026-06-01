@@ -1,6 +1,11 @@
 import type { ArtifactRecord, ArtifactStore, WriteArtifactInput } from "../artifacts/store.js";
 import type { AuditLog } from "../audit/log.js";
 import type { PolicyEngine } from "../policy/engine.js";
+import {
+  ProjectTestRunnerService,
+  type ProjectTestRunnerInput,
+  type ProjectTestRunnerResult,
+} from "../execution/project-test-runner.js";
 import { AGENT_INDEX, type AgentDefinition } from "./roles.js";
 
 /**
@@ -79,11 +84,40 @@ export interface AgentRuntime {
   execute(input: AgentRunInput): Promise<AgentRunOutput>;
 }
 
+/**
+ * Minimal surface the QA agent needs to run a project's real test suite in a
+ * worktree. Mirrors {@link ProjectTestRunnerService.run}. Keeping it as an
+ * interface lets tests inject a deterministic fake (a stub `ProjectCommandRunner`
+ * behind the real service, or a hand-rolled fake) without spawning a process.
+ */
+export interface ProjectTestRunner {
+  run(input?: ProjectTestRunnerInput): Promise<ProjectTestRunnerResult>;
+}
+
+/**
+ * Builds a {@link ProjectTestRunner} rooted at a code worktree. Defaults to the
+ * real {@link ProjectTestRunnerService}; tests override it to supply a fake
+ * `ProjectCommandRunner` for deterministic pass/fail without a subprocess.
+ */
+export type ProjectTestRunnerFactory = (
+  workspaceRoot: string,
+  deps: { artifacts: ArtifactStore; audit: AuditLog },
+) => ProjectTestRunner;
+
+export const defaultProjectTestRunnerFactory: ProjectTestRunnerFactory = (workspaceRoot, deps) =>
+  new ProjectTestRunnerService(workspaceRoot, deps);
+
 export interface AgentDeps {
   artifacts: ArtifactStore;
   audit: AuditLog;
   policy: PolicyEngine;
   capabilityUse?: AgentCapabilityChecker;
+  /**
+   * Factory for the project test runner the QA agent uses to run real tests in
+   * the development worktree (SER-240). Injectable so unit tests can supply a
+   * deterministic fake. Defaults to {@link defaultProjectTestRunnerFactory}.
+   */
+  projectTestRunnerFactory?: ProjectTestRunnerFactory;
 }
 
 /**

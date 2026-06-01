@@ -1,6 +1,13 @@
-import type { AgentDeps, AgentRunInput, AgentRunOutput, AgentRuntime } from "../runtime.js";
+import {
+  defaultProjectTestRunnerFactory,
+  type AgentDeps,
+  type AgentRunInput,
+  type AgentRunOutput,
+  type AgentRuntime,
+} from "../runtime.js";
 import { AGENT_INDEX } from "../roles.js";
 import type { ArtifactRecord } from "../../artifacts/store.js";
+import type { ProjectTestRunnerResult } from "../../execution/project-test-runner.js";
 import { draftAgentArtifact } from "../model-drafting.js";
 import { blockedByInvalidHandoff, validateRequiredHandoff } from "../handoff.js";
 
@@ -341,15 +348,86 @@ export class QaAgent implements AgentRuntime {
       ...(draft.error ? { error: draft.error } : {}),
       result: analysis.readiness === "ready_for_review" ? "ok" : "error",
     });
+
+    // When the dispatch provisioned a code worktree (SER-243), QA runs the
+    // project's REAL test suite against the code the development agent wrote and
+    // gates the handoff on the result (SER-240). With no worktree (non-code
+    // runs) the deterministic acceptance path below is unchanged.
+    const testGate = await this.runProjectTests(input);
+
+    const decisions = [`qa:${analysis.readiness}`];
+    if (testGate) decisions.push(`qa:tests_${testGate.result.status}`);
+
+    const artifactIds = [artifact.id];
+    if (testGate) artifactIds.push(testGate.result.artifact.id);
+
+    const blockers = [...analysis.blockers, ...(testGate?.blockers ?? [])];
+    const ok = analysis.readiness === "ready_for_review" && (testGate?.passed ?? true);
+
     return {
-      ok: analysis.readiness === "ready_for_review",
-      artifactIds: [artifact.id],
-      decisions: [`qa:${analysis.readiness}`],
-      blockers: analysis.blockers,
-      notes:
-        analysis.readiness === "ready_for_review"
-          ? "qa verification passed all acceptance criteria"
-          : `qa verification blocked ready-for-review with ${analysis.blockers.length} blocker(s)`,
+      ok,
+      artifactIds,
+      decisions,
+      blockers,
+      notes: qaNotes(analysis, testGate),
     };
   }
+
+  /**
+   * Runs the project's real test suite in the development worktree and maps the
+   * runner result onto the ready-for-review gate. Returns `undefined` when no
+   * code worktree is supplied, leaving today's acceptance-only path unchanged.
+   */
+  private async runProjectTests(input: AgentRunInput): Promise<TestGate | undefined> {
+    const workspaceRoot = input.context.codeWorkspaceRoot;
+    if (!workspaceRoot) return undefined;
+
+    const factory = this.deps.projectTestRunnerFactory ?? defaultProjectTestRunnerFactory;
+    const runner = factory(workspaceRoot, {
+      artifacts: this.deps.artifacts,
+      audit: this.deps.audit,
+    });
+    const result = await runner.run({
+      runId: input.context.runId,
+      createdBy: this.definition.id,
+      ...(input.context.projectId !== undefined ? { projectId: input.context.projectId } : {}),
+      ...(input.context.clientId !== undefined ? { clientId: input.context.clientId } : {}),
+    });
+
+    const passed = result.status === "passed";
+    const blockers = passed ? [] : [testGateBlocker(result)];
+    await this.deps.audit.append({
+      actor: this.definition.id,
+      action: "agent.qa.tests_gated",
+      target: input.context.runId,
+      artifact_id: result.artifact.id,
+      result: passed ? "ok" : "error",
+    });
+    return { result, passed, blockers };
+  }
+}
+
+interface TestGate {
+  result: ProjectTestRunnerResult;
+  passed: boolean;
+  blockers: string[];
+}
+
+function testGateBlocker(result: ProjectTestRunnerResult): string {
+  if (result.status === "blocked") {
+    return result.reason ?? "no project test command configured or discovered";
+  }
+  return "project tests failed";
+}
+
+function qaNotes(analysis: QaVerificationAnalysis, testGate: TestGate | undefined): string {
+  const acceptanceNote =
+    analysis.readiness === "ready_for_review"
+      ? "qa verification passed all acceptance criteria"
+      : `qa verification blocked ready-for-review with ${analysis.blockers.length} blocker(s)`;
+  if (!testGate) return acceptanceNote;
+  const testNote = testGate.passed
+    ? "project tests passed"
+    : `project tests gate blocked ready-for-review (${testGate.result.status})`;
+  return `${acceptanceNote}; ${testNote}`;
 }
