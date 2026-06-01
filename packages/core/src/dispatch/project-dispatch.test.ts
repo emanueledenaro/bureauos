@@ -12,7 +12,35 @@ import { initWorkspace } from "../init/initializer.js";
 import { workspacePaths } from "../paths.js";
 import { ProjectDispatchService, pendingProjectApprovals } from "./project-dispatch.js";
 import type { ApprovalRecord } from "../registries/approval.js";
-import type { ProjectRecord } from "../registries/project.js";
+import { ProjectRegistry, type ProjectRecord } from "../registries/project.js";
+import {
+  type GitHubPullRequestPublishClient,
+  type GitHubPullRequestPublishClientPr,
+} from "../github/pr-publisher.js";
+
+/** Fake PR client for dispatch wiring tests: records calls, never hits GitHub. */
+class RecordingPrClient implements GitHubPullRequestPublishClient {
+  readonly created: Array<unknown> = [];
+  async createPullRequest(
+    owner: string,
+    repo: string,
+    input: { title: string; body: string; head: string; base: string; draft?: boolean },
+  ): Promise<GitHubPullRequestPublishClientPr> {
+    this.created.push({ owner, repo, input });
+    return {
+      owner,
+      repo,
+      number: this.created.length,
+      title: input.title,
+      url: `https://github.com/${owner}/${repo}/pull/${this.created.length}`,
+      head: input.head,
+      headSha: "abc",
+      base: input.base,
+      state: "open",
+      updatedAt: "2026-05-30T00:00:00.000Z",
+    };
+  }
+}
 
 const run = promisify(execFile);
 
@@ -166,6 +194,40 @@ describe("ProjectDispatchService", () => {
     await expect(
       stat(join(dir, "workspaces", ".worktrees", intake.project.slug, result.run.id)),
     ).rejects.toThrow();
+  }, 60_000);
+
+  it("does NOT attempt delivery when the dispatched run is blocked (off-by-default safe, SER-241)", async () => {
+    // The feature pipeline's QA legitimately blocks with no acceptance evidence,
+    // so this run is blocked. Delivery must not fire: no push, no PR, no
+    // delivered/blocked delivery result — today's no-delivery behavior preserved.
+    const config = defaultConfig("agency");
+    const intake = await new CoordinatorIntakeService(dir, { config }).process({
+      clientName: "Pizzeria Aurora",
+      message: "Vuole un sito con prenotazioni.",
+      source: "owner_chat",
+    });
+    // Link a repository so the only reason delivery does not fire is the blocked run.
+    await new ProjectRegistry(dir).update(intake.project.slug, {
+      repository: "https://github.com/acme/site",
+    });
+    const github = new RecordingPrClient();
+
+    const result = await new ProjectDispatchService(dir, {
+      config,
+      githubPrPublishClient: github,
+    }).dispatch({
+      projectSlug: intake.project.slug,
+      runType: "feature",
+      scope: "Prepare dev-ready work for booking website MVP",
+    });
+
+    expect(result.dispatch.steps.some((step) => !step.ok)).toBe(true);
+    expect(result.delivery).toBeUndefined();
+    expect(github.created).toHaveLength(0);
+
+    const audit = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(audit).not.toContain("project.dispatch.delivered");
+    expect(audit).not.toContain("project.dispatch.branch_pushed");
   }, 60_000);
 
   it("creates project-scoped dispatch and handoff packets before running specialist agents", async () => {

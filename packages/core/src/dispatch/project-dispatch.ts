@@ -1,5 +1,6 @@
 import { appendFile } from "node:fs/promises";
 import { join } from "node:path";
+import { OctokitGitHubClient } from "@bureauos/capabilities";
 import {
   buildConfiguredProviderRouter,
   type ProviderEnv,
@@ -9,7 +10,9 @@ import { configureAgentProviderRouting } from "../agents/provider-routing.js";
 import { ArtifactStore, type ArtifactRecord } from "../artifacts/store.js";
 import { AuditLog } from "../audit/log.js";
 import { buildDevelopmentExecution } from "../execution/development-execution.js";
-import { ProjectWorkspaceService } from "../execution/project-workspace.js";
+import { ProjectWorkspaceService, type RunCommitResult } from "../execution/project-workspace.js";
+import type { GitHubPullRequestPublishClient } from "../github/pr-publisher.js";
+import { deliverDispatchedRun, type DispatchDeliveryResult } from "./delivery.js";
 import type { BureauConfig } from "../config/schema.js";
 import { defaultConfig } from "../config/loader.js";
 import { workspacePaths } from "../paths.js";
@@ -51,6 +54,12 @@ export interface ProjectDispatchResult {
   handoffs: AgentHandoff[];
   dispatch: DispatchOutput;
   artifacts: ArtifactRecord[];
+  /**
+   * Outcome of the post-run delivery step (SER-241): pushing the run branch and
+   * opening a policy-gated draft PR. Absent when delivery never ran (e.g. a
+   * planning run with no worktree).
+   */
+  delivery?: DispatchDeliveryResult;
 }
 
 export interface ProjectDispatchDeps {
@@ -64,6 +73,16 @@ export interface ProjectDispatchDeps {
   audit?: AuditLog;
   policy?: PolicyEngine;
   runs?: RunEngine;
+  /**
+   * GitHub client used by the delivery step's PR publisher (SER-241). Inject a
+   * fake in tests so no real GitHub account is ever touched. When omitted, a real
+   * Octokit client is built ONLY if an owner-provided token is configured
+   * (`githubToken` or `GITHUB_TOKEN`); with no token, delivery still pushes to a
+   * local remote but cannot open a PR.
+   */
+  githubPrPublishClient?: GitHubPullRequestPublishClient;
+  /** Owner-provided GitHub token; defaults to `GITHUB_TOKEN`. Never used in tests. */
+  githubToken?: string;
 }
 
 function artifactList(items: readonly ArtifactRecord[]): string {
@@ -226,6 +245,7 @@ export class ProjectDispatchService {
   private readonly runs: RunEngine;
   private readonly providerRouter?: ProviderRouter;
   private readonly providerEnv: ProviderEnv;
+  private readonly githubPrPublishClient?: GitHubPullRequestPublishClient;
 
   constructor(
     private readonly workspaceRoot: string,
@@ -248,6 +268,13 @@ export class ProjectDispatchService {
         policy: this.policy,
         recordDecisions: this.config.memory.write_decision_records,
       });
+    // Delivery PR client (SER-241): an injected fake in tests, otherwise a real
+    // Octokit client ONLY when an owner-provided token exists. With no token the
+    // client stays undefined so no network call is ever made by default.
+    const githubToken = deps.githubToken ?? this.providerEnv["GITHUB_TOKEN"];
+    this.githubPrPublishClient =
+      deps.githubPrPublishClient ??
+      (githubToken ? new OctokitGitHubClient({ token: githubToken }) : undefined);
   }
 
   async dispatch(input: ProjectDispatchInput): Promise<ProjectDispatchResult> {
@@ -379,6 +406,10 @@ export class ProjectDispatchService {
         : undefined;
 
     let dispatch: DispatchOutput;
+    // The run branch's commit (when the run produced one) gates delivery: only a
+    // real commit is pushed and opened as a PR (SER-241). Captured from the
+    // commit-before-release step below so it survives the worktree teardown.
+    let commitResult: RunCommitResult | undefined;
     try {
       dispatch = await dispatchRun(
         {
@@ -407,7 +438,7 @@ export class ProjectDispatchService {
           // worktree — a forced worktree removal would discard uncommitted work.
           // A no-op when the run changed nothing (e.g. blocked on a gate). The
           // branch survives for the gated push/PR delivery (SER-241).
-          await workspace.commitRunWork(
+          commitResult = await workspace.commitRunWork(
             project.slug,
             run.id,
             `bureauos(${project.slug}): ${scope}`,
@@ -469,24 +500,28 @@ export class ProjectDispatchService {
       result: dispatchResult,
     });
 
-    const summary =
-      blockedSteps.length > 0
-        ? `Dispatched ${project.name} to ${pipeline.length} roles; ${blockedSteps.length} blocked (${blockedSteps
-            .map((step) => step.role)
-            .join(", ")}). Owner resolution required before delivery.`
-        : `Dispatched ${project.name} to ${pipeline.length} roles with ${handoffs.length} handoff packets.`;
-    const nextActions =
-      blockedSteps.length > 0
-        ? [
-            `Resolve specialist blockers before delivery: ${blockers.join("; ")}.`,
-            "Review the project RISKS.md entry for the blocked dispatch.",
-            "Re-dispatch once blockers are cleared, or escalate for owner intervention.",
-          ]
-        : [
-            "Review specialist artifacts before creating dev-ready GitHub issues.",
-            "Resolve pending approval gates before external commitments.",
-            "Use the dispatch packet as the project-scoped context source for follow-up runs.",
-          ];
+    // Delivery (SER-241): after a successful, committed code run, push the run
+    // branch and open a policy-gated draft PR. Fires only when the run was not
+    // blocked, a worktree existed, a commit was produced, and the project has a
+    // linked repository; the delivery helper enforces every precondition and the
+    // push/PR gates, and never throws for an expected gate/parse failure.
+    const delivery = await this.deliverRun({
+      project,
+      run,
+      scope,
+      commit: commitResult,
+      hadWorktree: Boolean(worktree),
+      runOk: blockedSteps.length === 0,
+    });
+
+    const summary = this.dispatchSummary({
+      project,
+      pipeline,
+      handoffs,
+      blockedSteps,
+      delivery,
+    });
+    const nextActions = this.dispatchNextActions({ blockers, blockedSteps, delivery });
 
     return {
       summary,
@@ -500,7 +535,111 @@ export class ProjectDispatchService {
       handoffs,
       dispatch,
       artifacts: [packet, ...handoffs.map((handoff) => handoff.artifact)],
+      ...(delivery ? { delivery } : {}),
     };
+  }
+
+  /**
+   * Run the post-run delivery step (SER-241): push the run branch and open a
+   * policy-gated draft PR. Returns `undefined` only for the no-delivery
+   * preconditions (run blocked / no worktree / no commit) so today's behavior is
+   * preserved; otherwise the delivery helper owns the gating and always returns a
+   * result (delivered / blocked / skipped).
+   */
+  private async deliverRun(args: {
+    project: ProjectRecord;
+    run: RunRecord;
+    scope: string;
+    commit: RunCommitResult | undefined;
+    hadWorktree: boolean;
+    runOk: boolean;
+  }): Promise<DispatchDeliveryResult | undefined> {
+    // No commit / no worktree / blocked -> today's no-delivery behavior, no
+    // delivery attempt at all (off-by-default safe).
+    if (!args.runOk || !args.hadWorktree || !args.commit?.committed) return undefined;
+
+    return deliverDispatchedRun(
+      {
+        workspaceRoot: this.workspaceRoot,
+        config: this.config,
+        workspace: new ProjectWorkspaceService(this.workspaceRoot),
+        policy: this.policy,
+        audit: this.audit,
+        artifacts: this.artifacts,
+        projects: this.projects,
+        clients: this.clients,
+        approvals: this.approvals,
+        ...(this.githubPrPublishClient ? { githubClient: this.githubPrPublishClient } : {}),
+      },
+      {
+        project: args.project,
+        run: args.run,
+        scope: args.scope,
+        commit: args.commit,
+        hadWorktree: args.hadWorktree,
+        runOk: args.runOk,
+        producedArtifacts: await this.artifacts.list({ run_id: args.run.id }),
+      },
+    );
+  }
+
+  private dispatchSummary(args: {
+    project: ProjectRecord;
+    pipeline: readonly string[];
+    handoffs: readonly AgentHandoff[];
+    blockedSteps: readonly { role: string }[];
+    delivery?: DispatchDeliveryResult;
+  }): string {
+    const { project, pipeline, handoffs, blockedSteps, delivery } = args;
+    if (blockedSteps.length > 0) {
+      return `Dispatched ${project.name} to ${pipeline.length} roles; ${blockedSteps.length} blocked (${blockedSteps
+        .map((step) => step.role)
+        .join(", ")}). Owner resolution required before delivery.`;
+    }
+    const base = `Dispatched ${project.name} to ${pipeline.length} roles with ${handoffs.length} handoff packets.`;
+    if (delivery?.status === "delivered") {
+      return `${base} Delivered: opened draft PR ${delivery.pullRequestUrl}.`;
+    }
+    if (delivery?.status === "blocked") {
+      return `${base} Delivery blocked, pending owner decision: ${delivery.reason}.`;
+    }
+    return base;
+  }
+
+  private dispatchNextActions(args: {
+    blockers: readonly string[];
+    blockedSteps: readonly unknown[];
+    delivery?: DispatchDeliveryResult;
+  }): string[] {
+    const { blockers, blockedSteps, delivery } = args;
+    if (blockedSteps.length > 0) {
+      return [
+        `Resolve specialist blockers before delivery: ${blockers.join("; ")}.`,
+        "Review the project RISKS.md entry for the blocked dispatch.",
+        "Re-dispatch once blockers are cleared, or escalate for owner intervention.",
+      ];
+    }
+    if (delivery?.status === "delivered") {
+      return [
+        `Review the draft PR before merge: ${delivery.pullRequestUrl}.`,
+        "Merge and production deploy remain separate approval-gated actions.",
+        "Use the dispatch packet as the project-scoped context source for follow-up runs.",
+      ];
+    }
+    if (delivery?.status === "blocked") {
+      return [
+        `Resolve the delivery gate to push/open the PR: ${delivery.reason}.`,
+        ...(delivery.approvalId
+          ? [`Approve or reject pending owner decision ${delivery.approvalId}.`]
+          : []),
+        "The run's work is committed on its branch and preserved for delivery once unblocked.",
+      ];
+    }
+    return [
+      "Review specialist artifacts before creating dev-ready GitHub issues.",
+      "Resolve pending approval gates before external commitments.",
+      "Use the dispatch packet as the project-scoped context source for follow-up runs.",
+    ];
   }
 
   private async agentProviderRouter(
