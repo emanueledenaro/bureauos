@@ -38,6 +38,8 @@ import {
 } from "../lib/tone";
 import { cn } from "../lib/utils";
 import { formatLabel, formatMoney, timeAgo } from "../lib/format";
+import { useT } from "../i18n/i18n";
+import type { TFunction } from "../i18n/i18n";
 import type { DashboardState, PortfolioLane } from "../lib/types";
 import type { ApprovalRecord } from "../lib/api";
 
@@ -95,11 +97,12 @@ const CLOSED_PORTFOLIO_STATUSES = new Set([
 ]);
 
 export function PortfolioView({ state }: { state: DashboardState }) {
+  const t = useT();
   const [tab, setTab] = useState<PortfolioTab>("map");
   const [filters, setFilters] = useState<PortfolioFilters>(DEFAULT_FILTERS);
   const lanes = useMemo(() => buildPortfolioLanes(state), [state]);
   const capacitySegments = useMemo(() => buildCapacitySegments(state), [state]);
-  const records = useMemo(() => buildPortfolioRecords(state), [state]);
+  const records = useMemo(() => buildPortfolioRecords(state, t), [state, t]);
   const scopedRecords = useMemo(
     () => (filters.includeClosed ? records : records.filter((record) => !isClosedRecord(record))),
     [filters.includeClosed, records],
@@ -127,19 +130,24 @@ export function PortfolioView({ state }: { state: DashboardState }) {
     <Card className="overflow-hidden">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/60 px-5 py-3.5">
         <div>
-          <h2 className="text-[14px] font-semibold text-foreground">Portfolio Operating Room</h2>
+          <h2 className="text-[14px] font-semibold text-foreground">
+            {t("portfolio.title", "Portfolio Operating Room")}
+          </h2>
           <p className="mt-0.5 text-[11px] text-muted-foreground">
-            Live portfolio view of workstreams, projects, and autonomous execution.
+            {t(
+              "portfolio.subtitle",
+              "Live portfolio view of workstreams, projects, and autonomous execution.",
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant={activeFilterCount > 0 ? "info" : "outline"}>
-            {activeFilterCount} filters
+            {activeFilterCount} {t("portfolio.filters", "filters")}
           </Badge>
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="Reset portfolio filters"
+            aria-label={t("portfolio.resetFiltersAria", "Reset portfolio filters")}
             disabled={activeFilterCount === 0}
             onClick={() => setFilters(DEFAULT_FILTERS)}
           >
@@ -153,19 +161,19 @@ export function PortfolioView({ state }: { state: DashboardState }) {
           <TabsList className="h-auto max-w-full flex-wrap items-start border-b-0 py-1 sm:h-9 sm:flex-nowrap sm:items-center sm:py-0">
             <TabsTrigger value="map" className="h-8 px-2.5 sm:h-9 sm:px-3">
               <LayoutGrid className="mr-1.5 h-3 w-3" />
-              Portfolio Map
+              {t("portfolio.tabMap", "Portfolio Map")}
             </TabsTrigger>
             <TabsTrigger value="workload" className="h-8 px-2.5 sm:h-9 sm:px-3">
               <ListChecks className="mr-1.5 h-3 w-3" />
-              Workload
+              {t("portfolio.tabWorkload", "Workload")}
             </TabsTrigger>
             <TabsTrigger value="timeline" className="h-8 px-2.5 sm:h-9 sm:px-3">
               <Workflow className="mr-1.5 h-3 w-3" />
-              Activity timeline
+              {t("portfolio.tabTimeline", "Activity timeline")}
             </TabsTrigger>
             <TabsTrigger value="kanban" className="h-8 px-2.5 sm:h-9 sm:px-3">
               <KanbanSquare className="mr-1.5 h-3 w-3" />
-              Kanban
+              {t("portfolio.tabKanban", "Kanban")}
             </TabsTrigger>
           </TabsList>
         </div>
@@ -234,15 +242,16 @@ function PortfolioFilterBar({
   onChange: (filters: PortfolioFilters) => void;
   onReset: () => void;
 }) {
+  const t = useT();
   return (
     <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
       <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
         <FilterSelect
-          label="Client"
+          label={t("portfolio.filterClient", "Client")}
           value={filters.client}
           onValueChange={(client) => onChange({ ...filters, client })}
           items={[
-            { value: ALL, label: "All clients" },
+            { value: ALL, label: t("portfolio.allClients", "All clients") },
             ...options.clients.map((client) => ({
               value: client.id,
               label: client.label,
@@ -250,11 +259,11 @@ function PortfolioFilterBar({
           ]}
         />
         <FilterSelect
-          label="Status"
+          label={t("portfolio.filterStatus", "Status")}
           value={filters.status}
           onValueChange={(status) => onChange({ ...filters, status })}
           items={[
-            { value: ALL, label: "All statuses" },
+            { value: ALL, label: t("portfolio.allStatuses", "All statuses") },
             ...options.statuses.map((status) => ({
               value: status,
               label: formatLabel(status),
@@ -262,11 +271,11 @@ function PortfolioFilterBar({
           ]}
         />
         <FilterSelect
-          label="Agent"
+          label={t("portfolio.filterAgent", "Agent")}
           value={filters.agent}
           onValueChange={(agent) => onChange({ ...filters, agent })}
           items={[
-            { value: ALL, label: "All agents" },
+            { value: ALL, label: t("portfolio.allAgents", "All agents") },
             ...options.agents.map((agent) => ({
               value: agent,
               label: formatLabel(agent),
@@ -274,7 +283,7 @@ function PortfolioFilterBar({
           ]}
         />
         <div className="flex flex-col gap-1">
-          <div className="text-eyebrow">Risk</div>
+          <div className="text-eyebrow">{t("portfolio.risk", "Risk")}</div>
           <Button
             variant={filters.riskOnly ? "default" : "outline"}
             size="sm"
@@ -282,11 +291,11 @@ function PortfolioFilterBar({
             onClick={() => onChange({ ...filters, riskOnly: !filters.riskOnly })}
           >
             <CircleAlert className="h-3.5 w-3.5" />
-            Active risk only
+            {t("portfolio.activeRiskOnly", "Active risk only")}
           </Button>
         </div>
         <div className="flex flex-col gap-1">
-          <div className="text-eyebrow">Scope</div>
+          <div className="text-eyebrow">{t("portfolio.scope", "Scope")}</div>
           <Button
             variant={filters.includeClosed ? "default" : "outline"}
             size="sm"
@@ -294,16 +303,20 @@ function PortfolioFilterBar({
             onClick={() => onChange({ ...filters, includeClosed: !filters.includeClosed })}
           >
             <Archive className="h-3.5 w-3.5" />
-            {filters.includeClosed ? "Showing closed" : "Active only"}
+            {filters.includeClosed
+              ? t("portfolio.showingClosed", "Showing closed")
+              : t("portfolio.activeOnly", "Active only")}
           </Button>
         </div>
       </div>
       <div className="flex items-center justify-between gap-3 lg:justify-end">
         <span className="text-meta">
-          {resultCount} record{resultCount === 1 ? "" : "s"} · {closedRecordCount} closed
+          {resultCount}{" "}
+          {resultCount === 1 ? t("portfolio.record", "record") : t("portfolio.records", "records")}{" "}
+          · {closedRecordCount} {t("portfolio.closed", "closed")}
         </span>
         <Button variant="ghost" size="sm" disabled={activeFilterCount === 0} onClick={onReset}>
-          Reset
+          {t("portfolio.reset", "Reset")}
         </Button>
       </div>
     </div>
@@ -321,11 +334,12 @@ function FilterSelect({
   items: { value: string; label: string }[];
   onValueChange: (value: string) => void;
 }) {
+  const t = useT();
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <div className="text-eyebrow">{label}</div>
       <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger aria-label={`${label} filter`}>
+        <SelectTrigger aria-label={`${label} ${t("portfolio.filterAria", "filter")}`}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -355,24 +369,37 @@ function PortfolioMapContent({
   visibleStreams: number;
   closedRecordCount: number;
 }) {
+  const t = useT();
   if (lanes.length === 0) {
     return (
       <EmptyState
         title={
           loading
-            ? "Loading company memory"
+            ? t("portfolio.loadingMemory", "Loading company memory")
             : filtered
-              ? "No matching workstreams"
-              : "No active workstreams"
+              ? t("portfolio.noMatchingWorkstreams", "No matching workstreams")
+              : t("portfolio.noActiveWorkstreams", "No active workstreams")
         }
         description={
           loading
-            ? "The Operating Room is reading local BureauOS state."
+            ? t(
+                "portfolio.loadingDescription",
+                "The Operating Room is reading local BureauOS state.",
+              )
             : filtered
               ? includeClosed || closedRecordCount === 0
-                ? "Adjust filters to include more clients, statuses, agents, or risk states."
-                : "Show closed work to include completed, cancelled, won, or lost records."
-              : "Send an intake message to create the first client, project, opportunity, and approval trail."
+                ? t(
+                    "portfolio.adjustFilters",
+                    "Adjust filters to include more clients, statuses, agents, or risk states.",
+                  )
+                : t(
+                    "portfolio.showClosedWork",
+                    "Show closed work to include completed, cancelled, won, or lost records.",
+                  )
+              : t(
+                  "portfolio.sendIntake",
+                  "Send an intake message to create the first client, project, opportunity, and approval trail.",
+                )
         }
       />
     );
@@ -382,14 +409,18 @@ function PortfolioMapContent({
     <>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h3 className="text-section-title">Portfolio Map</h3>
+          <h3 className="text-section-title">{t("portfolio.mapHeading", "Portfolio Map")}</h3>
           <p className="text-meta mt-0.5">
-            {visibleStreams} visible {includeClosed ? "total" : "active"} project and revenue
-            streams.
+            {visibleStreams}{" "}
+            {includeClosed
+              ? t("portfolio.visibleTotalStreams", "visible total project and revenue streams.")
+              : t("portfolio.visibleActiveStreams", "visible active project and revenue streams.")}
           </p>
         </div>
         {!includeClosed && closedRecordCount > 0 ? (
-          <Badge variant="outline">{closedRecordCount} closed hidden</Badge>
+          <Badge variant="outline">
+            {closedRecordCount} {t("portfolio.closedHidden", "closed hidden")}
+          </Badge>
         ) : null}
       </div>
       <div className="grid grid-cols-1 gap-x-7 gap-y-4 md:grid-cols-2 xl:grid-cols-4">
@@ -407,7 +438,7 @@ function PortfolioMapContent({
                   {lane.capacityPercent}%
                 </div>
                 <div className="text-[9px] uppercase tracking-wide text-muted-foreground">
-                  Of visible work
+                  {t("portfolio.ofVisibleWork", "Of visible work")}
                 </div>
               </div>
             </div>
@@ -425,12 +456,16 @@ function PortfolioMapContent({
 }
 
 function WorkloadContent({ records }: { records: PortfolioRecord[] }) {
+  const t = useT();
   const groups = useMemo(() => buildWorkloadGroups(records), [records]);
   if (groups.length === 0) {
     return (
       <EmptyState
-        title="No workload to show"
-        description="Projects, opportunities, and runs with agent ownership appear here."
+        title={t("portfolio.noWorkload", "No workload to show")}
+        description={t(
+          "portfolio.noWorkloadDescription",
+          "Projects, opportunities, and runs with agent ownership appear here.",
+        )}
       />
     );
   }
@@ -441,16 +476,20 @@ function WorkloadContent({ records }: { records: PortfolioRecord[] }) {
         <BaseCard key={group.agent} className="gap-3">
           <BaseCardHeader
             title={formatLabel(group.agent)}
-            subtitle={`${group.records.length} assigned record${group.records.length === 1 ? "" : "s"}`}
+            subtitle={`${group.records.length} ${
+              group.records.length === 1
+                ? t("portfolio.assignedRecord", "assigned record")
+                : t("portfolio.assignedRecords", "assigned records")
+            }`}
           >
             <Badge variant={group.riskCount > 0 ? "warning" : "outline"}>
-              {group.riskCount} risk
+              {group.riskCount} {t("portfolio.riskCount", "risk")}
             </Badge>
           </BaseCardHeader>
           <div className="grid grid-cols-3 gap-2">
-            <MiniStat label="Active" value={String(group.activeCount)} />
-            <MiniStat label="Runs" value={String(group.runCount)} />
-            <MiniStat label="Clients" value={String(group.clientCount)} />
+            <MiniStat label={t("portfolio.active", "Active")} value={String(group.activeCount)} />
+            <MiniStat label={t("portfolio.runs", "Runs")} value={String(group.runCount)} />
+            <MiniStat label={t("portfolio.clients", "Clients")} value={String(group.clientCount)} />
           </div>
           <div className="flex flex-col gap-2">
             {group.records.slice(0, 5).map((record) => (
@@ -467,14 +506,18 @@ function WorkloadContent({ records }: { records: PortfolioRecord[] }) {
 }
 
 function ActivityTimelineContent({ records }: { records: PortfolioRecord[] }) {
+  const t = useT();
   const dated = records.filter((record) => record.created || record.updated);
   const range = buildTimelineRange(dated);
 
   if (dated.length === 0 || !range) {
     return (
       <EmptyState
-        title="No dated portfolio records"
-        description="Created and updated timestamps from projects, opportunities, and runs are needed for the activity timeline."
+        title={t("portfolio.noDatedRecords", "No dated portfolio records")}
+        description={t(
+          "portfolio.noDatedRecordsDescription",
+          "Created and updated timestamps from projects, opportunities, and runs are needed for the activity timeline.",
+        )}
       />
     );
   }
@@ -482,14 +525,17 @@ function ActivityTimelineContent({ records }: { records: PortfolioRecord[] }) {
   return (
     <div className="overflow-hidden rounded-lg border border-border/70 bg-card/95">
       <div className="border-b border-border/60 bg-surface-subtle/35 px-4 py-2 text-[10px] text-muted-foreground">
-        Bars span first-seen to last-activity, not planned duration or effort.
+        {t(
+          "portfolio.timelineBanner",
+          "Bars span first-seen to last-activity, not planned duration or effort.",
+        )}
       </div>
       <div
         className="grid gap-3 border-b border-border/60 bg-surface-subtle/35 px-4 py-3 text-eyebrow"
         style={{ gridTemplateColumns: TIMELINE_GRID_TEMPLATE }}
       >
-        <span>Record</span>
-        <span className="min-w-0">Activity span</span>
+        <span>{t("portfolio.columnRecord", "Record")}</span>
+        <span className="min-w-0">{t("portfolio.columnActivitySpan", "Activity span")}</span>
       </div>
       <div className="divide-y divide-border/60">
         {dated.map((record) => {
@@ -528,8 +574,16 @@ function ActivityTimelineContent({ records }: { records: PortfolioRecord[] }) {
                   />
                 </div>
                 <div className="mt-1 flex justify-between gap-2 text-[10px] text-muted-foreground">
-                  <span>{start ? `First seen ${timeAgo(start)}` : "No start"}</span>
-                  <span>{end ? `Last activity ${timeAgo(end)}` : "No update"}</span>
+                  <span>
+                    {start
+                      ? `${t("portfolio.firstSeen", "First seen")} ${timeAgo(start)}`
+                      : t("portfolio.noStart", "No start")}
+                  </span>
+                  <span>
+                    {end
+                      ? `${t("portfolio.lastActivity", "Last activity")} ${timeAgo(end)}`
+                      : t("portfolio.noUpdate", "No update")}
+                  </span>
                 </div>
               </div>
             </div>
@@ -541,12 +595,16 @@ function ActivityTimelineContent({ records }: { records: PortfolioRecord[] }) {
 }
 
 function KanbanContent({ records }: { records: PortfolioRecord[] }) {
+  const t = useT();
   const groups = useMemo(() => buildStatusGroups(records), [records]);
   if (groups.length === 0) {
     return (
       <EmptyState
-        title="No cards match filters"
-        description="Portfolio Kanban renders project, opportunity, and run records from local state."
+        title={t("portfolio.noCardsMatch", "No cards match filters")}
+        description={t(
+          "portfolio.noCardsMatchDescription",
+          "Portfolio Kanban renders project, opportunity, and run records from local state.",
+        )}
       />
     );
   }
@@ -605,12 +663,18 @@ function PortfolioRecordRow({ record, framed }: { record: PortfolioRecord; frame
 }
 
 function CapacityAllocation({ segments }: { segments: ReturnType<typeof buildCapacitySegments> }) {
+  const t = useT();
   return (
     <div className="mt-6 flex flex-col gap-3 border-t border-border/60 pt-4 lg:flex-row lg:items-center">
       <div className="w-48 shrink-0">
-        <div className="text-[12px] font-semibold text-foreground">Work mix</div>
+        <div className="text-[12px] font-semibold text-foreground">
+          {t("portfolio.workMix", "Work mix")}
+        </div>
         <div className="mt-0.5 text-[11px] text-muted-foreground">
-          Share of tracked records by area, not team capacity.
+          {t(
+            "portfolio.workMixDescription",
+            "Share of tracked records by area, not team capacity.",
+          )}
         </div>
       </div>
       <div className="flex-1">
@@ -638,7 +702,7 @@ function CapacityAllocation({ segments }: { segments: ReturnType<typeof buildCap
   );
 }
 
-function buildPortfolioRecords(state: DashboardState): PortfolioRecord[] {
+function buildPortfolioRecords(state: DashboardState, t: TFunction): PortfolioRecord[] {
   const ownershipByProjectId = new Map(
     state.projectOwnership.map((ownership) => [ownership.project_id, ownership]),
   );
@@ -665,7 +729,7 @@ function buildPortfolioRecords(state: DashboardState): PortfolioRecord[] {
       risk:
         project.status === "blocked" ||
         hasMatchingApproval(project.name, project.id, state.approvals),
-      meta: project.repository || project.stack || "Project memory",
+      meta: project.repository || project.stack || t("portfolio.projectMemory", "Project memory"),
       created: project.created,
       updated: project.updated,
       sortDate: project.updated ?? project.created,
@@ -708,11 +772,17 @@ function buildPortfolioRecords(state: DashboardState): PortfolioRecord[] {
       tone: runTone(run.status),
       progress: runProgress(run.status),
       clientId: run.client_id,
-      clientName: run.client_id ? clientName(state.clients, run.client_id) : "No client",
+      clientName: run.client_id
+        ? clientName(state.clients, run.client_id)
+        : t("portfolio.noClient", "No client"),
       projectId: run.project_id,
       agents: uniqueCompact([run.created_by, "supreme_coordinator"]),
       risk: RISK_RUN_STATUSES.has(run.status),
-      meta: run.source_work_item_id || run.trigger_source || run.trigger_type || "BureauOS run",
+      meta:
+        run.source_work_item_id ||
+        run.trigger_source ||
+        run.trigger_type ||
+        t("portfolio.bureauosRun", "BureauOS run"),
       created: run.created,
       updated: run.updated ?? run.completed,
       sortDate: run.updated ?? run.created,

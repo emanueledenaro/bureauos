@@ -1,0 +1,41 @@
+import type { CatalogNamespace } from "../types";
+
+export default {
+  en: {
+    "coordinatorPanel.takeOverPrefix": "Take over: ",
+    "coordinatorPanel.decideOperatingFocus": "Decide today's operating focus",
+    "coordinatorPanel.reprioritizeDelivery": "Reprioritize delivery work",
+    "coordinatorPanel.prepareOperatingPlan": "Prepare the operating plan",
+    "coordinatorPanel.reviewClients": "Review clients and follow-ups",
+    "coordinatorPanel.setUpFirstClient": "Set up the first client",
+    "coordinatorPanel.attachedFiles": "Attached files",
+    "coordinatorPanel.title": "Supreme Coordinator",
+    "coordinatorPanel.commandThread": "Company command thread · {count} messages",
+    "coordinatorPanel.approvals": "{count} approvals",
+    "coordinatorPanel.activeRuns": "{count} active runs",
+    "coordinatorPanel.executiveChannel": "Executive channel",
+    "coordinatorPanel.emptyHeadline": "Bring decisions, clients, projects, and priorities here.",
+    "coordinatorPanel.readingContext": "Reading company context...",
+    "coordinatorPanel.requestFailed": "Coordinator request failed",
+    "coordinatorPanel.composerPlaceholder": "Message a decision, client, project, or priority...",
+  },
+  it: {
+    "coordinatorPanel.takeOverPrefix": "Prendi in carico: ",
+    "coordinatorPanel.decideOperatingFocus": "Decidi la priorità operativa di oggi",
+    "coordinatorPanel.reprioritizeDelivery": "Riordina le priorità del lavoro di consegna",
+    "coordinatorPanel.prepareOperatingPlan": "Prepara il piano operativo",
+    "coordinatorPanel.reviewClients": "Rivedi clienti e follow-up",
+    "coordinatorPanel.setUpFirstClient": "Configura il primo cliente",
+    "coordinatorPanel.attachedFiles": "File allegati",
+    "coordinatorPanel.title": "Coordinatore Supremo",
+    "coordinatorPanel.commandThread": "Thread di comando aziendale · {count} messaggi",
+    "coordinatorPanel.approvals": "{count} approvazioni",
+    "coordinatorPanel.activeRuns": "{count} esecuzioni attive",
+    "coordinatorPanel.executiveChannel": "Canale esecutivo",
+    "coordinatorPanel.emptyHeadline": "Porta qui decisioni, clienti, progetti e priorità.",
+    "coordinatorPanel.readingContext": "Lettura del contesto aziendale...",
+    "coordinatorPanel.requestFailed": "Richiesta al coordinatore non riuscita",
+    "coordinatorPanel.composerPlaceholder":
+      "Scrivi una decisione, un cliente, un progetto o una priorità...",
+  },
+} satisfies CatalogNamespace;

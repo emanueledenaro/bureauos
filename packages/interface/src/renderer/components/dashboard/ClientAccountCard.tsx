@@ -6,6 +6,7 @@ import { StatusPill } from "./StatusPill";
 import { clientRiskTone } from "../../lib/tone";
 import { formatLabel, formatMoney, timeAgo } from "../../lib/format";
 import type { ClientIntelligenceItem } from "../../lib/api";
+import { useT } from "../../i18n/i18n";
 
 export function ClientAccountCard({
   item,
@@ -14,6 +15,7 @@ export function ClientAccountCard({
   item: ClientIntelligenceItem;
   onOpen?: () => void;
 }) {
+  const t = useT();
   const topProject = item.projects[0];
   const topOpportunity = item.opportunities[0];
   const memoryPaths = [
@@ -30,7 +32,9 @@ export function ClientAccountCard({
       <span className="font-mono">{item.client.slug}</span>
       <span aria-hidden>·</span>
       <span>
-        {item.latest_activity_at ? `Updated ${timeAgo(item.latest_activity_at)}` : "No activity"}
+        {item.latest_activity_at
+          ? `${t("clientAccountCard.updatedPrefix", "Updated")} ${timeAgo(item.latest_activity_at)}`
+          : t("clientAccountCard.noActivity", "No activity")}
       </span>
     </span>
   );
@@ -42,23 +46,37 @@ export function ClientAccountCard({
       </BaseCardHeader>
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <MiniStat label="Pipeline" value={formatMoney(item.revenue.pipeline_value)} />
-        <MiniStat label="Won" value={formatMoney(item.revenue.won_value)} />
-        <MiniStat label="Projects" value={String(item.delivery.projects_total)} />
-        <MiniStat label="Open opps" value={String(item.revenue.open_opportunities)} />
+        <MiniStat
+          label={t("clientAccountCard.pipeline", "Pipeline")}
+          value={formatMoney(item.revenue.pipeline_value)}
+        />
+        <MiniStat
+          label={t("clientAccountCard.won", "Won")}
+          value={formatMoney(item.revenue.won_value)}
+        />
+        <MiniStat
+          label={t("clientAccountCard.projects", "Projects")}
+          value={String(item.delivery.projects_total)}
+        />
+        <MiniStat
+          label={t("clientAccountCard.openOpps", "Open opps")}
+          value={String(item.revenue.open_opportunities)}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <div className="rounded-md border border-border/60 bg-background/35 p-3">
           <div className="flex items-center gap-1.5 text-muted-foreground">
             <Briefcase className="h-3 w-3" />
-            <span className="text-eyebrow">Delivery</span>
+            <span className="text-eyebrow">{t("clientAccountCard.delivery", "Delivery")}</span>
           </div>
           <div className="text-body-secondary mt-2 text-foreground">
-            {item.delivery.active_projects} active · {item.delivery.blocked_projects} blocked
+            {item.delivery.active_projects} {t("clientAccountCard.active", "active")} ·{" "}
+            {item.delivery.blocked_projects} {t("clientAccountCard.blocked", "blocked")}
           </div>
           <div className="text-meta mt-1">
-            {item.delivery.repositories_linked} repos · {item.delivery.pending_approvals} approvals
+            {item.delivery.repositories_linked} {t("clientAccountCard.repos", "repos")} ·{" "}
+            {item.delivery.pending_approvals} {t("clientAccountCard.approvals", "approvals")}
           </div>
           {topProject ? (
             <div className="text-meta mt-2 truncate">
@@ -69,13 +87,15 @@ export function ClientAccountCard({
         <div className="rounded-md border border-border/60 bg-background/35 p-3">
           <div className="flex items-center gap-1.5 text-muted-foreground">
             <TrendingUp className="h-3 w-3" />
-            <span className="text-eyebrow">Revenue</span>
+            <span className="text-eyebrow">{t("clientAccountCard.revenue", "Revenue")}</span>
           </div>
           <div className="text-body-secondary mt-2 text-foreground">
-            {Math.round(item.revenue.average_expected_margin)}% average margin
+            {Math.round(item.revenue.average_expected_margin)}%{" "}
+            {t("clientAccountCard.averageMargin", "average margin")}
           </div>
           <div className="text-meta mt-1">
-            {item.revenue.won_opportunities} won · {item.revenue.stalled_opportunities} stalled
+            {item.revenue.won_opportunities} {t("clientAccountCard.wonLower", "won")} ·{" "}
+            {item.revenue.stalled_opportunities} {t("clientAccountCard.stalled", "stalled")}
           </div>
           {topOpportunity ? (
             <div className="text-meta mt-2 truncate">
@@ -86,7 +106,7 @@ export function ClientAccountCard({
       </div>
 
       <div className="rounded-md border border-border/60 bg-background/35 p-3">
-        <div className="text-eyebrow">Next action</div>
+        <div className="text-eyebrow">{t("clientAccountCard.nextAction", "Next action")}</div>
         <div className="text-body mt-1 leading-relaxed text-foreground">{item.next_action}</div>
       </div>
 
@@ -101,7 +121,10 @@ export function ClientAccountCard({
               type="button"
               onClick={onOpen}
               className="text-meta focus-ring max-w-full truncate rounded-md border border-border/60 bg-background/35 px-2 py-1 font-mono transition-colors hover:border-border hover:text-foreground"
-              title={`Open ${path} in Memory`}
+              title={t("clientAccountCard.openInMemory", "Open {path} in Memory").replace(
+                "{path}",
+                path,
+              )}
             >
               {path}
             </button>
@@ -117,7 +140,7 @@ export function ClientAccountCard({
         )}
         {onOpen ? (
           <Button variant="ghost" size="sm" className="ml-auto" onClick={onOpen}>
-            Open account
+            {t("clientAccountCard.openAccount", "Open account")}
             <ArrowRight className="h-3 w-3" />
           </Button>
         ) : null}

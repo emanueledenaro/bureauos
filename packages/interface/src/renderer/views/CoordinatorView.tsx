@@ -25,6 +25,7 @@ import { cn } from "../lib/utils";
 import { formatLabel, formatMoney, timeAgo } from "../lib/format";
 import { buildTodayActions, pipelineValue, sortNewest } from "../lib/builders";
 import { actionStateLabel } from "../lib/tone";
+import { useT } from "../i18n/i18n";
 import type {
   CoordinatorAttachmentInput,
   CoordinatorChatResult,
@@ -59,6 +60,7 @@ export function CoordinatorView({
   ) => Promise<CoordinatorChatResult>;
   onModeChange: (mode: AdaptiveMode) => void;
 }) {
+  const t = useT();
   const [contextOpen, setContextOpen] = useState(false);
 
   // The drawer only exists below xl, where the context column is hidden. If the
@@ -97,10 +99,10 @@ export function CoordinatorView({
               size="sm"
               className="xl:hidden"
               onClick={() => setContextOpen(true)}
-              aria-label="Open company context"
+              aria-label={t("coordinator.openCompanyContext", "Open company context")}
             >
               <PanelRightOpen className="h-3.5 w-3.5" />
-              Context
+              {t("coordinator.context", "Context")}
             </Button>
           }
         />
@@ -113,9 +115,12 @@ export function CoordinatorView({
       <Sheet open={contextOpen} onOpenChange={setContextOpen}>
         <SheetContent side="right" className="w-[320px] gap-0 p-0 sm:max-w-sm">
           <SheetHeader>
-            <SheetTitle>Company context</SheetTitle>
+            <SheetTitle>{t("coordinator.companyContext", "Company context")}</SheetTitle>
             <SheetDescription>
-              Pulse, next queue, recent artifacts, and the agent bench.
+              {t(
+                "coordinator.drawerDescription",
+                "Pulse, next queue, recent artifacts, and the agent bench.",
+              )}
             </SheetDescription>
           </SheetHeader>
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
@@ -136,6 +141,7 @@ function ContextColumn({
   state: DashboardState;
   onModeChange: (mode: AdaptiveMode) => void;
 }) {
+  const t = useT();
   const recentArtifacts = useMemo(() => sortNewest(state.artifacts).slice(0, 4), [state.artifacts]);
   const nextActions = useMemo(() => buildTodayActions(state).slice(0, 4), [state]);
   const pendingApprovals = state.approvals.length;
@@ -146,33 +152,49 @@ function ContextColumn({
   return (
     <aside className={cn("flex min-h-0 flex-col gap-3", className)}>
       <BaseCard padding="comfortable" className="gap-3">
-        <BaseCardHeader title="Company context">
+        <BaseCardHeader title={t("coordinator.companyContext", "Company context")}>
           <span className="text-meta">{state.pulse?.organization ?? "BureauOS"}</span>
         </BaseCardHeader>
         <div className="grid grid-cols-2 gap-2">
-          <PulseStat icon={CheckCircle2} label="Approvals" value={String(pendingApprovals)} />
-          <PulseStat icon={Calendar} label="Blockers" value={String(blockedProjects)} />
-          <PulseStat icon={Sparkles} label="Runs" value={String(activeRuns.length)} />
-          <PulseStat icon={MessageSquare} label="Pipeline" value={formatMoney(pipeline)} />
+          <PulseStat
+            icon={CheckCircle2}
+            label={t("coordinator.approvals", "Approvals")}
+            value={String(pendingApprovals)}
+          />
+          <PulseStat
+            icon={Calendar}
+            label={t("coordinator.blockers", "Blockers")}
+            value={String(blockedProjects)}
+          />
+          <PulseStat
+            icon={Sparkles}
+            label={t("coordinator.runs", "Runs")}
+            value={String(activeRuns.length)}
+          />
+          <PulseStat
+            icon={MessageSquare}
+            label={t("coordinator.pipeline", "Pipeline")}
+            value={formatMoney(pipeline)}
+          />
         </div>
       </BaseCard>
 
       <BaseCard padding="comfortable" className="gap-2">
-        <BaseCardHeader title="Next queue">
+        <BaseCardHeader title={t("coordinator.nextQueue", "Next queue")}>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => onModeChange("today")}
             className="text-meta"
           >
-            Inbox
+            {t("coordinator.inbox", "Inbox")}
             <ArrowRight className="h-3 w-3" />
           </Button>
         </BaseCardHeader>
         <div className="flex flex-col gap-2">
           {nextActions.length === 0 ? (
             <div className="rounded-md border border-border/60 bg-background/35 p-3 text-meta">
-              No urgent owner action.
+              {t("coordinator.noUrgentAction", "No urgent owner action.")}
             </div>
           ) : (
             nextActions.map((action) => (
@@ -200,21 +222,21 @@ function ContextColumn({
       </BaseCard>
 
       <BaseCard padding="comfortable" className="min-h-0 flex-1 gap-2">
-        <BaseCardHeader title="Recent artifacts">
+        <BaseCardHeader title={t("coordinator.recentArtifacts", "Recent artifacts")}>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => onModeChange("memory")}
             className="text-meta"
           >
-            All
+            {t("coordinator.all", "All")}
             <ArrowRight className="h-3 w-3" />
           </Button>
         </BaseCardHeader>
         <ScrollArea className="min-h-0 flex-1">
           <div className="flex flex-col gap-2 pr-2">
             {recentArtifacts.length === 0 ? (
-              <div className="text-meta">No artifacts yet.</div>
+              <div className="text-meta">{t("coordinator.noArtifacts", "No artifacts yet.")}</div>
             ) : (
               recentArtifacts.map((artifact) => (
                 <div
@@ -230,7 +252,9 @@ function ContextColumn({
                     </div>
                     <div className="text-meta truncate font-mono">{artifact.id}</div>
                     <div className="text-meta">
-                      {artifact.created ? timeAgo(artifact.created) : "created"}
+                      {artifact.created
+                        ? timeAgo(artifact.created)
+                        : t("coordinator.created", "created")}
                     </div>
                   </div>
                 </div>
@@ -241,14 +265,14 @@ function ContextColumn({
       </BaseCard>
 
       <BaseCard padding="comfortable" className="gap-2">
-        <BaseCardHeader title="Agent bench">
+        <BaseCardHeader title={t("coordinator.agentBench", "Agent bench")}>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => onModeChange("agents")}
             className="text-meta"
           >
-            Open
+            {t("coordinator.open", "Open")}
             <ArrowRight className="h-3 w-3" />
           </Button>
         </BaseCardHeader>
@@ -268,7 +292,9 @@ function ContextColumn({
           {state.agents.length > 6 ? (
             <span className="text-meta ml-1">+{state.agents.length - 6}</span>
           ) : null}
-          {state.agents.length === 0 ? <span className="text-meta">No agents loaded</span> : null}
+          {state.agents.length === 0 ? (
+            <span className="text-meta">{t("coordinator.noAgents", "No agents loaded")}</span>
+          ) : null}
         </div>
       </BaseCard>
     </aside>

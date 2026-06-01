@@ -24,6 +24,7 @@ import { buildLinkedWorkItems, clientName, linkedWorkTone, sortNewest } from "..
 import { projectTone } from "../lib/tone";
 import { formatLabel, timeAgo } from "../lib/format";
 import { useState } from "react";
+import { useT } from "../i18n/i18n";
 import type { ProjectRepositoryVerificationResult } from "../lib/api";
 import type { DashboardState, LinkedWorkItem, WorkstreamPullRequestLink } from "../lib/types";
 
@@ -51,7 +52,9 @@ function ExternalLinkText({
 }
 
 function PullRequestLinks({ links }: { links: WorkstreamPullRequestLink[] }) {
-  if (links.length === 0) return <span className="text-muted-foreground">No PR</span>;
+  const t = useT();
+  if (links.length === 0)
+    return <span className="text-muted-foreground">{t("delivery.noPr", "No PR")}</span>;
   return (
     <div className="flex min-w-0 flex-wrap gap-1">
       {links.map((link) =>
@@ -87,6 +90,7 @@ export function DeliveryView({
   state: DashboardState;
   onVerifyRepositories: (projectSlug?: string) => Promise<ProjectRepositoryVerificationResult>;
 }) {
+  const t = useT();
   const blocked = state.projects.filter((project) => project.status === "blocked").length;
   const reposLinked = state.projects.filter((project) => project.repository).length;
   const latestVerification = [...state.artifacts]
@@ -120,24 +124,36 @@ export function DeliveryView({
     typeof deliveryFocus === "object"
       ? `${deliveryFocus.name} · ${clientName(state.clients, deliveryFocus.client_id)}`
       : deliveryFocus === "stale-linked-work" && staleLinkedWork
-        ? `${formatLabel(staleLinkedWork.runType)} · stale GitHub signal`
+        ? `${formatLabel(staleLinkedWork.runType)} · ${t("delivery.staleGithubSignal", "stale GitHub signal")}`
         : deliveryFocus === "missing-pr-run" && missingPrRun
-          ? `${formatLabel(missingPrRun.runType)} · PR missing`
+          ? `${formatLabel(missingPrRun.runType)} · ${t("delivery.prMissing", "PR missing")}`
           : state.projects.length > 0
-            ? "Delivery queue is clear enough to keep moving"
-            : "Create the first delivery stream";
+            ? t("delivery.queueClearTitle", "Delivery queue is clear enough to keep moving")
+            : t("delivery.createFirstStreamTitle", "Create the first delivery stream");
   const deliveryFocusDetail =
     typeof deliveryFocus === "object"
       ? deliveryFocus.status === "blocked"
-        ? "Project is blocked. Assign a recovery action before starting more delivery work for this account."
-        : "Repository is not linked yet. Connect the project repo before expecting GitHub-native delivery evidence."
+        ? t(
+            "delivery.focusBlockedDetail",
+            "Project is blocked. Assign a recovery action before starting more delivery work for this account.",
+          )
+        : t(
+            "delivery.focusMissingRepoDetail",
+            "Repository is not linked yet. Connect the project repo before expecting GitHub-native delivery evidence.",
+          )
       : deliveryFocus === "stale-linked-work" && staleLinkedWork
         ? staleLinkedWork.prDetail
         : deliveryFocus === "missing-pr-run" && missingPrRun
           ? missingPrRun.prDetail
           : state.projects.length > 0
-            ? "No blocked project is first in the queue. Continue with repository verification and active project-manager runs."
-            : "No project memory exists yet. The coordinator should create a project from approved client scope.";
+            ? t(
+                "delivery.focusQueueClearDetail",
+                "No blocked project is first in the queue. Continue with repository verification and active project-manager runs.",
+              )
+            : t(
+                "delivery.focusNoMemoryDetail",
+                "No project memory exists yet. The coordinator should create a project from approved client scope.",
+              );
 
   const verifyAll = useAsyncAction(onVerifyRepositories);
   const [busyProject, setBusyProject] = useState<string | undefined>();
@@ -146,9 +162,9 @@ export function DeliveryView({
   const linkedWorkColumns: DataTableColumn<LinkedWorkItem>[] = [
     {
       id: "run",
-      header: "Run",
+      header: t("delivery.colRun", "Run"),
       width: "minmax(180px,1.15fr)",
-      mobileLabel: "Run",
+      mobileLabel: t("delivery.colRun", "Run"),
       render: (item) => (
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -193,29 +209,35 @@ export function DeliveryView({
     },
     {
       id: "refs",
-      header: "Refs",
+      header: t("delivery.colRefs", "Refs"),
       width: "170px",
-      mobileLabel: "Refs",
+      mobileLabel: t("delivery.colRefs", "Refs"),
       render: (item) => (
         <div className="min-w-0 text-meta">
-          <div className="truncate">Branch: {item.branch}</div>
-          <div className="truncate">Commit: {item.commit}</div>
+          <div className="truncate">
+            {t("delivery.branchLabel", "Branch")}: {item.branch}
+          </div>
+          <div className="truncate">
+            {t("delivery.commitLabel", "Commit")}: {item.commit}
+          </div>
         </div>
       ),
     },
     {
       id: "checks",
-      header: "Checks",
+      header: t("delivery.colChecks", "Checks"),
       width: "130px",
-      mobileLabel: "Checks",
+      mobileLabel: t("delivery.colChecks", "Checks"),
       render: (item) => (
         <div className="flex flex-wrap gap-1">
           <Badge
             variant={item.failingChecks > 0 ? "danger" : item.checks > 0 ? "success" : "muted"}
           >
-            CI {item.checks}
+            {t("delivery.ciBadge", "CI")} {item.checks}
           </Badge>
-          <Badge variant={item.staleCount > 0 ? "warning" : "muted"}>Stale {item.staleCount}</Badge>
+          <Badge variant={item.staleCount > 0 ? "warning" : "muted"}>
+            {t("delivery.staleBadge", "Stale")} {item.staleCount}
+          </Badge>
         </div>
       ),
     },
@@ -228,7 +250,11 @@ export function DeliveryView({
       await onVerifyRepositories(projectSlug);
     } catch (error) {
       // A failing single-project verify must surface, not silently no-op (SER-206).
-      setVerifyError(error instanceof Error ? error.message : "Repository verification failed.");
+      setVerifyError(
+        error instanceof Error
+          ? error.message
+          : t("delivery.verificationFailedFallback", "Repository verification failed."),
+      );
     } finally {
       setBusyProject(undefined);
     }
@@ -236,16 +262,16 @@ export function DeliveryView({
 
   return (
     <SectionShell
-      title="Delivery"
-      description="Projects, repositories, status, and team execution."
+      title={t("delivery.title", "Delivery")}
+      description={t("delivery.description", "Projects, repositories, status, and team execution.")}
       action={
         <ViewToolbar
           primary={{
-            label: "Verify repositories",
+            label: t("delivery.verifyRepositories", "Verify repositories"),
             icon: RefreshCw,
             onClick: () => void verifyAll.run(),
             busy: verifyAll.busy,
-            busyLabel: "Verifying",
+            busyLabel: t("delivery.verifying", "Verifying"),
           }}
         />
       }
@@ -253,7 +279,7 @@ export function DeliveryView({
       {verifyError ? (
         <ActionBanner
           tone="danger"
-          title="Repository verification failed"
+          title={t("delivery.verificationFailedTitle", "Repository verification failed")}
           detail={verifyError}
           onDismiss={() => setVerifyError(undefined)}
           className="mb-3"
@@ -262,7 +288,7 @@ export function DeliveryView({
       {verifyAll.error ? (
         <ActionBanner
           tone="danger"
-          title="Repository verification failed"
+          title={t("delivery.verificationFailedTitle", "Repository verification failed")}
           detail={verifyAll.error}
           onDismiss={verifyAll.reset}
           className="mb-3"
@@ -270,8 +296,8 @@ export function DeliveryView({
       ) : latestVerification ? (
         <ActionBanner
           tone="info"
-          title="Last repository verification"
-          detail={`${latestVerification.verified_count ?? 0} verified · ${attentionCount} attention · ${unverifiedCount} unverified · ${latestVerification.created ? timeAgo(latestVerification.created) : "now"}`}
+          title={t("delivery.lastVerificationTitle", "Last repository verification")}
+          detail={`${latestVerification.verified_count ?? 0} ${t("delivery.verified", "verified")} · ${attentionCount} ${t("delivery.attention", "attention")} · ${unverifiedCount} ${t("delivery.unverified", "unverified")} · ${latestVerification.created ? timeAgo(latestVerification.created) : t("delivery.now", "now")}`}
           className="mb-3"
         />
       ) : null}
@@ -283,34 +309,34 @@ export function DeliveryView({
         title={deliveryFocusTitle}
         detail={deliveryFocusDetail}
         signals={[
-          `${blocked} blocked`,
-          `${reposLinked}/${Math.max(state.projects.length, 1)} repos`,
-          `${linkedWork.length} runs`,
+          `${blocked} ${t("delivery.signalBlocked", "blocked")}`,
+          `${reposLinked}/${Math.max(state.projects.length, 1)} ${t("delivery.signalRepos", "repos")}`,
+          `${linkedWork.length} ${t("delivery.signalRuns", "runs")}`,
         ]}
       />
 
       <KpiBar>
         <MetricTile
-          label="Projects"
+          label={t("delivery.kpiProjects", "Projects")}
           value={String(state.projects.length)}
-          detail="Tracked delivery streams"
+          detail={t("delivery.kpiProjectsDetail", "Tracked delivery streams")}
           icon={Briefcase}
           tone="info"
         />
         <MetricTile
-          label="Blocked"
+          label={t("delivery.kpiBlocked", "Blocked")}
           value={String(blocked)}
-          detail="Needs intervention"
+          detail={t("delivery.kpiBlockedDetail", "Needs intervention")}
           icon={ShieldAlert}
           tone={blocked > 0 ? "danger" : "success"}
         />
         <MetricTile
-          label="Repos linked"
+          label={t("delivery.kpiReposLinked", "Repos linked")}
           value={String(reposLinked)}
           detail={
             latestVerification
-              ? `${attentionCount} attention · ${unverifiedCount} unverified`
-              : "GitHub native execution"
+              ? `${attentionCount} ${t("delivery.attention", "attention")} · ${unverifiedCount} ${t("delivery.unverified", "unverified")}`
+              : t("delivery.kpiReposLinkedDetail", "GitHub native execution")
           }
           icon={GitBranch}
           tone={reposLinked > 0 ? "success" : "warning"}
@@ -320,15 +346,20 @@ export function DeliveryView({
       <div className="mt-section">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
           <div>
-            <h3 className="text-section-title">Linked Work Dashboard</h3>
+            <h3 className="text-section-title">
+              {t("delivery.linkedWorkTitle", "Linked Work Dashboard")}
+            </h3>
             <p className="text-meta mt-0.5">
-              Linear issues, runs, PRs, checks, branches, and commits from local evidence.
+              {t(
+                "delivery.linkedWorkSubtitle",
+                "Linear issues, runs, PRs, checks, branches, and commits from local evidence.",
+              )}
             </p>
           </div>
           <Badge
             variant={linkedWork.some((item) => item.prState === "stale") ? "warning" : "muted"}
           >
-            {linkedWork.length} runs
+            {linkedWork.length} {t("delivery.signalRuns", "runs")}
           </Badge>
         </div>
         <DataTable
@@ -338,8 +369,11 @@ export function DeliveryView({
           mobileFallback="cards"
           minWidth={920}
           emptyState={{
-            title: "No linked work yet",
-            description: "Linear issues, runs, PRs, checks, branches, and commits appear here.",
+            title: t("delivery.linkedWorkEmptyTitle", "No linked work yet"),
+            description: t(
+              "delivery.linkedWorkEmptyDescription",
+              "Linear issues, runs, PRs, checks, branches, and commits appear here.",
+            ),
           }}
         />
       </div>
@@ -354,11 +388,11 @@ export function DeliveryView({
               <StatusPill value={formatLabel(project.status)} tone={projectTone(project.status)} />
             </BaseCardHeader>
             <div className="text-body-secondary text-muted-foreground">
-              {project.stack || "Stack not set"}
+              {project.stack || t("delivery.stackNotSet", "Stack not set")}
             </div>
             <div className="text-meta flex items-center gap-1.5 truncate font-mono">
               <GitBranch className="h-3 w-3 shrink-0" />
-              {project.repository || "Repository pending"}
+              {project.repository || t("delivery.repositoryPending", "Repository pending")}
             </div>
             <BaseCardFooter className="justify-end">
               <Button
@@ -370,7 +404,9 @@ export function DeliveryView({
                 <RefreshCw
                   className={busyProject === project.slug ? "h-3 w-3 animate-spin" : "h-3 w-3"}
                 />
-                {busyProject === project.slug ? "Verifying" : "Verify"}
+                {busyProject === project.slug
+                  ? t("delivery.verifying", "Verifying")
+                  : t("delivery.verify", "Verify")}
               </Button>
             </BaseCardFooter>
           </BaseCard>
@@ -378,8 +414,11 @@ export function DeliveryView({
         {state.projects.length === 0 ? (
           <div className="md:col-span-2 xl:col-span-3">
             <EmptyState
-              title="No projects yet"
-              description="The coordinator creates a project when you describe a client job."
+              title={t("delivery.noProjectsTitle", "No projects yet")}
+              description={t(
+                "delivery.noProjectsDescription",
+                "The coordinator creates a project when you describe a client job.",
+              )}
             />
           </div>
         ) : null}

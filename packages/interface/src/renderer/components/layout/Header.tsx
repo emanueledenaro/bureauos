@@ -4,6 +4,7 @@ import { Avatar, AvatarFallback } from "../ui/avatar";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "../../lib/utils";
+import { useT } from "../../i18n/i18n";
 import { formatDate, formatMoney, formatTime } from "../../lib/format";
 import { buildTodayActions, pipelineValue } from "../../lib/builders";
 import { MODE_LABELS } from "../../lib/modes";
@@ -32,6 +33,7 @@ export function Header({
   onOpenQuickChat: () => void;
   onOpenApprovals: () => void;
 }) {
+  const t = useT();
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 30_000);
@@ -47,15 +49,19 @@ export function Header({
     blockedProjects > 0 ? "danger" : state.approvals.length > 0 ? "warning" : "success";
   const riskLabel =
     blockedProjects > 0
-      ? `${blockedProjects} blocked`
+      ? `${blockedProjects} ${t("header.riskBlocked", "blocked")}`
       : state.approvals.length > 0
-        ? `${state.approvals.length} approvals`
-        : "Clear";
+        ? `${state.approvals.length} ${t("header.riskApprovals", "approvals")}`
+        : t("header.riskClear", "Clear");
   const pipeline = pipelineValue(state);
   // Connection (not autonomy): this reflects API reachability. Renamed from the
   // misleading "Autonomous" pill in SER-155 so the label matches what it shows.
   const connectionTone: Tone = state.error ? "danger" : !state.hasLoaded ? "warning" : "success";
-  const connectionLabel = state.error ? "Offline" : !state.hasLoaded ? "Connecting" : "Online";
+  const connectionLabel = state.error
+    ? t("header.offline", "Offline")
+    : !state.hasLoaded
+      ? t("header.connecting", "Connecting")
+      : t("header.online", "Online");
   const nextAction = buildTodayActions(state)[0];
 
   return (
@@ -65,7 +71,7 @@ export function Header({
         size="icon"
         className="lg:hidden"
         onClick={onOpenSidebar}
-        aria-label="Open navigation"
+        aria-label={t("header.openNavigation", "Open navigation")}
       >
         <Menu className="h-4 w-4" />
       </Button>
@@ -74,10 +80,10 @@ export function Header({
         <div className="flex min-w-0 items-center gap-3">
           <div className="min-w-0">
             <div className="truncate whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-              Operating Room
+              {t("shell.brandSubtitle", "Operating Room")}
             </div>
             <h1 className="truncate text-[15px] font-semibold text-foreground">
-              {MODE_LABELS[mode]}
+              {t(`shell.${mode}`, MODE_LABELS[mode])}
             </h1>
           </div>
           <div className="hidden items-center gap-1 text-[11px] text-muted-foreground lg:flex">
@@ -91,7 +97,7 @@ export function Header({
                     mode === quickMode ? "font-medium text-foreground" : "text-muted-foreground",
                   )}
                 >
-                  {MODE_LABELS[quickMode]}
+                  {t(`shell.${quickMode}`, MODE_LABELS[quickMode])}
                 </button>
                 {index < QUICK_MODES.length - 1 ? (
                   <span className="text-border" aria-hidden>
@@ -104,21 +110,30 @@ export function Header({
         </div>
         <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
           {!state.hasLoaded
-            ? "Loading company context…"
+            ? t("header.loadingContext", "Loading company context…")
             : nextAction
-              ? `Next: ${nextAction.title} · ${nextAction.source}`
-              : `${state.pulse?.organization ?? "BureauOS"} · no urgent action`}
+              ? `${t("header.nextPrefix", "Next:")} ${nextAction.title} · ${nextAction.source}`
+              : `${state.pulse?.organization ?? "BureauOS"} · ${t("header.noUrgentAction", "no urgent action")}`}
         </div>
       </div>
 
       <div className="flex items-center gap-2">
         <div className="hidden md:flex items-center gap-2">
-          <TopMetric tone={connectionTone} label="Connection" value={connectionLabel} />
-          <TopMetric tone={riskTone} label="Risk" value={riskLabel} className="hidden lg:flex" />
+          <TopMetric
+            tone={connectionTone}
+            label={t("header.connection", "Connection")}
+            value={connectionLabel}
+          />
+          <TopMetric
+            tone={riskTone}
+            label={t("header.risk", "Risk")}
+            value={riskLabel}
+            className="hidden lg:flex"
+          />
           <TopMetric
             tone={pipeline > 0 ? "success" : "warning"}
-            label="Revenue"
-            value={pipeline > 0 ? formatMoney(pipeline) : "No pipeline"}
+            label={t("header.revenue", "Revenue")}
+            value={pipeline > 0 ? formatMoney(pipeline) : t("header.noPipeline", "No pipeline")}
             className="hidden xl:flex"
           />
         </div>
@@ -132,13 +147,15 @@ export function Header({
               className="hidden md:inline-flex"
             >
               <MessageSquare className="h-3.5 w-3.5" />
-              Quick chat
+              {t("header.quickChat", "Quick chat")}
               <span className="ml-1 inline-flex items-center gap-0.5 rounded border border-border/70 bg-surface-raised px-1 py-0.5 text-[9px] text-muted-foreground">
                 <Command className="h-2.5 w-2.5" />K
               </span>
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Quick chat with coordinator (⌘K)</TooltipContent>
+          <TooltipContent>
+            {t("header.quickChatTooltip", "Quick chat with coordinator (⌘K)")}
+          </TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -147,13 +164,13 @@ export function Header({
               size="icon"
               className="md:hidden relative"
               onClick={onOpenQuickChat}
-              aria-label="Quick chat with coordinator"
+              aria-label={t("header.quickChatMobileAria", "Quick chat with coordinator")}
             >
               <MessageSquare className="h-4 w-4" />
               <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-success animate-pulse-soft" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Quick chat</TooltipContent>
+          <TooltipContent>{t("header.quickChat", "Quick chat")}</TooltipContent>
         </Tooltip>
 
         <Tooltip>
@@ -163,12 +180,16 @@ export function Header({
               size="icon"
               className="hidden sm:inline-flex"
               onClick={onToggleTheme}
-              aria-label="Theme"
+              aria-label={t("header.theme", "Theme")}
             >
               {theme === "light" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{theme === "light" ? "Light mode" : "Dark mode"}</TooltipContent>
+          <TooltipContent>
+            {theme === "light"
+              ? t("header.lightMode", "Light mode")
+              : t("header.darkMode", "Dark mode")}
+          </TooltipContent>
         </Tooltip>
 
         <Tooltip>
@@ -178,7 +199,7 @@ export function Header({
               size="icon"
               className="relative"
               onClick={onOpenApprovals}
-              aria-label="Open pending approvals"
+              aria-label={t("header.openApprovals", "Open pending approvals")}
             >
               <Bell className="h-4 w-4" />
               {bellCount > 0 ? (
@@ -188,8 +209,8 @@ export function Header({
           </TooltipTrigger>
           <TooltipContent>
             {localNotifications > 0
-              ? `${localNotifications} local notifications`
-              : `${state.approvals.length} pending approvals`}
+              ? `${localNotifications} ${t("header.localNotifications", "local notifications")}`
+              : `${state.approvals.length} ${t("header.pendingApprovals", "pending approvals")}`}
           </TooltipContent>
         </Tooltip>
 

@@ -2,6 +2,7 @@ import { FileText, X } from "lucide-react";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { formatBytes } from "../../lib/format";
+import { useT } from "../../i18n/i18n";
 
 /**
  * Chip per un attachment in composer o messaggio. Tooltip sul nome completo,
@@ -18,6 +19,7 @@ export function AttachmentChip({
   previewUrl?: string;
   onRemove?: () => void;
 }) {
+  const t = useT();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -38,7 +40,7 @@ export function AttachmentChip({
               variant="ghost"
               size="icon-sm"
               onClick={onRemove}
-              aria-label={`Remove ${name}`}
+              aria-label={`${t("attachmentChip.remove", "Remove")} ${name}`}
               className="shrink-0"
             >
               <X className="h-3 w-3" />

@@ -6,6 +6,7 @@ import { AttachmentChip } from "./AttachmentChip";
 import { useAutosizeTextarea } from "../../hooks/useAutosizeTextarea";
 import type { ChatAttachment } from "../../lib/types";
 import { cn } from "../../lib/utils";
+import { useT } from "../../i18n/i18n";
 
 /**
  * Composer della chat del coordinator. Textarea auto-espandente, attachment
@@ -19,7 +20,7 @@ export function Composer({
   onRemoveAttachment,
   onSubmit,
   busy = false,
-  placeholder = "Message BureauOS…",
+  placeholder,
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -30,9 +31,12 @@ export function Composer({
   busy?: boolean;
   placeholder?: string;
 }) {
+  const t = useT();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   useAutosizeTextarea(textareaRef, value, { minRows: 1, maxRows: 12 });
+
+  const resolvedPlaceholder = placeholder ?? t("composer.placeholder", "Message BureauOS…");
 
   const canSend = !busy && (value.trim().length > 0 || attachments.length > 0);
 
@@ -75,7 +79,7 @@ export function Composer({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={placeholder}
+          placeholder={resolvedPlaceholder}
           rows={1}
           className="w-full resize-none bg-transparent px-3 py-2.5 text-body-lg leading-[20px] text-foreground placeholder:text-muted-foreground/70 focus-visible:outline-none"
         />
@@ -99,12 +103,12 @@ export function Composer({
                   variant="ghost"
                   size="icon-sm"
                   onClick={() => fileInputRef.current?.click()}
-                  aria-label="Attach files"
+                  aria-label={t("composer.attachFiles", "Attach files")}
                 >
                   <Paperclip className="h-3.5 w-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Attach files</TooltipContent>
+              <TooltipContent>{t("composer.attachFiles", "Attach files")}</TooltipContent>
             </Tooltip>
           </div>
           <Button type="submit" size="sm" disabled={!canSend}>
@@ -113,7 +117,7 @@ export function Composer({
             ) : (
               <SendHorizontal className="h-3 w-3" />
             )}
-            {busy ? "Sending" : "Send"}
+            {busy ? t("composer.sending", "Sending") : t("composer.send", "Send")}
           </Button>
         </div>
       </div>

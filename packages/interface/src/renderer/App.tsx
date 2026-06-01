@@ -31,6 +31,8 @@ import { TimelineView } from "./views/TimelineView";
 import { RevenuePulseView } from "./views/RevenuePulseView";
 import { useDashboard } from "./hooks/useDashboard";
 import { useTheme } from "./lib/theme";
+import { I18nProvider, useT } from "./i18n/i18n";
+import type { AppLang } from "./i18n/types";
 import { nextAutoSelection, pipelineValue } from "./lib/builders";
 import {
   Api,
@@ -58,6 +60,16 @@ export function App() {
   const [quickChatOpen, setQuickChatOpen] = useState(false);
   const [approvalsOpen, setApprovalsOpen] = useState(false);
   const [isSmallScreen, setIsSmallScreen] = useState(false);
+
+  // Active UI language lives in the interface settings (interface.language),
+  // persisted by the Settings language selector. Defaults to English when the
+  // settings have not loaded yet or the field is absent.
+  const lang: AppLang = state.settings?.interface.language ?? "en";
+
+  // Keep <html lang> in sync with the chosen language for a11y / spellcheck.
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
 
   useEffect(() => {
     const query = window.matchMedia("(max-width: 767px)");
@@ -216,78 +228,85 @@ export function App() {
   };
 
   return (
-    <TooltipProvider delayDuration={120}>
-      <div className="flex h-screen overflow-hidden bg-background text-foreground">
-        <Sidebar state={state} mode={mode} onModeChange={onModeChange} />
-        <SidebarDrawer
-          state={state}
-          mode={mode}
-          open={sidebarOpen}
-          onOpenChange={setSidebarOpen}
-          onModeChange={onModeChange}
-        />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <Header
+    <I18nProvider lang={lang}>
+      <TooltipProvider delayDuration={120}>
+        <div className="flex h-screen overflow-hidden bg-background text-foreground">
+          <Sidebar state={state} mode={mode} onModeChange={onModeChange} />
+          <SidebarDrawer
             state={state}
             mode={mode}
-            theme={theme}
-            onToggleTheme={toggleTheme}
+            open={sidebarOpen}
+            onOpenChange={setSidebarOpen}
             onModeChange={onModeChange}
-            onOpenSidebar={() => setSidebarOpen(true)}
-            onOpenQuickChat={() => setQuickChatOpen(true)}
-            onOpenApprovals={() => setApprovalsOpen(true)}
           />
-          <main className="min-w-0 flex-1 overflow-y-auto bg-background">
-            <DashboardLayout
-              mode={mode}
+          <div className="flex min-w-0 flex-1 flex-col">
+            <Header
               state={state}
+              mode={mode}
+              theme={theme}
+              onToggleTheme={toggleTheme}
               onModeChange={onModeChange}
-              onResolve={onResolve}
-              onCoordinatorMessage={onCoordinatorMessage}
-              onCoordinatorMessageStream={onCoordinatorMessageStream}
-              onGenerateReport={onGenerateReport}
-              onProviderLogin={onProviderLogin}
-              onProviderLogout={onProviderLogout}
-              onVerifyRepositories={onVerifyRepositories}
-              onRetryScan={onRetryScan}
-              onGenerateClientSuccessStatus={onGenerateClientSuccessStatus}
-              onMemoryTriggerScan={onMemoryTriggerScan}
-              onGenerateGrowthContent={onGenerateGrowthContent}
-              onGenerateGrowthReview={onGenerateGrowthReview}
-              onGenerateRevenuePipeline={onGenerateRevenuePipeline}
-              onRefresh={refresh}
+              onOpenSidebar={() => setSidebarOpen(true)}
+              onOpenQuickChat={() => setQuickChatOpen(true)}
+              onOpenApprovals={() => setApprovalsOpen(true)}
             />
-          </main>
-          <AgentLayer
-            agents={state.agents}
-            capabilities={state.capabilities}
-            runs={state.runs}
-            onOpenAgents={() => onModeChange("agents")}
+            <main className="min-w-0 flex-1 overflow-y-auto bg-background">
+              <DashboardLayout
+                mode={mode}
+                state={state}
+                onModeChange={onModeChange}
+                onResolve={onResolve}
+                onCoordinatorMessage={onCoordinatorMessage}
+                onCoordinatorMessageStream={onCoordinatorMessageStream}
+                onGenerateReport={onGenerateReport}
+                onProviderLogin={onProviderLogin}
+                onProviderLogout={onProviderLogout}
+                onVerifyRepositories={onVerifyRepositories}
+                onRetryScan={onRetryScan}
+                onGenerateClientSuccessStatus={onGenerateClientSuccessStatus}
+                onMemoryTriggerScan={onMemoryTriggerScan}
+                onGenerateGrowthContent={onGenerateGrowthContent}
+                onGenerateGrowthReview={onGenerateGrowthReview}
+                onGenerateRevenuePipeline={onGenerateRevenuePipeline}
+                onRefresh={refresh}
+              />
+            </main>
+            <AgentLayer
+              agents={state.agents}
+              capabilities={state.capabilities}
+              runs={state.runs}
+              onOpenAgents={() => onModeChange("agents")}
+            />
+            {state.error ? <ApiErrorBar error={state.error} /> : null}
+          </div>
+          <QuickChatPopover
+            open={quickChatOpen}
+            onOpenChange={setQuickChatOpen}
+            onSubmit={onCoordinatorMessage}
+            onOpenFullCoordinator={openCoordinatorPage}
           />
-          {state.error ? (
-            <div className="border-t border-danger/40 bg-danger-subtle/40 px-5 py-2 text-meta text-danger">
-              API server unreachable: {state.error}
-            </div>
-          ) : null}
+          <PendingApprovalsSheet
+            open={approvalsOpen}
+            onOpenChange={setApprovalsOpen}
+            state={state}
+            onResolve={onResolve}
+            onOpenApprovalsPage={() => {
+              setApprovalsOpen(false);
+              onModeChange("approvals");
+            }}
+          />
         </div>
-        <QuickChatPopover
-          open={quickChatOpen}
-          onOpenChange={setQuickChatOpen}
-          onSubmit={onCoordinatorMessage}
-          onOpenFullCoordinator={openCoordinatorPage}
-        />
-        <PendingApprovalsSheet
-          open={approvalsOpen}
-          onOpenChange={setApprovalsOpen}
-          state={state}
-          onResolve={onResolve}
-          onOpenApprovalsPage={() => {
-            setApprovalsOpen(false);
-            onModeChange("approvals");
-          }}
-        />
-      </div>
-    </TooltipProvider>
+      </TooltipProvider>
+    </I18nProvider>
+  );
+}
+
+function ApiErrorBar({ error }: { error: string }) {
+  const t = useT();
+  return (
+    <div className="border-t border-danger/40 bg-danger-subtle/40 px-5 py-2 text-meta text-danger">
+      {t("appShell.apiUnreachable", "API server unreachable:")} {error}
+    </div>
   );
 }
 
@@ -304,6 +323,7 @@ function PendingApprovalsSheet({
   onResolve: (id: string, status: "approved" | "rejected", reason?: string) => Promise<void>;
   onOpenApprovalsPage: () => void;
 }) {
+  const t = useT();
   const pending = state.approvals.slice(0, 5);
   const [resolveError, setResolveError] = useState<string | undefined>();
   // A failing resolve (e.g. 409 "no longer pending", 500) must not become an
@@ -317,7 +337,11 @@ function PendingApprovalsSheet({
     try {
       await onResolve(id, status, reason);
     } catch (error) {
-      setResolveError(error instanceof Error ? error.message : "Failed to resolve approval.");
+      setResolveError(
+        error instanceof Error
+          ? error.message
+          : t("appShell.resolveFailed", "Failed to resolve approval."),
+      );
     }
   };
   return (
@@ -326,10 +350,13 @@ function PendingApprovalsSheet({
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4" />
-            Pending approvals
+            {t("appShell.sheetTitle", "Pending approvals")}
           </SheetTitle>
           <SheetDescription>
-            Money, deletion, legal, production, security, and final external commitments.
+            {t(
+              "appShell.sheetDescription",
+              "Money, deletion, legal, production, security, and final external commitments.",
+            )}
           </SheetDescription>
         </SheetHeader>
         <div className="min-h-0 overflow-y-auto px-4 py-4 sm:px-5">
@@ -352,7 +379,7 @@ function PendingApprovalsSheet({
                         {approval.scope}
                       </div>
                       <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                        <span>{approval.risk_level ?? "risk"}</span>
+                        <span>{approval.risk_level ?? t("appShell.riskFallback", "risk")}</span>
                         <span aria-hidden>·</span>
                         <span>{approval.action}</span>
                       </div>
@@ -367,7 +394,7 @@ function PendingApprovalsSheet({
                       }
                     >
                       <XCircle className="h-3.5 w-3.5" />
-                      Reject
+                      {t("appShell.reject", "Reject")}
                     </Button>
                     <Button
                       size="sm"
@@ -376,7 +403,7 @@ function PendingApprovalsSheet({
                       }
                     >
                       <CheckCircle2 className="h-3.5 w-3.5" />
-                      Approve
+                      {t("appShell.approve", "Approve")}
                     </Button>
                   </div>
                 </div>
@@ -384,7 +411,7 @@ function PendingApprovalsSheet({
             </div>
           ) : (
             <div className="rounded-lg border border-border/70 bg-surface-subtle/50 p-4 text-[12px] text-muted-foreground">
-              No pending approvals.
+              {t("appShell.empty", "No pending approvals.")}
             </div>
           )}
           {resolveError ? (
@@ -398,7 +425,7 @@ function PendingApprovalsSheet({
         </div>
         <div className="border-t border-border/60 px-4 py-3 sm:px-5">
           <Button variant="outline" className="w-full" onClick={onOpenApprovalsPage}>
-            Open approvals
+            {t("appShell.openApprovals", "Open approvals")}
           </Button>
         </div>
       </SheetContent>

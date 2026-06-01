@@ -1,0 +1,66 @@
+import type { CatalogNamespace } from "../types";
+
+export default {
+  en: {
+    "shell.brandSubtitle": "Operating Room",
+    "shell.navAria": "Primary Operating Room navigation.",
+    "shell.navTitle": "Navigation",
+    // Section titles
+    "shell.command": "Command",
+    "shell.business": "Business",
+    "shell.control": "Control",
+    // Navigation labels (mirror MODE_LABELS)
+    "shell.coordinator": "Coordinator",
+    "shell.portfolio": "Portfolio",
+    "shell.today": "Today",
+    "shell.goals": "Goals",
+    "shell.revenue": "Revenue",
+    "shell.delivery": "Delivery",
+    "shell.growth": "Growth",
+    "shell.clients": "Clients",
+    "shell.risk": "Risk",
+    "shell.approvals": "Approvals",
+    "shell.memory": "Memory",
+    "shell.agents": "Agents",
+    "shell.reports": "Reports",
+    "shell.settings": "Settings",
+    // System status panel
+    "shell.systemStatus": "System Status",
+    "shell.apiOffline": "API offline",
+    "shell.connecting": "Connecting",
+    "shell.allSystemsOnline": "All systems online",
+    "shell.agentsLabel": "agents",
+    "shell.runsLabel": "runs",
+  },
+  it: {
+    "shell.brandSubtitle": "Sala Operativa",
+    "shell.navAria": "Navigazione principale della Sala Operativa.",
+    "shell.navTitle": "Navigazione",
+    // Section titles
+    "shell.command": "Comando",
+    "shell.business": "Business",
+    "shell.control": "Controllo",
+    // Navigation labels (mirror MODE_LABELS)
+    "shell.coordinator": "Coordinatore",
+    "shell.portfolio": "Portfolio",
+    "shell.today": "Oggi",
+    "shell.goals": "Obiettivi",
+    "shell.revenue": "Ricavi",
+    "shell.delivery": "Consegna",
+    "shell.growth": "Crescita",
+    "shell.clients": "Clienti",
+    "shell.risk": "Rischio",
+    "shell.approvals": "Approvazioni",
+    "shell.memory": "Memoria",
+    "shell.agents": "Agenti",
+    "shell.reports": "Report",
+    "shell.settings": "Impostazioni",
+    // System status panel
+    "shell.systemStatus": "Stato del sistema",
+    "shell.apiOffline": "API offline",
+    "shell.connecting": "Connessione in corso",
+    "shell.allSystemsOnline": "Tutti i sistemi online",
+    "shell.agentsLabel": "agenti",
+    "shell.runsLabel": "esecuzioni",
+  },
+} satisfies CatalogNamespace;
