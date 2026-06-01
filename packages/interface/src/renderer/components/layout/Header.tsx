@@ -62,7 +62,7 @@ export function Header({
     : !state.hasLoaded
       ? t("header.connecting", "Connecting")
       : t("header.online", "Online");
-  const nextAction = buildTodayActions(state)[0];
+  const nextAction = buildTodayActions(state, t)[0];
 
   return (
     <header className="flex h-16 items-center gap-3 border-b border-border/60 bg-surface/95 px-3 sm:px-5">

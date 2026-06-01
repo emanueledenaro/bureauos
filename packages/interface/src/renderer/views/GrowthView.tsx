@@ -21,6 +21,7 @@ import { useT, type TFunction } from "../i18n/i18n";
 import { useAsyncAction } from "../hooks/useAsyncAction";
 import { sortNewest } from "../lib/builders";
 import { formatLabel, timeAgo } from "../lib/format";
+import { statusLabel } from "../lib/status-labels";
 import type { ArtifactRecord, GrowthContentPipelineResult, GrowthReviewResult } from "../lib/api";
 import type { DashboardState } from "../lib/types";
 
@@ -298,7 +299,7 @@ export function GrowthView({
             <BaseCard key={section.id} className="h-full gap-3">
               <BaseCardHeader title={section.title}>
                 <Badge variant={section.status === "configured" ? "success" : "muted"}>
-                  {formatLabel(section.status)}
+                  {statusLabel(section.status, t)}
                 </Badge>
               </BaseCardHeader>
               <div className="text-meta font-mono">{section.path}</div>

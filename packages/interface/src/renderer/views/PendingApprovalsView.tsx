@@ -3,7 +3,8 @@ import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { EmptyState } from "../components/dashboard/EmptyState";
-import { formatLabel, timeAgo } from "../lib/format";
+import { timeAgo } from "../lib/format";
+import { actionLabel } from "../lib/status-labels";
 import type { ApprovalRecord } from "../lib/api";
 import { useT } from "../i18n/i18n";
 
@@ -41,7 +42,7 @@ export function PendingApprovalsView({
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="truncate text-[12px] font-semibold text-foreground">
-                      {formatLabel(approval.action)}
+                      {actionLabel(approval.action, t)}
                     </div>
                     <div className="mt-1 truncate text-[10px] text-muted-foreground">
                       {approval.target}

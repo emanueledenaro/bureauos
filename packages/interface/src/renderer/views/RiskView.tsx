@@ -10,7 +10,8 @@ import { ViewToolbar } from "../components/dashboard/ViewToolbar";
 import { useAsyncAction } from "../hooks/useAsyncAction";
 import { useT } from "../i18n/i18n";
 import { clientName } from "../lib/builders";
-import { formatLabel, timeAgo } from "../lib/format";
+import { timeAgo } from "../lib/format";
+import { actionLabel, statusLabel } from "../lib/status-labels";
 import type {
   AutonomousRetryResult,
   PolicyExplainDecision,
@@ -269,7 +270,7 @@ export function RiskView({
       <div className="mt-section grid gap-3 md:grid-cols-2">
         {state.approvals.map((approval) => (
           <BaseCard key={approval.id} variant="accent" accentTone="warning" className="gap-2">
-            <BaseCardHeader title={formatLabel(approval.action)}>
+            <BaseCardHeader title={actionLabel(approval.action, t)}>
               <StatusPill value={t("risk.pending", "Pending")} tone="warning" />
             </BaseCardHeader>
             <div className="text-body-secondary text-muted-foreground">{approval.scope}</div>
@@ -307,8 +308,8 @@ export function RiskView({
             accentTone="warning"
             className="gap-2"
           >
-            <BaseCardHeader title={formatLabel(run.type)}>
-              <StatusPill value={formatLabel(run.status)} tone="warning" />
+            <BaseCardHeader title={statusLabel(run.type, t)}>
+              <StatusPill value={statusLabel(run.status, t)} tone="warning" />
             </BaseCardHeader>
             <div className="text-body-secondary text-muted-foreground">{run.scope}</div>
             <div className="text-meta font-mono">{run.id}</div>

@@ -38,6 +38,7 @@ import {
 } from "../lib/tone";
 import { cn } from "../lib/utils";
 import { formatLabel, formatMoney, timeAgo } from "../lib/format";
+import { statusLabel } from "../lib/status-labels";
 import { useT } from "../i18n/i18n";
 import type { TFunction } from "../i18n/i18n";
 import type { DashboardState, PortfolioLane } from "../lib/types";
@@ -100,7 +101,7 @@ export function PortfolioView({ state }: { state: DashboardState }) {
   const t = useT();
   const [tab, setTab] = useState<PortfolioTab>("map");
   const [filters, setFilters] = useState<PortfolioFilters>(DEFAULT_FILTERS);
-  const lanes = useMemo(() => buildPortfolioLanes(state), [state]);
+  const lanes = useMemo(() => buildPortfolioLanes(state, t), [state, t]);
   const capacitySegments = useMemo(() => buildCapacitySegments(state), [state]);
   const records = useMemo(() => buildPortfolioRecords(state, t), [state, t]);
   const scopedRecords = useMemo(
@@ -266,7 +267,7 @@ function PortfolioFilterBar({
             { value: ALL, label: t("portfolio.allStatuses", "All statuses") },
             ...options.statuses.map((status) => ({
               value: status,
-              label: formatLabel(status),
+              label: statusLabel(status, t),
             })),
           ]}
         />
@@ -556,7 +557,7 @@ function ActivityTimelineContent({ records }: { records: PortfolioRecord[] }) {
                   {record.title}
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                  <StatusPill value={formatLabel(record.status)} tone={record.tone} />
+                  <StatusPill value={statusLabel(record.status, t)} tone={record.tone} />
                   <span className="text-meta">{record.clientName}</span>
                 </div>
               </div>
@@ -615,7 +616,7 @@ function KanbanContent({ records }: { records: PortfolioRecord[] }) {
         <div key={group.status} className="min-w-0 rounded-lg border border-border/70 bg-card/95">
           <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-surface-subtle/35 px-3 py-2.5">
             <div className="text-[12px] font-semibold text-foreground">
-              {formatLabel(group.status)}
+              {statusLabel(group.status, t)}
             </div>
             <Badge variant={toneBadgeVariant[group.tone]}>{group.records.length}</Badge>
           </div>
@@ -631,6 +632,7 @@ function KanbanContent({ records }: { records: PortfolioRecord[] }) {
 }
 
 function PortfolioRecordRow({ record, framed }: { record: PortfolioRecord; framed?: boolean }) {
+  const t = useT();
   return (
     <div
       className={cn(
@@ -642,11 +644,11 @@ function PortfolioRecordRow({ record, framed }: { record: PortfolioRecord; frame
         <div className="min-w-0">
           <div className="truncate text-[12px] font-medium text-foreground">{record.title}</div>
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-            <Badge variant="outline">{formatLabel(record.kind)}</Badge>
+            <Badge variant="outline">{statusLabel(record.kind, t)}</Badge>
             <span className="text-meta truncate">{record.clientName}</span>
           </div>
         </div>
-        <StatusPill value={formatLabel(record.status)} tone={record.tone} />
+        <StatusPill value={statusLabel(record.status, t)} tone={record.tone} />
       </div>
       <div className="mt-2 flex items-center gap-2">
         <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
@@ -767,7 +769,7 @@ function buildPortfolioRecords(state: DashboardState, t: TFunction): PortfolioRe
     (run): PortfolioRecord => ({
       id: run.id,
       kind: "run",
-      title: `${formatLabel(run.type)} · ${run.scope}`,
+      title: `${statusLabel(run.type, t)} · ${run.scope}`,
       status: run.status,
       tone: runTone(run.status),
       progress: runProgress(run.status),

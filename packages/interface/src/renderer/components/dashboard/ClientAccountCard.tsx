@@ -4,7 +4,8 @@ import { Button } from "../ui/button";
 import { MiniStat } from "./MetricTile";
 import { StatusPill } from "./StatusPill";
 import { clientRiskTone } from "../../lib/tone";
-import { formatLabel, formatMoney, timeAgo } from "../../lib/format";
+import { formatMoney, timeAgo } from "../../lib/format";
+import { statusLabel } from "../../lib/status-labels";
 import type { ClientIntelligenceItem } from "../../lib/api";
 import { useT } from "../../i18n/i18n";
 
@@ -42,7 +43,7 @@ export function ClientAccountCard({
   return (
     <BaseCard className="gap-4">
       <BaseCardHeader title={item.client.name} subtitle={subtitle}>
-        <StatusPill value={formatLabel(item.risk)} tone={clientRiskTone(item.risk)} />
+        <StatusPill value={statusLabel(item.risk, t)} tone={clientRiskTone(item.risk)} />
       </BaseCardHeader>
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
@@ -80,7 +81,7 @@ export function ClientAccountCard({
           </div>
           {topProject ? (
             <div className="text-meta mt-2 truncate">
-              {topProject.name} · {formatLabel(topProject.status)}
+              {topProject.name} · {statusLabel(topProject.status, t)}
             </div>
           ) : null}
         </div>

@@ -16,6 +16,7 @@ import { useT } from "../i18n/i18n";
 import { cn } from "../lib/utils";
 import { enabledCount } from "../lib/builders";
 import { formatLabel } from "../lib/format";
+import { actionLabel } from "../lib/status-labels";
 import {
   Api,
   type ProviderAuthAuthorization,
@@ -894,6 +895,7 @@ function ToggleList({
   savingKey?: string;
   onToggle: (key: string, next: boolean) => void;
 }) {
+  const t = useT();
   const entries = Object.entries(values).filter(
     ([key, value]) => key !== "level" && typeof value === "boolean",
   );
@@ -903,7 +905,7 @@ function ToggleList({
         const on = value === true;
         return (
           <div key={key} className="flex items-center justify-between gap-2">
-            <span className="truncate text-muted-foreground">{formatLabel(key)}</span>
+            <span className="truncate text-muted-foreground">{actionLabel(key, t)}</span>
             <PolicyToggle
               on={on}
               saving={savingKey !== undefined}

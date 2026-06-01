@@ -18,7 +18,7 @@ export function GoalsView({
   onModeChange: (mode: AdaptiveMode) => void;
 }) {
   const t = useT();
-  const goals = buildGoalItems(state);
+  const goals = buildGoalItems(state, t);
   const averageProgress = goals.length
     ? Math.round(goals.reduce((sum, goal) => sum + goal.progress, 0) / goals.length)
     : 0;

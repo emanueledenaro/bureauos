@@ -9,6 +9,7 @@ import { Badge } from "../components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../components/ui/tooltip";
 import { agentAbbr, runTone, type Tone } from "../lib/tone";
 import { formatLabel, timeAgo } from "../lib/format";
+import { statusLabel } from "../lib/status-labels";
 import type { CapabilityDefinition, RunRecord } from "../lib/api";
 import type { DashboardState } from "../lib/types";
 import { useT } from "../i18n/i18n";
@@ -66,8 +67,8 @@ function agentRuntimeState(agentId: string, runs: RunRecord[], t: TFunction): Ag
   const active = ACTIVE_RUN_STATUSES.has(run.status);
   const phase = active ? t("agents.runPhaseCurrent", "Current") : t("agents.runPhaseLast", "Last");
   return {
-    label: active ? t("agents.running", "Running") : formatLabel(run.status),
-    detail: `${phase} ${t("agents.runWord", "run")} · ${formatLabel(run.type)} · ${timeAgo(
+    label: active ? t("agents.running", "Running") : statusLabel(run.status, t),
+    detail: `${phase} ${t("agents.runWord", "run")} · ${statusLabel(run.type, t)} · ${timeAgo(
       run.updated ?? run.created,
     )}`,
     tone: active ? "info" : runTone(run.status),
@@ -198,7 +199,10 @@ export function AgentsView({ state }: { state: DashboardState }) {
               </div>
             </div>
             <span className="text-muted-foreground">{capability.type}</span>
-            <StatusPill value={capability.status} tone={capabilityStatusTone(capability.status)} />
+            <StatusPill
+              value={statusLabel(capability.status, t)}
+              tone={capabilityStatusTone(capability.status)}
+            />
             <span className="truncate text-muted-foreground">
               {enabledActions(capability).join(", ") ||
                 t("agents.noEnabledActions", "No enabled actions")}

@@ -22,6 +22,7 @@ import { useAsyncAction } from "../hooks/useAsyncAction";
 import { actionStateLabel, runTone, toneIndicatorClass, type Tone } from "../lib/tone";
 import { buildTodayActions, pipelineValue, sortNewest } from "../lib/builders";
 import { formatLabel, formatMoney } from "../lib/format";
+import { statusLabel } from "../lib/status-labels";
 import { useT } from "../i18n/i18n";
 import type { MemoryTriggerResult } from "../lib/api";
 import type { AdaptiveMode, DashboardState, TodayAction } from "../lib/types";
@@ -36,7 +37,7 @@ export function TodayView({
   onMemoryTriggerScan: () => Promise<MemoryTriggerResult>;
 }) {
   const t = useT();
-  const actions = buildTodayActions(state);
+  const actions = buildTodayActions(state, t);
   const nextAction = actions[0];
   const blocked = state.projects.filter((project) => project.status === "blocked").length;
   const followUpsDue =
@@ -71,7 +72,7 @@ export function TodayView({
       width: "100px",
       mobileLabel: t("today.colState", "State"),
       render: (action) => (
-        <StatusPill value={formatLabel(actionStateLabel(action.tone))} tone={action.tone} />
+        <StatusPill value={statusLabel(actionStateLabel(action.tone), t)} tone={action.tone} />
       ),
     },
     {
@@ -221,9 +222,9 @@ export function TodayView({
                   key={run.id}
                   className="grid grid-cols-[100px_minmax(0,1fr)_96px] items-center gap-3 py-2.5 text-body"
                 >
-                  <span className="font-medium text-foreground">{formatLabel(run.type)}</span>
+                  <span className="font-medium text-foreground">{statusLabel(run.type, t)}</span>
                   <span className="text-meta truncate">{run.scope}</span>
-                  <StatusPill value={formatLabel(run.status)} tone={runTone(run.status)} />
+                  <StatusPill value={statusLabel(run.status, t)} tone={runTone(run.status)} />
                 </div>
               ))}
             {activeRuns.length === 0 ? (

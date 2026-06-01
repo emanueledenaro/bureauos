@@ -83,7 +83,7 @@ export function CoordinatorPanel({
   const attachmentsRef = useRef<ChatAttachment[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastScrollHeightRef = useRef(0);
-  const pendingActions = buildTodayActions(state);
+  const pendingActions = buildTodayActions(state, t);
   const activeRuns = state.runs.filter((run) => !["completed", "cancelled"].includes(run.status));
   const suggestedIntents = [
     pendingActions[0]
