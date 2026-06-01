@@ -36,9 +36,19 @@ export function buildCodexRuntimeFromConfig(
   const codex = config?.runtime?.codex;
   if (!codex || !codex.enabled) return undefined;
 
+  // The codegen tool's own binary must be on the allow-list, so add it
+  // automatically when codegen is configured (the owner shouldn't have to
+  // remember to list it twice).
+  const codegenBinary = codex.codegen_command[0];
+  const allowedCommands =
+    codegenBinary && !codex.allowed_commands.includes(codegenBinary)
+      ? [...codex.allowed_commands, codegenBinary]
+      : codex.allowed_commands;
+
   const runner = new HostCodexRuntimeRunner({
     commands: codex.commands.map(toHostCommand),
-    allowedCommands: codex.allowed_commands,
+    codegenCommand: codex.codegen_command,
+    allowedCommands,
     timeoutMs: codex.timeout_ms,
     maxOutputChars: codex.max_output_chars,
     ...(options.executor ? { executor: options.executor } : {}),

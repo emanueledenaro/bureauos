@@ -83,6 +83,14 @@ export interface HostCodexRuntimeRunnerOptions {
    * read/verify tools.
    */
   allowedCommands?: readonly string[];
+  /**
+   * Coding-tool invocation used to GENERATE code from the run's task when no
+   * explicit `commands` are configured/supplied — e.g. `["codex", "exec",
+   * "--full-auto"]`. The task prompt (built from scope + briefing) is appended
+   * as a single final argument. Empty (the default) keeps the runner in pure
+   * verify-only mode; the tool's binary must be on the allow-list.
+   */
+  codegenCommand?: readonly string[];
   /** Per-command wall-clock timeout. */
   timeoutMs?: number;
   /** Maximum captured stdout/stderr characters per command. */
@@ -166,6 +174,7 @@ const VALUE_TAKING_GIT_GLOBAL_FLAGS = new Set([
 
 export class HostCodexRuntimeRunner implements CodexRuntimeRunner {
   private readonly commands: readonly HostCodexCommand[];
+  private readonly codegenCommand: readonly string[];
   private readonly allowedCommands: ReadonlySet<string>;
   private readonly timeoutMs: number;
   private readonly maxOutputChars: number;
@@ -174,6 +183,7 @@ export class HostCodexRuntimeRunner implements CodexRuntimeRunner {
 
   constructor(options: HostCodexRuntimeRunnerOptions = {}) {
     this.commands = options.commands ?? [];
+    this.codegenCommand = options.codegenCommand ?? [];
     this.allowedCommands = new Set(options.allowedCommands ?? DEFAULT_ALLOWED_COMMANDS);
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.maxOutputChars = options.maxOutputChars ?? DEFAULT_MAX_OUTPUT_CHARS;
@@ -257,7 +267,23 @@ export class HostCodexRuntimeRunner implements CodexRuntimeRunner {
   private resolveCommands(input: CodexRuntimeRunnerInput): readonly HostCodexCommand[] {
     const fromTask = commandsFromInputs(input.task.inputs);
     if (fromTask.length > 0) return fromTask;
-    return this.commands;
+    if (this.commands.length > 0) return this.commands;
+    // Codegen mode: no fixed commands were configured, so turn the run's task
+    // into a single coding-tool invocation that writes the code (the resulting
+    // diff is still inspected + bounded by the same safety envelope).
+    const codegen = this.buildCodegenCommand(input.task);
+    return codegen ? [codegen] : [];
+  }
+
+  private buildCodegenCommand(task: CodexRuntimeRunnerInput["task"]): HostCodexCommand | undefined {
+    if (this.codegenCommand.length === 0) return undefined;
+    const scope = (task.scope ?? "").trim();
+    if (!scope) return undefined;
+    const [command, ...baseArgs] = this.codegenCommand;
+    if (!command) return undefined;
+    // The task prompt is one argument value (never a shell string), so it cannot
+    // inject additional commands or flags into the coding tool.
+    return { command, args: [...baseArgs, buildCodegenPrompt(task)], label: `codegen: ${command}` };
   }
 
   private validateCommands(commands: readonly HostCodexCommand[]): string | undefined {
@@ -370,6 +396,24 @@ export function parseGitPorcelain(stdout: string): string[] {
     if (normalized) files.push(normalized);
   }
   return files;
+}
+
+/**
+ * Build the single instruction string handed to the coding tool in codegen
+ * mode, from the run's task: the scope is the headline objective and the
+ * briefing (when present) is the supporting context. Kept plain and bounded —
+ * it is passed as one argument value, never interpolated into a shell.
+ */
+function buildCodegenPrompt(task: CodexRuntimeRunnerInput["task"]): string {
+  const parts = [`Task: ${task.scope.trim()}`];
+  const briefing = task.inputs?.["briefing"];
+  if (typeof briefing === "string" && briefing.trim()) {
+    parts.push(`Context:\n${briefing.trim()}`);
+  }
+  parts.push(
+    "Implement this in the current repository with focused, working changes. Do not run destructive commands.",
+  );
+  return parts.join("\n\n");
 }
 
 function commandsFromInputs(inputs: Record<string, unknown> | undefined): HostCodexCommand[] {

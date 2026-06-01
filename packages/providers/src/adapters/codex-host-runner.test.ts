@@ -55,6 +55,62 @@ describe("HostCodexRuntimeRunner", () => {
     expect(executor.calls).toHaveLength(0);
   });
 
+  it("codegen mode: turns the task into a coding-tool invocation when no commands are configured", async () => {
+    const executor = new FakeExecutor({}, ok("")); // codegen call + git diff both succeed
+    const runner = new HostCodexRuntimeRunner({
+      executor,
+      codegenCommand: ["codex", "exec", "--full-auto"],
+      allowedCommands: ["codex"],
+    });
+
+    const result = await runner.execute(
+      input({
+        scope: "Build a pizzeria table-booking screen",
+        inputs: { briefing: "Flutter app named giovanniprova" },
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    const codegenCall = executor.calls.find((call) => call.command === "codex");
+    expect(codegenCall).toBeDefined();
+    // Base args preserved; the task prompt is one final argument (never a shell string).
+    expect(codegenCall?.args.slice(0, 2)).toEqual(["exec", "--full-auto"]);
+    const prompt = codegenCall?.args[2] ?? "";
+    expect(prompt).toContain("Task: Build a pizzeria table-booking screen");
+    expect(prompt).toContain("giovanniprova");
+    expect(result.commands.some((line) => line.startsWith("codex exec --full-auto"))).toBe(true);
+  });
+
+  it("codegen mode stays off when explicit commands are configured (verify-only wins)", async () => {
+    const executor = new FakeExecutor({}, ok(""));
+    const runner = new HostCodexRuntimeRunner({
+      executor,
+      codegenCommand: ["codex", "exec"],
+      allowedCommands: ["codex", "pnpm"],
+      commands: [{ command: "pnpm", args: ["test"] }],
+    });
+
+    await runner.execute(input());
+
+    expect(executor.calls.some((call) => call.command === "pnpm")).toBe(true);
+    expect(executor.calls.some((call) => call.command === "codex")).toBe(false);
+  });
+
+  it("codegen mode is refused when its binary is not on the allow-list", async () => {
+    const executor = new FakeExecutor({}, ok(""));
+    const runner = new HostCodexRuntimeRunner({
+      executor,
+      codegenCommand: ["codex", "exec"],
+      allowedCommands: ["pnpm"], // codex deliberately not allowed
+    });
+
+    const result = await runner.execute(input());
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("allow-list");
+    expect(executor.calls.some((call) => call.command === "codex")).toBe(false);
+  });
+
   it("runs configured commands with shell:false-safe args and reports diff evidence", async () => {
     const executor = new FakeExecutor({
       "pnpm test": ok("all good"),

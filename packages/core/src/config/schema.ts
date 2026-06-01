@@ -332,6 +332,10 @@ const RuntimeConfig = z
         enabled: z.boolean().default(false),
         allowed_commands: z.array(z.string()).default(["pnpm", "npm", "yarn", "node", "git"]),
         commands: z.array(RuntimeCommandConfig).default([]),
+        // Coding-tool invocation used to GENERATE code from the run's task when
+        // no fixed `commands` are configured (e.g. ["codex", "exec", "--full-auto"]).
+        // Empty keeps the runner verify-only; its binary is auto-allow-listed.
+        codegen_command: z.array(z.string()).default([]),
         max_changed_files: z.number().int().positive().default(25),
         timeout_ms: z.number().int().positive().default(120_000),
         max_output_chars: z.number().int().positive().default(12_000),
