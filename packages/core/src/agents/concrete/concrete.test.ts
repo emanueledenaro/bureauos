@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -25,6 +25,13 @@ import { workspacePaths } from "../../paths.js";
 import type { AgentCapabilityCheckInput } from "../runtime.js";
 import { MODEL_PROVIDER_CAPABILITY, type AgentModelSelection } from "../provider-routing.js";
 import { buildCodexRuntimeFromConfig } from "../../execution/codex-runtime.js";
+import {
+  ProjectTestRunnerService,
+  type ProjectCommandRunner,
+  type ProjectCommandRunnerOptions,
+  type ProjectTestExecution,
+  type ResolvedProjectTestCommand,
+} from "../../execution/project-test-runner.js";
 import { DevelopmentAgent } from "./development.js";
 import { buildDefaultAgentRegistry } from "./index.js";
 import { QaAgent } from "./qa.js";
@@ -95,6 +102,42 @@ class FakeRuntime implements RuntimeAdapter {
     return this.result;
   }
 }
+
+/**
+ * Deterministic command runner so QA test-gating can be exercised without
+ * spawning a real subprocess. Returns a fixed execution result for any command.
+ */
+class FakeProjectCommandRunner implements ProjectCommandRunner {
+  readonly commands: ResolvedProjectTestCommand[] = [];
+
+  constructor(private readonly execution: ProjectTestExecution) {}
+
+  async run(
+    command: ResolvedProjectTestCommand,
+    _options: ProjectCommandRunnerOptions,
+  ): Promise<ProjectTestExecution> {
+    this.commands.push(command);
+    return this.execution;
+  }
+}
+
+const PASSING_EXECUTION: ProjectTestExecution = {
+  exitCode: 0,
+  stdout: "all tests passed",
+  stderr: "",
+  timedOut: false,
+  stdoutTruncated: false,
+  stderrTruncated: false,
+};
+
+const FAILING_EXECUTION: ProjectTestExecution = {
+  exitCode: 1,
+  stdout: "1 failing",
+  stderr: "AssertionError",
+  timedOut: false,
+  stdoutTruncated: false,
+  stderrTruncated: false,
+};
 
 describe("concrete agents", () => {
   let dir: string;
@@ -607,6 +650,150 @@ describe("concrete agents", () => {
     expect(written?.body).toContain("Status: fail");
     expect(written?.body).toContain("Status: unknown");
     expect(written?.body).toContain("Ready-for-review is blocked");
+  });
+
+  it("runs real project tests and reaches ready-for-review when they pass (SER-240)", async () => {
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const artifacts = new ArtifactStore(dir);
+    const policy = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
+    await artifacts.write({
+      type: "test-evidence-report",
+      createdBy: "development",
+      runId: "run_qa_tests_pass",
+      body: ["# Test Evidence", "", "PASS: feature works end to end."].join("\n"),
+    });
+
+    const codeWorkspaceRoot = await mkdtemp(join(tmpdir(), "bureauos-qa-worktree-"));
+    await writeFile(
+      join(codeWorkspaceRoot, "package.json"),
+      JSON.stringify({ packageManager: "pnpm@9.12.0", scripts: { test: "pnpm -r run test" } }),
+      "utf8",
+    );
+    const commandRunner = new FakeProjectCommandRunner(PASSING_EXECUTION);
+    const agent = new QaAgent({
+      artifacts,
+      audit,
+      policy,
+      projectTestRunnerFactory: (workspaceRoot, deps) =>
+        new ProjectTestRunnerService(workspaceRoot, { ...deps, commandRunner }),
+    });
+
+    try {
+      const out = await agent.execute({
+        context: {
+          runId: "run_qa_tests_pass",
+          scope: ["Acceptance criteria:", "- feature works end to end."].join("\n"),
+          codeWorkspaceRoot,
+        },
+        capabilities: new Map(),
+      });
+
+      expect(out.ok).toBe(true);
+      expect(out.decisions).toContain("qa:ready_for_review");
+      expect(out.decisions).toContain("qa:tests_passed");
+      expect(out.blockers).toEqual([]);
+      expect(commandRunner.commands).toHaveLength(1);
+      // The QA report plus the test-evidence-report are both attached.
+      expect(out.artifactIds).toHaveLength(2);
+      const evidence = await artifacts.read(out.artifactIds[1]!);
+      expect(evidence?.record.type).toBe("test-evidence-report");
+      expect(evidence?.record.created_by).toBe("qa");
+      expect(evidence?.record.test_status).toBe("passed");
+      const log = await readFile(workspacePaths(dir).auditLog, "utf8");
+      expect(log).toContain("agent.qa.tests_gated");
+    } finally {
+      await rm(codeWorkspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("blocks ready-for-review and does not advance when project tests fail (SER-240)", async () => {
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const artifacts = new ArtifactStore(dir);
+    const policy = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
+    // Acceptance evidence passes; the failing test suite alone must block.
+    await artifacts.write({
+      type: "test-evidence-report",
+      createdBy: "development",
+      runId: "run_qa_tests_fail",
+      body: ["# Test Evidence", "", "PASS: feature works end to end."].join("\n"),
+    });
+
+    const codeWorkspaceRoot = await mkdtemp(join(tmpdir(), "bureauos-qa-worktree-"));
+    await writeFile(
+      join(codeWorkspaceRoot, "package.json"),
+      JSON.stringify({ packageManager: "pnpm@9.12.0", scripts: { test: "pnpm -r run test" } }),
+      "utf8",
+    );
+    const commandRunner = new FakeProjectCommandRunner(FAILING_EXECUTION);
+    const agent = new QaAgent({
+      artifacts,
+      audit,
+      policy,
+      projectTestRunnerFactory: (workspaceRoot, deps) =>
+        new ProjectTestRunnerService(workspaceRoot, { ...deps, commandRunner }),
+    });
+
+    try {
+      const out = await agent.execute({
+        context: {
+          runId: "run_qa_tests_fail",
+          scope: ["Acceptance criteria:", "- feature works end to end."].join("\n"),
+          codeWorkspaceRoot,
+        },
+        capabilities: new Map(),
+      });
+
+      // ok:false means the coordinator pipeline does not advance to reviewer/release.
+      expect(out.ok).toBe(false);
+      expect(out.decisions).toContain("qa:tests_failed");
+      expect(out.blockers).toContain("project tests failed");
+      const evidence = await artifacts.read(out.artifactIds[1]!);
+      expect(evidence?.record.test_status).toBe("failed");
+    } finally {
+      await rm(codeWorkspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("blocks ready-for-review when no project test command is configured (SER-240)", async () => {
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const artifacts = new ArtifactStore(dir);
+    const policy = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
+    await artifacts.write({
+      type: "test-evidence-report",
+      createdBy: "development",
+      runId: "run_qa_tests_missing",
+      body: ["# Test Evidence", "", "PASS: feature works end to end."].join("\n"),
+    });
+
+    // Worktree has no package.json test script: the runner reports "blocked".
+    const codeWorkspaceRoot = await mkdtemp(join(tmpdir(), "bureauos-qa-worktree-"));
+    const commandRunner = new FakeProjectCommandRunner(PASSING_EXECUTION);
+    const agent = new QaAgent({
+      artifacts,
+      audit,
+      policy,
+      projectTestRunnerFactory: (workspaceRoot, deps) =>
+        new ProjectTestRunnerService(workspaceRoot, { ...deps, commandRunner }),
+    });
+
+    try {
+      const out = await agent.execute({
+        context: {
+          runId: "run_qa_tests_missing",
+          scope: ["Acceptance criteria:", "- feature works end to end."].join("\n"),
+          codeWorkspaceRoot,
+        },
+        capabilities: new Map(),
+      });
+
+      expect(out.ok).toBe(false);
+      expect(out.decisions).toContain("qa:tests_blocked");
+      expect(out.blockers).toContain("no project test command configured or discovered");
+      // The fake command runner is never invoked when there is no test command.
+      expect(commandRunner.commands).toHaveLength(0);
+    } finally {
+      await rm(codeWorkspaceRoot, { recursive: true, force: true });
+    }
   });
 
   it("flags auth payment and secrets paths in security review", async () => {

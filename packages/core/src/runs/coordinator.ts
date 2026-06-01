@@ -187,7 +187,9 @@ ${input.briefing ?? "(none supplied)"}
         workspaceRoot: input.workspaceRoot,
         runId: input.run.id,
         scope: input.scope,
-        ...(role === "development" && input.codeWorkspaceRoot
+        // Development edits real code in the worktree; QA must run the project's
+        // real tests against that same worktree to gate the handoff (SER-240).
+        ...((role === "development" || role === "qa") && input.codeWorkspaceRoot
           ? { codeWorkspaceRoot: input.codeWorkspaceRoot }
           : {}),
         ...(role === "development" && input.run.source_work_item_id
