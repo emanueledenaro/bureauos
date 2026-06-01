@@ -28,14 +28,15 @@ import { approvalTone } from "../lib/tone";
 import { formatLabel, timeAgo } from "../lib/format";
 import type { ApprovalRecord } from "../lib/api";
 import type { DashboardState } from "../lib/types";
+import { useT, type TFunction } from "../i18n/i18n";
 
 type ApprovalFilter = "pending" | "approved" | "rejected" | "all";
 
-const FILTERS: Array<{ id: ApprovalFilter; label: string }> = [
-  { id: "pending", label: "Pending" },
-  { id: "approved", label: "Approved" },
-  { id: "rejected", label: "Rejected" },
-  { id: "all", label: "All" },
+const FILTERS: Array<{ id: ApprovalFilter; labelKey: string; label: string }> = [
+  { id: "pending", labelKey: "approvals.filterPending", label: "Pending" },
+  { id: "approved", labelKey: "approvals.filterApproved", label: "Approved" },
+  { id: "rejected", labelKey: "approvals.filterRejected", label: "Rejected" },
+  { id: "all", labelKey: "approvals.filterAll", label: "All" },
 ];
 
 function sortApprovalRows(a: ApprovalRecord, b: ApprovalRecord): number {
@@ -54,31 +55,47 @@ function statusSortRank(status: ApprovalRecord["status"]): number {
 function approvalEmptyState(
   filter: ApprovalFilter,
   historyCount: number,
+  t: TFunction,
 ): { title: string; description: string } {
   if (filter === "pending") {
     return {
-      title: "Decision queue clear",
+      title: t("approvals.emptyPendingTitle", "Decision queue clear"),
       description:
         historyCount > 0
-          ? "Switch to All, Approved, or Rejected to inspect resolved decisions."
-          : "Serious policy gates will appear here before BureauOS performs sensitive actions.",
+          ? t(
+              "approvals.emptyPendingWithHistory",
+              "Switch to All, Approved, or Rejected to inspect resolved decisions.",
+            )
+          : t(
+              "approvals.emptyPendingNoHistory",
+              "Serious policy gates will appear here before BureauOS performs sensitive actions.",
+            ),
     };
   }
   if (filter === "approved") {
     return {
-      title: "No approved decisions yet",
-      description: "Approved policy gates will appear here after the owner allows them.",
+      title: t("approvals.emptyApprovedTitle", "No approved decisions yet"),
+      description: t(
+        "approvals.emptyApprovedDescription",
+        "Approved policy gates will appear here after the owner allows them.",
+      ),
     };
   }
   if (filter === "rejected") {
     return {
-      title: "No rejected decisions yet",
-      description: "Denied policy gates will appear here when the owner blocks sensitive work.",
+      title: t("approvals.emptyRejectedTitle", "No rejected decisions yet"),
+      description: t(
+        "approvals.emptyRejectedDescription",
+        "Denied policy gates will appear here when the owner blocks sensitive work.",
+      ),
     };
   }
   return {
-    title: "No approval records yet",
-    description: "Serious policy gates and resolved owner decisions will appear here.",
+    title: t("approvals.emptyAllTitle", "No approval records yet"),
+    description: t(
+      "approvals.emptyAllDescription",
+      "Serious policy gates and resolved owner decisions will appear here.",
+    ),
   };
 }
 
@@ -89,6 +106,7 @@ export function ApprovalsView({
   state: DashboardState;
   onResolve: (id: string, status: "approved" | "rejected", reason?: string) => Promise<void>;
 }) {
+  const t = useT();
   const recommendedFilter: ApprovalFilter = state.approvals.length > 0 ? "pending" : "all";
   const [filter, setFilter] = useState<ApprovalFilter>(recommendedFilter);
   const [manualFilter, setManualFilter] = useState(false);
@@ -132,7 +150,9 @@ export function ApprovalsView({
     if (!decision) return;
     const note = decisionNote.trim();
     if (decisionRequiresNote && !note) {
-      setDecisionError("Decision note required for high-risk approval.");
+      setDecisionError(
+        t("approvals.errorNoteRequired", "Decision note required for high-risk approval."),
+      );
       return;
     }
     setSubmitting(true);
@@ -143,10 +163,10 @@ export function ApprovalsView({
     } catch (error) {
       setDecisionError(
         isStaleApprovalError(error)
-          ? "Approval already resolved. Queue refreshed."
+          ? t("approvals.errorAlreadyResolved", "Approval already resolved. Queue refreshed.")
           : error instanceof Error
             ? error.message
-            : "Approval decision failed.",
+            : t("approvals.errorDecisionFailed", "Approval decision failed."),
       );
       setSubmitting(false);
     }
@@ -156,11 +176,11 @@ export function ApprovalsView({
     <div className="flex justify-end gap-2">
       <Button size="sm" variant="success" onClick={() => openDecision(approval, "approved")}>
         <Check className="h-3 w-3" />
-        Approve
+        {t("approvals.approve", "Approve")}
       </Button>
       <Button size="sm" variant="outline" onClick={() => openDecision(approval, "rejected")}>
         <X className="h-3 w-3" />
-        Reject
+        {t("approvals.reject", "Reject")}
       </Button>
     </div>
   );
@@ -168,7 +188,7 @@ export function ApprovalsView({
   const columns: DataTableColumn<ApprovalRecord>[] = [
     {
       id: "action",
-      header: "Action",
+      header: t("approvals.columnAction", "Action"),
       width: "minmax(0,1.4fr)",
       render: (approval) => (
         <div className="min-w-0">
@@ -181,7 +201,7 @@ export function ApprovalsView({
     },
     {
       id: "status",
-      header: "Status",
+      header: t("approvals.columnStatus", "Status"),
       width: "140px",
       render: (approval) => (
         <div className="flex flex-col gap-1">
@@ -196,7 +216,7 @@ export function ApprovalsView({
     },
     {
       id: "scope",
-      header: "Scope",
+      header: t("approvals.columnScope", "Scope"),
       width: "minmax(0,1fr)",
       render: (approval) => (
         <div className="min-w-0">
@@ -204,9 +224,9 @@ export function ApprovalsView({
           <div className="text-meta mt-0.5 truncate">{approval.target}</div>
           {approval.source || approval.limit ? (
             <div className="text-meta mt-0.5 truncate text-muted-foreground/80">
-              {approval.source ? `Source: ${approval.source}` : ""}
+              {approval.source ? `${t("approvals.source", "Source")}: ${approval.source}` : ""}
               {approval.source && approval.limit ? " · " : ""}
-              {approval.limit ? `Limit: ${approval.limit}` : ""}
+              {approval.limit ? `${t("approvals.limit", "Limit")}: ${approval.limit}` : ""}
             </div>
           ) : null}
         </div>
@@ -214,20 +234,20 @@ export function ApprovalsView({
     },
     {
       id: "actor",
-      header: "Actor",
+      header: t("approvals.columnActor", "Actor"),
       width: "120px",
       render: (approval) => <span className="text-meta truncate">{approval.actor}</span>,
     },
     {
       id: "updated",
-      header: "Updated",
+      header: t("approvals.columnUpdated", "Updated"),
       width: "140px",
       render: (approval) => (
         <div className="text-meta">
           <div>{approval.updated ? timeAgo(approval.updated) : "—"}</div>
           {approval.resolved_by ? (
             <div className="text-meta mt-0.5 truncate text-muted-foreground/80">
-              by {approval.resolved_by}
+              {t("approvals.by", "by")} {approval.resolved_by}
             </div>
           ) : null}
         </div>
@@ -244,7 +264,7 @@ export function ApprovalsView({
           decisionButtons(approval)
         ) : (
           <span className="block max-w-[180px] truncate text-right text-meta">
-            {approval.reason || approval.resolved_at || "Resolved"}
+            {approval.reason || approval.resolved_at || t("approvals.resolved", "Resolved")}
           </span>
         ),
     },
@@ -252,38 +272,41 @@ export function ApprovalsView({
 
   return (
     <SectionShell
-      title="Approvals"
-      description="Owner decisions, external action gates, and resolved approval history."
+      title={t("approvals.title", "Approvals")}
+      description={t(
+        "approvals.description",
+        "Owner decisions, external action gates, and resolved approval history.",
+      )}
     >
       <KpiBar
         columns={4}
         className="grid-flow-row grid-cols-2 auto-cols-auto overflow-visible pb-0 lg:grid-cols-4"
       >
         <MetricTile
-          label="Pending"
+          label={t("approvals.metricPending", "Pending")}
           value={String(state.approvals.length)}
-          detail="Waiting for owner"
+          detail={t("approvals.metricPendingDetail", "Waiting for owner")}
           icon={ShieldCheck}
           tone={state.approvals.length > 0 ? "warning" : "success"}
         />
         <MetricTile
-          label="Approved"
+          label={t("approvals.metricApproved", "Approved")}
           value={String(approved.length)}
-          detail="Resolved allowed"
+          detail={t("approvals.metricApprovedDetail", "Resolved allowed")}
           icon={Check}
           tone="success"
         />
         <MetricTile
-          label="Rejected"
+          label={t("approvals.metricRejected", "Rejected")}
           value={String(rejected.length)}
-          detail="Resolved blocked"
+          detail={t("approvals.metricRejectedDetail", "Resolved blocked")}
           icon={X}
           tone={rejected.length > 0 ? "danger" : "neutral"}
         />
         <MetricTile
-          label="Total"
+          label={t("approvals.metricTotal", "Total")}
           value={String(allApprovals.length)}
-          detail="Pending and history"
+          detail={t("approvals.metricTotalDetail", "Pending and history")}
           icon={ShieldCheck}
           tone="neutral"
         />
@@ -292,13 +315,21 @@ export function ApprovalsView({
       <div className="mt-section grid gap-3">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
-            <h3 className="text-[13px] font-semibold text-foreground">Decision Inbox</h3>
+            <h3 className="text-[13px] font-semibold text-foreground">
+              {t("approvals.decisionInbox", "Decision Inbox")}
+            </h3>
             <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-              Serious owner gates stay here; resolved decisions stay visible in history.
+              {t(
+                "approvals.decisionInboxHelper",
+                "Serious owner gates stay here; resolved decisions stay visible in history.",
+              )}
             </p>
           </div>
           <span className="text-[11px] text-muted-foreground sm:text-right">
-            {state.approvals.length} pending decision{state.approvals.length === 1 ? "" : "s"}
+            {state.approvals.length}{" "}
+            {state.approvals.length === 1
+              ? t("approvals.pendingDecision", "pending decision")
+              : t("approvals.pendingDecisions", "pending decisions")}
           </span>
         </div>
         {pendingGroups.length > 0 ? (
@@ -330,12 +361,14 @@ export function ApprovalsView({
                 <div key={riskGroup.risk} className="border-t border-border/60">
                   <div className="flex items-center justify-between gap-2 bg-surface-raised/50 px-4 py-2">
                     <StatusPill
-                      value={`${riskGroup.risk} risk`}
+                      value={`${riskGroup.risk} ${t("approvals.risk", "risk")}`}
                       tone={approvalRiskTone(riskGroup.risk)}
                     />
                     <span className="text-[10px] text-muted-foreground">
-                      {riskGroup.approvals.length} gate
-                      {riskGroup.approvals.length === 1 ? "" : "s"}
+                      {riskGroup.approvals.length}{" "}
+                      {riskGroup.approvals.length === 1
+                        ? t("approvals.gate", "gate")
+                        : t("approvals.gates", "gates")}
                     </span>
                   </div>
                   <div className="divide-y divide-border/60">
@@ -353,7 +386,7 @@ export function ApprovalsView({
                             {approvalRequiresDecisionNote(approval) ? (
                               <span className="inline-flex items-center gap-1 rounded border border-warning/40 bg-warning-subtle/30 px-1.5 py-0.5 text-[10px] text-warning">
                                 <AlertTriangle className="h-3 w-3" />
-                                note required
+                                {t("approvals.noteRequired", "note required")}
                               </span>
                             ) : null}
                           </div>
@@ -365,10 +398,21 @@ export function ApprovalsView({
                           </div>
                           {approval.source || approval.limit || approval.expires_at ? (
                             <div className="mt-1 grid gap-0.5 text-[10px] text-muted-foreground/80">
-                              {approval.source ? <div>Source: {approval.source}</div> : null}
-                              {approval.limit ? <div>Limit: {approval.limit}</div> : null}
+                              {approval.source ? (
+                                <div>
+                                  {t("approvals.source", "Source")}: {approval.source}
+                                </div>
+                              ) : null}
+                              {approval.limit ? (
+                                <div>
+                                  {t("approvals.limit", "Limit")}: {approval.limit}
+                                </div>
+                              ) : null}
                               {approval.expires_at ? (
-                                <div>Expires {approval.expires_at.slice(0, 10)}</div>
+                                <div>
+                                  {t("approvals.expires", "Expires")}{" "}
+                                  {approval.expires_at.slice(0, 10)}
+                                </div>
                               ) : null}
                             </div>
                           ) : null}
@@ -386,28 +430,41 @@ export function ApprovalsView({
         ) : (
           <div className="flex flex-col gap-3 rounded-md border border-success/25 bg-success-subtle/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
-              <div className="text-[12px] font-semibold text-foreground">Decision queue clear</div>
+              <div className="text-[12px] font-semibold text-foreground">
+                {t("approvals.queueClearTitle", "Decision queue clear")}
+              </div>
               <div className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-                No serious owner decisions pending. Recent decision history is shown below.
+                {t(
+                  "approvals.queueClearDescription",
+                  "No serious owner decisions pending. Recent decision history is shown below.",
+                )}
               </div>
             </div>
-            <StatusPill value="No gate waiting" tone="success" />
+            <StatusPill value={t("approvals.noGateWaiting", "No gate waiting")} tone="success" />
           </div>
         )}
       </div>
 
       <div className="mt-section flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <h3 className="text-[13px] font-semibold text-foreground">Decision History</h3>
+          <h3 className="text-[13px] font-semibold text-foreground">
+            {t("approvals.decisionHistory", "Decision History")}
+          </h3>
           <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
             {showingHistoryByDefault
-              ? "No pending gates, so the latest resolved decisions are shown first."
-              : "Review pending and resolved policy decisions from the local audit trail."}
+              ? t(
+                  "approvals.historyHelperDefault",
+                  "No pending gates, so the latest resolved decisions are shown first.",
+                )
+              : t(
+                  "approvals.historyHelper",
+                  "Review pending and resolved policy decisions from the local audit trail.",
+                )}
           </p>
         </div>
         <div
           className="inline-flex w-full overflow-x-auto rounded-lg border border-border bg-surface-subtle p-1 sm:w-auto"
-          aria-label="Approval history filter"
+          aria-label={t("approvals.historyFilterLabel", "Approval history filter")}
         >
           {FILTERS.map((item) => (
             <button
@@ -423,7 +480,7 @@ export function ApprovalsView({
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
-              {item.label}
+              {t(item.labelKey, item.label)}
             </button>
           ))}
         </div>
@@ -436,23 +493,31 @@ export function ApprovalsView({
         rowKey={(approval) => approval.id}
         mobileFallback="cards"
         minWidth={920}
-        emptyState={approvalEmptyState(filter, historyCount)}
+        emptyState={approvalEmptyState(filter, historyCount, t)}
       />
 
       <Dialog open={Boolean(decision)} onOpenChange={(open) => !open && closeDecision()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {decision?.status === "approved" ? "Approve" : "Reject"}{" "}
-              {decision ? formatLabel(decision.approval.action) : "approval"}
+              {decision?.status === "approved"
+                ? t("approvals.approve", "Approve")
+                : t("approvals.reject", "Reject")}{" "}
+              {decision
+                ? formatLabel(decision.approval.action)
+                : t("approvals.approval", "approval")}
             </DialogTitle>
             <DialogDescription>
-              {decision?.approval.scope ?? "Owner decision"} · {decisionRisk} risk
+              {decision?.approval.scope ?? t("approvals.ownerDecision", "Owner decision")} ·{" "}
+              {decisionRisk} {t("approvals.risk", "risk")}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-2">
             <label className="text-[11px] font-semibold text-muted-foreground">
-              Decision note {decisionRequiresNote ? "(required)" : "(optional)"}
+              {t("approvals.decisionNote", "Decision note")}{" "}
+              {decisionRequiresNote
+                ? t("approvals.required", "(required)")
+                : t("approvals.optional", "(optional)")}
             </label>
             <Textarea
               value={decisionNote}
@@ -462,8 +527,11 @@ export function ApprovalsView({
               }}
               placeholder={
                 decisionRequiresNote
-                  ? "Why is this high-risk action approved or denied?"
-                  : "Add context for the audit trail"
+                  ? t(
+                      "approvals.placeholderRequired",
+                      "Why is this high-risk action approved or denied?",
+                    )
+                  : t("approvals.placeholderOptional", "Add context for the audit trail")
               }
               disabled={submitting}
             />
@@ -471,7 +539,7 @@ export function ApprovalsView({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={closeDecision} disabled={submitting}>
-              Cancel
+              {t("approvals.cancel", "Cancel")}
             </Button>
             <Button
               variant={decision?.status === "approved" ? "success" : "destructive"}
@@ -483,7 +551,11 @@ export function ApprovalsView({
               ) : (
                 <X className="h-3 w-3" />
               )}
-              {submitting ? "Saving" : decision?.status === "approved" ? "Approve" : "Reject"}
+              {submitting
+                ? t("approvals.saving", "Saving")
+                : decision?.status === "approved"
+                  ? t("approvals.approve", "Approve")
+                  : t("approvals.reject", "Reject")}
             </Button>
           </DialogFooter>
         </DialogContent>

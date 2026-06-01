@@ -17,6 +17,7 @@ import { KpiBar } from "../components/dashboard/KpiBar";
 import { ViewToolbar } from "../components/dashboard/ViewToolbar";
 import { OperationalFocus } from "../components/dashboard/OperationalFocus";
 import { Badge } from "../components/ui/badge";
+import { useT, type TFunction } from "../i18n/i18n";
 import { useAsyncAction } from "../hooks/useAsyncAction";
 import { sortNewest } from "../lib/builders";
 import { formatLabel, timeAgo } from "../lib/format";
@@ -39,6 +40,7 @@ export function GrowthView({
   onGenerateContent: () => Promise<GrowthContentPipelineResult>;
   onGenerateReview: () => Promise<GrowthReviewResult>;
 }) {
+  const t = useT();
   const generate = useAsyncAction(onGenerateContent);
   const review = useAsyncAction(onGenerateReview);
   const growthArtifacts = sortNewest(
@@ -63,40 +65,55 @@ export function GrowthView({
         : "info"
       : "warning";
   const growthFocusTitle = !growthMemory
-    ? "Connect growth memory"
+    ? t("growth.focusConnectTitle", "Connect growth memory")
     : growthMemory.ready
       ? growthArtifacts.length > 0
-        ? `Review latest ${formatLabel(latestGrowthArtifact.type)}`
-        : "Generate the first draft-only growth asset"
-      : `Complete ${growthMemory.missing_sections.map(formatLabel).join(", ")}`;
+        ? `${t("growth.focusReviewLatest", "Review latest")} ${formatLabel(latestGrowthArtifact.type)}`
+        : t("growth.focusFirstDraftTitle", "Generate the first draft-only growth asset")
+      : `${t("growth.focusComplete", "Complete")} ${growthMemory.missing_sections.map(formatLabel).join(", ")}`;
   const growthFocusDetail = !growthMemory
-    ? "The local API has not returned growth memory yet, so draft generation has no verified brand, offer, or channel source."
+    ? t(
+        "growth.focusConnectDetail",
+        "The local API has not returned growth memory yet, so draft generation has no verified brand, offer, or channel source.",
+      )
     : growthMemory.ready
       ? growthArtifacts.length > 0
-        ? "Draft assets exist locally. Review the newest artifact before any public publishing or spend decision."
-        : "Brand, offers, and channels are configured. BOS can draft content locally without touching publishing or ad spend."
-      : "Campaign work should wait until missing growth memory is written, otherwise drafts will be weak and hard to approve.";
+        ? t(
+            "growth.focusReviewDetail",
+            "Draft assets exist locally. Review the newest artifact before any public publishing or spend decision.",
+          )
+        : t(
+            "growth.focusFirstDraftDetail",
+            "Brand, offers, and channels are configured. BOS can draft content locally without touching publishing or ad spend.",
+          )
+      : t(
+          "growth.focusIncompleteDetail",
+          "Campaign work should wait until missing growth memory is written, otherwise drafts will be weak and hard to approve.",
+        );
 
   return (
     <SectionShell
-      title="Growth"
-      description="Draft-first marketing, content, social, and ads assets."
+      title={t("growth.title", "Growth")}
+      description={t(
+        "growth.description",
+        "Draft-first marketing, content, social, and ads assets.",
+      )}
       action={
         <ViewToolbar
           primary={{
-            label: "Generate drafts",
+            label: t("growth.generateDrafts", "Generate drafts"),
             icon: WandSparkles,
             onClick: () => void generate.run(),
             busy: generate.busy,
-            busyLabel: "Generating",
+            busyLabel: t("growth.generating", "Generating"),
           }}
           secondary={[
             {
-              label: "Run review",
+              label: t("growth.runReview", "Run review"),
               icon: ClipboardCheck,
               onClick: () => void review.run(),
               busy: review.busy,
-              busyLabel: "Reviewing",
+              busyLabel: t("growth.reviewing", "Reviewing"),
             },
           ]}
         />
@@ -115,7 +132,7 @@ export function GrowthView({
           <ActionBanner
             key="generate-error"
             tone="danger"
-            title="Content generation failed"
+            title={t("growth.generateErrorTitle", "Content generation failed")}
             detail={generate.error}
             onDismiss={generate.reset}
             className="mb-3"
@@ -125,8 +142,11 @@ export function GrowthView({
           <ActionBanner
             key="generate-result"
             tone="success"
-            title={`${generate.result.drafts.length} drafts generated · report ${generate.result.report.id}`}
-            detail="Drafts were created locally; external publishing stays gated."
+            title={`${generate.result.drafts.length} ${t("growth.generateResultDraftsGenerated", "drafts generated · report")} ${generate.result.report.id}`}
+            detail={t(
+              "growth.generateResultDetail",
+              "Drafts were created locally; external publishing stays gated.",
+            )}
             onDismiss={generate.reset}
             className="mb-3"
           />
@@ -135,7 +155,7 @@ export function GrowthView({
           <ActionBanner
             key="review-error"
             tone="danger"
-            title="Growth review failed"
+            title={t("growth.reviewErrorTitle", "Growth review failed")}
             detail={review.error}
             onDismiss={review.reset}
             className="mb-3"
@@ -145,8 +165,11 @@ export function GrowthView({
           <ActionBanner
             key="review-result"
             tone="success"
-            title={`Growth review generated · ${review.result.report.id}`}
-            detail={review.result.recommendations[0] ?? "Review is ready locally."}
+            title={`${t("growth.reviewResultTitle", "Growth review generated")} · ${review.result.report.id}`}
+            detail={
+              review.result.recommendations[0] ??
+              t("growth.reviewResultReady", "Review is ready locally.")
+            }
             onDismiss={review.reset}
             className="mb-3"
           />
@@ -160,31 +183,31 @@ export function GrowthView({
         title={growthFocusTitle}
         detail={growthFocusDetail}
         signals={[
-          `${configuredMemory}/3 memory`,
-          `${growthArtifacts.length} drafts`,
-          `${state.approvals.length} approvals`,
+          `${configuredMemory}/3 ${t("growth.signalMemory", "memory")}`,
+          `${growthArtifacts.length} ${t("growth.signalDrafts", "drafts")}`,
+          `${state.approvals.length} ${t("growth.signalApprovals", "approvals")}`,
         ]}
       />
 
       <KpiBar>
         <MetricTile
-          label="Growth artifacts"
+          label={t("growth.metricGrowthArtifacts", "Growth artifacts")}
           value={String(growthArtifacts.length)}
-          detail="Draft assets"
+          detail={t("growth.metricDraftAssets", "Draft assets")}
           icon={Sparkles}
           tone="info"
         />
         <MetricTile
-          label="Opportunities"
+          label={t("growth.metricOpportunities", "Opportunities")}
           value={String(state.opportunities.length)}
-          detail="Commercial pipeline"
+          detail={t("growth.metricCommercialPipeline", "Commercial pipeline")}
           icon={Megaphone}
           tone="success"
         />
         <MetricTile
-          label="Approvals"
+          label={t("growth.metricApprovals", "Approvals")}
           value={String(state.approvals.length)}
-          detail="External action gates"
+          detail={t("growth.metricExternalGates", "External action gates")}
           icon={ShieldCheck}
           tone={state.approvals.length > 0 ? "warning" : "success"}
         />
@@ -192,20 +215,28 @@ export function GrowthView({
 
       <div className="mt-section">
         <SectionHeading
-          title="Growth service coverage"
-          meta={`${contentReports.length + growthReviews.length} service reports`}
+          title={t("growth.serviceCoverageTitle", "Growth service coverage")}
+          meta={`${contentReports.length + growthReviews.length} ${t("growth.serviceReports", "service reports")}`}
         />
         <div className="mt-2 grid items-stretch gap-3 lg:grid-cols-4">
           <ServiceCard
             icon={Target}
-            title="Memory sections"
-            status={`${configuredMemory}/3 configured`}
-            badge={growthMemory?.ready ? "Ready" : "Setup needed"}
+            title={t("growth.memorySectionsTitle", "Memory sections")}
+            status={`${configuredMemory}/3 ${t("growth.configured", "configured")}`}
+            badge={
+              growthMemory?.ready
+                ? t("growth.badgeReady", "Ready")
+                : t("growth.badgeSetupNeeded", "Setup needed")
+            }
             detail={
               growthMemory?.ready
-                ? "Brand, offers, and channels are available for draft generation."
-                : `Missing ${
-                    growthMemory?.missing_sections.map(formatLabel).join(", ") || "growth memory"
+                ? t(
+                    "growth.memorySectionsReadyDetail",
+                    "Brand, offers, and channels are available for draft generation.",
+                  )
+                : `${t("growth.missing", "Missing")} ${
+                    growthMemory?.missing_sections.map(formatLabel).join(", ") ||
+                    t("growth.growthMemoryLower", "growth memory")
                   }.`
             }
             artifacts={(growthMemory?.sections ?? []).map((section) => ({
@@ -215,26 +246,39 @@ export function GrowthView({
           />
           <ServiceCard
             icon={FileText}
-            title="Content pipeline"
-            status={`${growthArtifacts.length} draft artifacts`}
-            badge={contentReports[0]?.id ?? "No report yet"}
-            detail="Social, campaign, creative, and ads briefs stay draft-only until policy allows external action."
+            title={t("growth.contentPipelineTitle", "Content pipeline")}
+            status={`${growthArtifacts.length} ${t("growth.draftArtifacts", "draft artifacts")}`}
+            badge={contentReports[0]?.id ?? t("growth.noReportYet", "No report yet")}
+            detail={t(
+              "growth.contentPipelineDetail",
+              "Social, campaign, creative, and ads briefs stay draft-only until policy allows external action.",
+            )}
             artifacts={[...contentReports.slice(0, 1), ...growthArtifacts.slice(0, 3)]}
           />
           <ServiceCard
             icon={ClipboardCheck}
-            title="Growth review"
-            status={`${growthReviews.length} review reports`}
-            badge={growthReviews[0]?.id ?? "Run review"}
-            detail="Weekly review checks memory readiness, recent content, pipeline, and follow-up pressure."
+            title={t("growth.growthReviewTitle", "Growth review")}
+            status={`${growthReviews.length} ${t("growth.reviewReports", "review reports")}`}
+            badge={growthReviews[0]?.id ?? t("growth.runReview", "Run review")}
+            detail={t(
+              "growth.growthReviewDetail",
+              "Weekly review checks memory readiness, recent content, pipeline, and follow-up pressure.",
+            )}
             artifacts={growthReviews.slice(0, 4)}
           />
           <ServiceCard
             icon={ShieldCheck}
-            title="Approval gates"
-            status={`${pendingApprovals.length} pending gates`}
-            badge={pendingApprovals.length ? "Owner gate" : "Clear"}
-            detail="Publishing, paid spend, public claims, final proposals, and pricing changes remain gated."
+            title={t("growth.approvalGatesTitle", "Approval gates")}
+            status={`${pendingApprovals.length} ${t("growth.pendingGates", "pending gates")}`}
+            badge={
+              pendingApprovals.length
+                ? t("growth.badgeOwnerGate", "Owner gate")
+                : t("growth.badgeClear", "Clear")
+            }
+            detail={t(
+              "growth.approvalGatesDetail",
+              "Publishing, paid spend, public claims, final proposals, and pricing changes remain gated.",
+            )}
             artifacts={pendingApprovals.slice(0, 4).map((approval) => ({
               id: approval.id,
               type: approval.action,
@@ -246,8 +290,8 @@ export function GrowthView({
 
       <div className="mt-section">
         <SectionHeading
-          title="Growth Memory"
-          meta={`${growthMemory?.ready ? "Ready" : "Incomplete"} · ${configuredMemory}/3 sections`}
+          title={t("growth.growthMemoryTitle", "Growth Memory")}
+          meta={`${growthMemory?.ready ? t("growth.metaReady", "Ready") : t("growth.metaIncomplete", "Incomplete")} · ${configuredMemory}/3 ${t("growth.sections", "sections")}`}
         />
         <div className="mt-2 grid items-stretch gap-3 md:grid-cols-3">
           {(growthMemory?.sections ?? []).map((section) => (
@@ -259,15 +303,18 @@ export function GrowthView({
               </BaseCardHeader>
               <div className="text-meta font-mono">{section.path}</div>
               <p className="text-body-secondary line-clamp-4 leading-relaxed text-foreground/80">
-                {section.preview || "No memory configured yet."}
+                {section.preview || t("growth.noMemoryConfigured", "No memory configured yet.")}
               </p>
             </BaseCard>
           ))}
           {!growthMemory ? (
             <div className="md:col-span-3">
               <EmptyState
-                title="Growth memory unavailable"
-                description="The Operating Room is waiting for the local API growth memory endpoint."
+                title={t("growth.memoryUnavailableTitle", "Growth memory unavailable")}
+                description={t(
+                  "growth.memoryUnavailableDescription",
+                  "The Operating Room is waiting for the local API growth memory endpoint.",
+                )}
               />
             </div>
           ) : null}
@@ -275,22 +322,28 @@ export function GrowthView({
       </div>
 
       <div className="mt-section">
-        <SectionHeading title="Recent draft assets" meta={`${growthArtifacts.length} total`} />
+        <SectionHeading
+          title={t("growth.recentDraftAssetsTitle", "Recent draft assets")}
+          meta={`${growthArtifacts.length} ${t("growth.total", "total")}`}
+        />
         <div className="mt-2 grid items-stretch gap-3 md:grid-cols-3">
           {growthArtifacts.slice(0, 6).map((artifact) => (
             <BaseCard key={artifact.id} className="h-full gap-2">
               <BaseCardHeader title={formatLabel(artifact.type)} />
               <div className="text-meta truncate font-mono">{artifact.id}</div>
               <div className="text-meta">
-                {artifact.created ? timeAgo(artifact.created) : "created"}
+                {artifact.created ? timeAgo(artifact.created) : t("growth.created", "created")}
               </div>
             </BaseCard>
           ))}
           {growthArtifacts.length === 0 ? (
             <div className="md:col-span-3">
               <EmptyState
-                title="No growth drafts yet"
-                description="Social, ads, and creative drafts are generated from intake and reports."
+                title={t("growth.noDraftsTitle", "No growth drafts yet")}
+                description={t(
+                  "growth.noDraftsDescription",
+                  "Social, ads, and creative drafts are generated from intake and reports.",
+                )}
               />
             </div>
           ) : null}
@@ -324,6 +377,7 @@ function ServiceCard({
   detail: string;
   artifacts: Array<Pick<ArtifactRecord, "id" | "type" | "created">>;
 }) {
+  const t: TFunction = useT();
   return (
     <BaseCard className="h-full gap-3">
       <BaseCardHeader
@@ -354,7 +408,7 @@ function ServiceCard({
             </div>
           ))
         ) : (
-          <div className="text-meta">No local artifacts yet.</div>
+          <div className="text-meta">{t("growth.noLocalArtifacts", "No local artifacts yet.")}</div>
         )}
       </div>
     </BaseCard>

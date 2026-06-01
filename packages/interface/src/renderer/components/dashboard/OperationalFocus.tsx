@@ -2,9 +2,10 @@ import type { LucideIcon } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { toneBadgeVariant, toneIndicatorClass, toneTextClass, type Tone } from "../../lib/tone";
 import { Badge } from "../ui/badge";
+import { useT } from "../../i18n/i18n";
 
 export function OperationalFocus({
-  eyebrow = "Next move",
+  eyebrow,
   title,
   detail,
   icon: Icon,
@@ -20,6 +21,8 @@ export function OperationalFocus({
   signals?: string[];
   className?: string;
 }) {
+  const t = useT();
+  const eyebrowLabel = eyebrow ?? t("operationalFocus.eyebrow", "Next move");
   return (
     <div
       role="status"
@@ -45,7 +48,7 @@ export function OperationalFocus({
                 <Icon className="h-3.5 w-3.5" />
               </span>
             ) : null}
-            <span className="text-eyebrow truncate">{eyebrow}</span>
+            <span className="text-eyebrow truncate">{eyebrowLabel}</span>
           </div>
           <div className="mt-2 text-[15px] font-semibold leading-tight text-foreground">
             {title}

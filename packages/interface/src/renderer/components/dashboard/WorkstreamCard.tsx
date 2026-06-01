@@ -2,8 +2,10 @@ import { GitBranch, GitPullRequest } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { toneIndicatorClass, toneProgressClass, toneTextClass } from "../../lib/tone";
 import type { Workstream } from "../../lib/types";
+import { useT } from "../../i18n/i18n";
 
 export function WorkstreamCard({ item, laneIndex }: { item: Workstream; laneIndex: number }) {
+  const t = useT();
   const openPullRequest = async (url: string): Promise<void> => {
     if (window.bureau) {
       await window.bureau.openExternal(url);
@@ -29,7 +31,9 @@ export function WorkstreamCard({ item, laneIndex }: { item: Workstream; laneInde
                 item.kind === "opportunity" ? "text-primary/80" : "text-muted-foreground/70",
               )}
             >
-              {item.kind === "opportunity" ? "Opportunity" : "Project"}
+              {item.kind === "opportunity"
+                ? t("workstreamCard.opportunity", "Opportunity")
+                : t("workstreamCard.project", "Project")}
             </div>
             <div className="truncate text-[13px] font-semibold text-foreground">{item.title}</div>
             <div

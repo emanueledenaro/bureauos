@@ -4,6 +4,7 @@ import { ResultCard } from "./ResultCard";
 import { MessageContent } from "./MessageContent";
 import { cn } from "../../lib/utils";
 import { formatBytes, formatTime } from "../../lib/format";
+import { useT } from "../../i18n/i18n";
 import type { CoordinatorMessageRecord } from "../../lib/api";
 
 /**
@@ -11,6 +12,7 @@ import type { CoordinatorMessageRecord } from "../../lib/api";
  * simile a un executive note: avatar, metadati, contenuto leggibile e poco boxy.
  */
 export function MessageBubble({ message }: { message: CoordinatorMessageRecord }) {
+  const t = useT();
   const isOwner = message.role === "owner";
   return (
     <div className={cn("flex w-full gap-2.5", isOwner ? "justify-end" : "justify-start")}>
@@ -29,7 +31,9 @@ export function MessageBubble({ message }: { message: CoordinatorMessageRecord }
       >
         <div className="text-eyebrow flex items-center gap-2 normal-case tracking-normal font-normal text-muted-foreground">
           <span className="font-medium text-foreground/80">
-            {isOwner ? "You" : "Supreme Coordinator"}
+            {isOwner
+              ? t("messageBubble.you", "You")
+              : t("messageBubble.supremeCoordinator", "Supreme Coordinator")}
           </span>
           <span aria-hidden>·</span>
           <span>{formatTime(new Date(message.created))}</span>

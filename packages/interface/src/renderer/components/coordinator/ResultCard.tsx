@@ -2,6 +2,7 @@ import { ArrowRight } from "lucide-react";
 import { BaseCard } from "../dashboard/BaseCard";
 import { Button } from "../ui/button";
 import type { CoordinatorIntakeResult } from "../../lib/api";
+import { useT } from "../../i18n/i18n";
 
 /**
  * Card di preview del risultato di un messaggio del coordinator.
@@ -9,6 +10,7 @@ import type { CoordinatorIntakeResult } from "../../lib/api";
  * appena creato.
  */
 export function ResultCard({ result }: { result: CoordinatorIntakeResult }) {
+  const t = useT();
   return (
     <BaseCard padding="compact" className="mt-2 w-full max-w-md gap-2 bg-surface-raised">
       <div className="flex items-start justify-between gap-2">
@@ -18,9 +20,15 @@ export function ResultCard({ result }: { result: CoordinatorIntakeResult }) {
         </div>
       </div>
       <div className="grid grid-cols-3 gap-2">
-        <Stat label="Client" value={result.client.name} />
-        <Stat label="Artifacts" value={String(result.artifacts.length)} />
-        <Stat label="Approvals" value={String(result.approvals.length)} />
+        <Stat label={t("resultCard.client", "Client")} value={result.client.name} />
+        <Stat
+          label={t("resultCard.artifacts", "Artifacts")}
+          value={String(result.artifacts.length)}
+        />
+        <Stat
+          label={t("resultCard.approvals", "Approvals")}
+          value={String(result.approvals.length)}
+        />
       </div>
       {result.next_actions.length > 0 ? (
         <div className="rounded-md border border-border/60 bg-surface-subtle p-2 text-body-secondary text-foreground">
@@ -29,7 +37,7 @@ export function ResultCard({ result }: { result: CoordinatorIntakeResult }) {
       ) : null}
       <div className="flex justify-end">
         <Button variant="ghost" size="sm">
-          Open opportunity
+          {t("resultCard.openOpportunity", "Open opportunity")}
           <ArrowRight className="h-3 w-3" />
         </Button>
       </div>

@@ -11,6 +11,8 @@ import { agentAbbr, runTone, type Tone } from "../lib/tone";
 import { formatLabel, timeAgo } from "../lib/format";
 import type { CapabilityDefinition, RunRecord } from "../lib/api";
 import type { DashboardState } from "../lib/types";
+import { useT } from "../i18n/i18n";
+import type { TFunction } from "../i18n/i18n";
 
 // Run statuses that mean the agent is actively working right now (mirrors the
 // Agent Layer footer so the two surfaces stay consistent).
@@ -48,24 +50,33 @@ interface AgentRuntimeState {
   label: string;
   detail: string;
   tone: Tone;
+  active: boolean;
 }
 
-function agentRuntimeState(agentId: string, runs: RunRecord[]): AgentRuntimeState {
+function agentRuntimeState(agentId: string, runs: RunRecord[], t: TFunction): AgentRuntimeState {
   const run = latestRunForAgent(agentId, runs);
   if (!run) {
-    return { label: "Idle", detail: "No active run", tone: "neutral" };
+    return {
+      label: t("agents.idle", "Idle"),
+      detail: t("agents.noActiveRun", "No active run"),
+      tone: "neutral",
+      active: false,
+    };
   }
   const active = ACTIVE_RUN_STATUSES.has(run.status);
+  const phase = active ? t("agents.runPhaseCurrent", "Current") : t("agents.runPhaseLast", "Last");
   return {
-    label: active ? "Running" : formatLabel(run.status),
-    detail: `${active ? "Current" : "Last"} run · ${formatLabel(run.type)} · ${timeAgo(
+    label: active ? t("agents.running", "Running") : formatLabel(run.status),
+    detail: `${phase} ${t("agents.runWord", "run")} · ${formatLabel(run.type)} · ${timeAgo(
       run.updated ?? run.created,
     )}`,
     tone: active ? "info" : runTone(run.status),
+    active,
   };
 }
 
 export function AgentsView({ state }: { state: DashboardState }) {
+  const t = useT();
   const readyCapabilities = state.capabilities.filter(
     (capability) => capability.status === "configured" || capability.status === "available",
   ).length;
@@ -73,7 +84,7 @@ export function AgentsView({ state }: { state: DashboardState }) {
     (capability) => capability.risk_class === "high" || capability.risk_class === "critical",
   ).length;
   const activeAgents = state.agents.filter(
-    (agent) => agentRuntimeState(agent.id, state.runs).label === "Running",
+    (agent) => agentRuntimeState(agent.id, state.runs, t).active,
   ).length;
   const assignedTo = (agentId: string): CapabilityDefinition[] =>
     state.capabilities.filter(
@@ -86,28 +97,33 @@ export function AgentsView({ state }: { state: DashboardState }) {
       .map(([action]) => action);
 
   return (
-    <SectionShell title="Agents" description="The autonomous organization and role boundaries.">
+    <SectionShell
+      title={t("agents.title", "Agents")}
+      description={t("agents.description", "The autonomous organization and role boundaries.")}
+    >
       <KpiBar>
         <MetricTile
-          label="Agents"
+          label={t("agents.agentsLabel", "Agents")}
           value={String(state.agents.length)}
           detail={
-            activeAgents > 0 ? `${activeAgents} with an active run` : "Role contracts · all idle"
+            activeAgents > 0
+              ? `${activeAgents} ${t("agents.withActiveRun", "with an active run")}`
+              : t("agents.roleContractsIdle", "Role contracts · all idle")
           }
           icon={Bot}
           tone={activeAgents > 0 ? "info" : "neutral"}
         />
         <MetricTile
-          label="Capabilities ready"
+          label={t("agents.capabilitiesReady", "Capabilities ready")}
           value={String(readyCapabilities)}
-          detail={`${state.capabilities.length} in catalog · configured or available`}
+          detail={`${state.capabilities.length} ${t("agents.inCatalogConfiguredOrAvailable", "in catalog · configured or available")}`}
           icon={Wrench}
           tone="success"
         />
         <MetricTile
-          label="High risk"
+          label={t("agents.highRisk", "High risk")}
           value={String(highRisk)}
-          detail="Approval-sensitive tools"
+          detail={t("agents.approvalSensitiveTools", "Approval-sensitive tools")}
           icon={ShieldCheck}
           tone={highRisk > 0 ? "warning" : "success"}
         />
@@ -115,7 +131,7 @@ export function AgentsView({ state }: { state: DashboardState }) {
 
       <div className="mt-section grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {state.agents.map((agent) => {
-          const runtime = agentRuntimeState(agent.id, state.runs);
+          const runtime = agentRuntimeState(agent.id, state.runs, t);
           return (
             <BaseCard key={agent.id} className="gap-3">
               <div className="flex items-start gap-3">
@@ -145,13 +161,16 @@ export function AgentsView({ state }: { state: DashboardState }) {
                       <TooltipContent>
                         <div className="font-medium">{capability.name}</div>
                         <div className="text-meta mt-0.5">
-                          {enabledActions(capability).join(", ") || "no enabled actions"}
+                          {enabledActions(capability).join(", ") ||
+                            t("agents.noEnabledActionsLower", "no enabled actions")}
                         </div>
                       </TooltipContent>
                     </Tooltip>
                   ))}
                 {assignedTo(agent.id).length === 0 ? (
-                  <span className="text-meta">No capability assigned</span>
+                  <span className="text-meta">
+                    {t("agents.noCapabilityAssigned", "No capability assigned")}
+                  </span>
                 ) : null}
               </div>
             </BaseCard>
@@ -161,11 +180,11 @@ export function AgentsView({ state }: { state: DashboardState }) {
 
       <ResponsiveTable className="mt-5" minWidth={840}>
         <div className="grid grid-cols-[170px_90px_100px_minmax(0,1.5fr)_minmax(0,1fr)] bg-surface-subtle/60 px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          <span>Capability</span>
-          <span>Type</span>
-          <span>Status</span>
-          <span>Enabled actions</span>
-          <span>Required approvals</span>
+          <span>{t("agents.colCapability", "Capability")}</span>
+          <span>{t("agents.colType", "Type")}</span>
+          <span>{t("agents.colStatus", "Status")}</span>
+          <span>{t("agents.colEnabledActions", "Enabled actions")}</span>
+          <span>{t("agents.colRequiredApprovals", "Required approvals")}</span>
         </div>
         {state.capabilities.map((capability) => (
           <div
@@ -181,12 +200,13 @@ export function AgentsView({ state }: { state: DashboardState }) {
             <span className="text-muted-foreground">{capability.type}</span>
             <StatusPill value={capability.status} tone={capabilityStatusTone(capability.status)} />
             <span className="truncate text-muted-foreground">
-              {enabledActions(capability).join(", ") || "No enabled actions"}
+              {enabledActions(capability).join(", ") ||
+                t("agents.noEnabledActions", "No enabled actions")}
             </span>
             <span className="truncate text-muted-foreground">
               {capability.required_approvals.length
                 ? capability.required_approvals.join(", ")
-                : "No owner decision"}
+                : t("agents.noOwnerDecision", "No owner decision")}
             </span>
           </div>
         ))}

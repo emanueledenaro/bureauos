@@ -23,6 +23,13 @@ import { formatLabel, timeAgo } from "../lib/format";
 import { runTone, type Tone } from "../lib/tone";
 import { approvalMatchesRun, approvalRiskLevel, approvalRiskTone } from "../lib/approvals";
 import type { ApprovalRecord, ArtifactRecord, AuditEvent, RunRecord } from "../lib/api";
+import { useT, type TFunction } from "../i18n/i18n";
+
+// Default resolver for the module-level helpers below: returns the English
+// fallback so the helpers stay translation-aware when a real `t` is threaded in
+// from the rendering component, while remaining usable (and English) when
+// called without one (e.g. unit tests, non-React callers).
+const fallbackT: TFunction = (_key, fallback) => fallback ?? "";
 
 export type TimelineEventIcon =
   | "activity"
@@ -83,7 +90,7 @@ export function runRiskLevel(run: RunRecord): RunRiskLevel {
   return "low";
 }
 
-export function runSourceIssue(run: RunRecord): string {
+export function runSourceIssue(run: RunRecord, t: TFunction = fallbackT): string {
   if (run.source_work_item_type === "linear_issue" && run.source_work_item_id) {
     return run.source_work_item_id;
   }
@@ -91,68 +98,88 @@ export function runSourceIssue(run: RunRecord): string {
   const source = run.trigger_source ?? "";
   const linear = /linear:\/\/issue\/([A-Z]+-\d+)/i.exec(source);
   if (linear?.[1]) return linear[1].toUpperCase();
-  return "No linked issue";
+  return t("timeline.noLinkedIssue", "No linked issue");
 }
 
-export function runBlockingReason(run: RunRecord): string | undefined {
+export function runBlockingReason(run: RunRecord, t: TFunction = fallbackT): string | undefined {
   const blockers = Array.isArray(run.blockers) ? run.blockers.join(", ") : run.blockers;
   return (
     run.blocking_reason ||
     blockers ||
     run.dispatch_error ||
     run.error ||
-    (run.status === "needs_human" ? "Owner approval or decision required." : undefined)
+    (run.status === "needs_human"
+      ? t("timeline.blockerOwnerApproval", "Owner approval or decision required.")
+      : undefined)
   );
 }
 
-export function runNextAction(run: RunRecord): string {
+export function runNextAction(run: RunRecord, t: TFunction = fallbackT): string {
   if (run.next_action) return run.next_action;
   if (run.status === "failed") {
-    return "Review the failure evidence and retry only after the blocker is clear.";
+    return t(
+      "timeline.nextActionFailed",
+      "Review the failure evidence and retry only after the blocker is clear.",
+    );
   }
-  if (run.status === "blocked") return "Resolve the blocker before dispatching more work.";
-  if (run.status === "needs_human") return "Review the required approval or decision.";
-  return "No blocking action required.";
+  if (run.status === "blocked") {
+    return t("timeline.nextActionBlocked", "Resolve the blocker before dispatching more work.");
+  }
+  if (run.status === "needs_human") {
+    return t("timeline.nextActionNeedsHuman", "Review the required approval or decision.");
+  }
+  return t("timeline.nextActionNone", "No blocking action required.");
 }
 
-export function timelineEventPresentation(event: AuditEvent): TimelineEventPresentation {
+export function timelineEventPresentation(
+  event: AuditEvent,
+  t: TFunction = fallbackT,
+): TimelineEventPresentation {
   const action = event.action.toLowerCase();
   const target = (event.target ?? "").toLowerCase();
   const descriptor = `${action} ${target}`;
 
   if (event.result !== "ok") {
-    return { icon: "audit", label: "Attention needed", tone: "danger" };
+    return {
+      icon: "audit",
+      label: t("timeline.categoryAttention", "Attention needed"),
+      tone: "danger",
+    };
   }
   if (descriptor.includes("approval")) {
-    return { icon: "approval", label: "Approval", tone: "warning" };
+    return { icon: "approval", label: t("timeline.categoryApproval", "Approval"), tone: "warning" };
   }
   if (descriptor.includes("policy")) {
-    return { icon: "policy", label: "Policy", tone: "warning" };
+    return { icon: "policy", label: t("timeline.categoryPolicy", "Policy"), tone: "warning" };
   }
   if (
     descriptor.includes("github") ||
     descriptor.includes("pull") ||
     descriptor.includes("issue")
   ) {
-    return { icon: "github", label: "GitHub", tone: "info" };
+    return { icon: "github", label: t("timeline.categoryGithub", "GitHub"), tone: "info" };
   }
   if (descriptor.includes("memory")) {
-    return { icon: "memory", label: "Memory", tone: "success" };
+    return { icon: "memory", label: t("timeline.categoryMemory", "Memory"), tone: "success" };
   }
   if (descriptor.includes("provider") || descriptor.includes("auth")) {
-    return { icon: "provider", label: "Provider", tone: "info" };
+    return { icon: "provider", label: t("timeline.categoryProvider", "Provider"), tone: "info" };
   }
   if (
     descriptor.includes("coordinator") ||
     descriptor.includes("chat") ||
     descriptor.includes("message")
   ) {
-    return { icon: "chat", label: "Coordinator", tone: "success" };
+    return {
+      icon: "chat",
+      label: t("timeline.categoryCoordinator", "Coordinator"),
+      tone: "success",
+    };
   }
   if (descriptor.includes("report") || descriptor.includes("artifact")) {
-    return { icon: "report", label: "Report", tone: "neutral" };
+    return { icon: "report", label: t("timeline.categoryReport", "Report"), tone: "neutral" };
   }
-  return { icon: "activity", label: "Activity", tone: "neutral" };
+  return { icon: "activity", label: t("timeline.categoryActivity", "Activity"), tone: "neutral" };
 }
 
 export function TimelineView({
@@ -168,6 +195,7 @@ export function TimelineView({
   approvals?: ApprovalRecord[];
   resolvedApprovals?: ApprovalRecord[];
 }) {
+  const t = useT();
   const sortedRuns = useMemo(
     () => [...runs].sort((a, b) => (b.created ?? "").localeCompare(a.created ?? "")),
     [runs],
@@ -202,7 +230,7 @@ export function TimelineView({
         .sort((a, b) => (b.updated ?? b.created ?? "").localeCompare(a.updated ?? a.created ?? ""))
     : [];
   const selectedRunRisk = selectedRun ? runRiskLevel(selectedRun) : "low";
-  const selectedRunBlocker = selectedRun ? runBlockingReason(selectedRun) : undefined;
+  const selectedRunBlocker = selectedRun ? runBlockingReason(selectedRun, t) : undefined;
   const visible = [...events]
     .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
     .slice(0, 6)
@@ -228,15 +256,20 @@ export function TimelineView({
           <div>
             <div className="flex items-center gap-2">
               <CircleDot className="h-3.5 w-3.5 text-muted-foreground" />
-              <h2 className="text-[14px] font-semibold text-foreground">Run Timeline</h2>
+              <h2 className="text-[14px] font-semibold text-foreground">
+                {t("timeline.runTimelineTitle", "Run Timeline")}
+              </h2>
             </div>
             <p className="mt-0.5 text-[11px] text-muted-foreground">
-              Request, agent work, policy events, artifacts, and outcome for each run.
+              {t(
+                "timeline.runTimelineDescription",
+                "Request, agent work, policy events, artifacts, and outcome for each run.",
+              )}
             </p>
           </div>
           <div className="hidden items-center gap-2 text-[11px] text-muted-foreground sm:flex">
             <Clock3 className="h-3.5 w-3.5" />
-            {sortedRuns.length} runs
+            {sortedRuns.length} {t("timeline.runsCountLabel", "runs")}
           </div>
         </div>
 
@@ -244,9 +277,9 @@ export function TimelineView({
           <div className="grid gap-0 lg:grid-cols-[minmax(280px,360px)_1fr]">
             <div className="border-b border-border/60 lg:border-r lg:border-b-0">
               <div className="grid grid-cols-[74px_minmax(0,1fr)_74px] border-b border-border/60 px-4 py-2 text-[10px] font-semibold uppercase text-muted-foreground">
-                <span>Status</span>
-                <span>Run</span>
-                <span className="text-right">Risk</span>
+                <span>{t("timeline.colStatus", "Status")}</span>
+                <span>{t("timeline.colRun", "Run")}</span>
+                <span className="text-right">{t("timeline.colRisk", "Risk")}</span>
               </div>
               <div className="max-h-[420px] overflow-y-auto">
                 {sortedRuns.slice(0, 12).map((run) => {
@@ -270,7 +303,7 @@ export function TimelineView({
                           {run.scope}
                         </span>
                         <span className="mt-1 block truncate text-[10px] text-muted-foreground/80">
-                          {run.created_by ?? "supreme_coordinator"} · {runSourceIssue(run)}
+                          {run.created_by ?? "supreme_coordinator"} · {runSourceIssue(run, t)}
                         </span>
                       </span>
                       <span className="flex justify-end">
@@ -291,7 +324,7 @@ export function TimelineView({
                       tone={runTone(selectedRun.status)}
                     />
                     <StatusPill
-                      value={`${selectedRunRisk} risk`}
+                      value={`${selectedRunRisk} ${t("timeline.riskSuffix", "risk")}`}
                       tone={riskTone[selectedRunRisk]}
                     />
                   </div>
@@ -299,11 +332,22 @@ export function TimelineView({
                     {selectedRun.scope}
                   </h3>
                   <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                    <span>Owner: {selectedRun.created_by ?? "supreme_coordinator"}</span>
-                    <span>Source issue: {runSourceIssue(selectedRun)}</span>
-                    <span>Created: {timeAgo(selectedRun.created)}</span>
+                    <span>
+                      {t("timeline.ownerLabel", "Owner")}:{" "}
+                      {selectedRun.created_by ?? "supreme_coordinator"}
+                    </span>
+                    <span>
+                      {t("timeline.sourceIssueLabel", "Source issue")}:{" "}
+                      {runSourceIssue(selectedRun, t)}
+                    </span>
+                    <span>
+                      {t("timeline.createdLabel", "Created")}: {timeAgo(selectedRun.created)}
+                    </span>
                     {selectedRun.completed ? (
-                      <span>Completed: {timeAgo(selectedRun.completed)}</span>
+                      <span>
+                        {t("timeline.completedLabel", "Completed")}:{" "}
+                        {timeAgo(selectedRun.completed)}
+                      </span>
                     ) : null}
                   </div>
                 </div>
@@ -313,11 +357,11 @@ export function TimelineView({
                 <div className="mt-4 rounded-md border border-warning/40 bg-warning-subtle/30 p-3">
                   <div className="flex items-center gap-2 text-[12px] font-semibold text-warning">
                     <AlertTriangle className="h-3.5 w-3.5" />
-                    Blocking reason
+                    {t("timeline.blockingReason", "Blocking reason")}
                   </div>
                   <div className="mt-1 text-[11px] text-foreground">{selectedRunBlocker}</div>
                   <div className="mt-1 text-[11px] text-muted-foreground">
-                    Next: {runNextAction(selectedRun)}
+                    {t("timeline.nextLabel", "Next")}: {runNextAction(selectedRun, t)}
                   </div>
                 </div>
               ) : null}
@@ -326,11 +370,13 @@ export function TimelineView({
                 <div className="mt-4 rounded-md border border-border/60 bg-surface-subtle/30">
                   <div className="flex items-center justify-between gap-2 border-b border-border/60 px-3 py-2">
                     <div className="text-[11px] font-semibold uppercase text-muted-foreground">
-                      Approval gates
+                      {t("timeline.approvalGates", "Approval gates")}
                     </div>
                     <span className="text-[10px] text-muted-foreground">
-                      {selectedRunApprovals.length} decision
-                      {selectedRunApprovals.length === 1 ? "" : "s"}
+                      {selectedRunApprovals.length}{" "}
+                      {selectedRunApprovals.length === 1
+                        ? t("timeline.decisionSingular", "decision")
+                        : t("timeline.decisionPlural", "decisions")}
                     </span>
                   </div>
                   <div className="divide-y divide-border/60">
@@ -374,7 +420,7 @@ export function TimelineView({
               <div className="mt-4 grid gap-4 xl:grid-cols-2">
                 <div>
                   <div className="text-[11px] font-semibold uppercase text-muted-foreground">
-                    Ordered events
+                    {t("timeline.orderedEvents", "Ordered events")}
                   </div>
                   <div className="mt-2 divide-y divide-border/60 rounded-md border border-border/60">
                     {selectedRunEvents.length > 0 ? (
@@ -392,7 +438,7 @@ export function TimelineView({
                       ))
                     ) : (
                       <div className="px-3 py-3 text-[11px] text-muted-foreground">
-                        No run-scoped audit events yet.
+                        {t("timeline.noRunEvents", "No run-scoped audit events yet.")}
                       </div>
                     )}
                   </div>
@@ -400,7 +446,7 @@ export function TimelineView({
 
                 <div>
                   <div className="text-[11px] font-semibold uppercase text-muted-foreground">
-                    Artifacts
+                    {t("timeline.artifacts", "Artifacts")}
                   </div>
                   <div className="mt-2 divide-y divide-border/60 rounded-md border border-border/60">
                     {selectedRunArtifacts.length > 0 ? (
@@ -427,7 +473,7 @@ export function TimelineView({
                       ))
                     ) : (
                       <div className="px-3 py-3 text-[11px] text-muted-foreground">
-                        No artifacts attached to this run.
+                        {t("timeline.noArtifacts", "No artifacts attached to this run.")}
                       </div>
                     )}
                   </div>
@@ -438,8 +484,11 @@ export function TimelineView({
         ) : (
           <div className="px-5 py-5">
             <EmptyState
-              title="No runs yet"
-              description="Run intake, dispatch, verification, blockers, and artifacts will appear here."
+              title={t("timeline.noRunsTitle", "No runs yet")}
+              description={t(
+                "timeline.noRunsDescription",
+                "Run intake, dispatch, verification, blockers, and artifacts will appear here.",
+              )}
             />
           </div>
         )}
@@ -451,15 +500,18 @@ export function TimelineView({
             <div className="flex items-center gap-2">
               <Activity className="h-3.5 w-3.5 text-muted-foreground" />
               <h2 className="text-[14px] font-semibold text-foreground">
-                Live Operations Timeline
+                {t("timeline.liveOpsTitle", "Live Operations Timeline")}
               </h2>
             </div>
             <p className="mt-0.5 text-[11px] text-muted-foreground">
-              Real-time autonomous activity across the company.
+              {t(
+                "timeline.liveOpsDescription",
+                "Real-time autonomous activity across the company.",
+              )}
             </p>
           </div>
           <Button variant="ghost" size="sm">
-            View all
+            {t("timeline.viewAll", "View all")}
             <ChevronRight className="h-3 w-3" />
           </Button>
         </div>
@@ -468,7 +520,7 @@ export function TimelineView({
             <div className="absolute right-9 top-[34px] left-9 hidden border-t border-dashed border-border/60 md:block" />
             <div className="grid gap-x-3 gap-y-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-6">
               {visible.map((event, index) => {
-                const presentation = timelineEventPresentation(event);
+                const presentation = timelineEventPresentation(event, t);
                 const Icon = timelineIcons[presentation.icon];
                 return (
                   <div key={`${event.timestamp}-${index}`} className="relative min-w-0">
@@ -503,8 +555,11 @@ export function TimelineView({
         ) : (
           <div className="px-5 py-5">
             <EmptyState
-              title="No live operations yet"
-              description="Audit events, intake runs, approvals, GitHub signals, and report generation will stream here."
+              title={t("timeline.noLiveOpsTitle", "No live operations yet")}
+              description={t(
+                "timeline.noLiveOpsDescription",
+                "Audit events, intake runs, approvals, GitHub signals, and report generation will stream here.",
+              )}
             />
           </div>
         )}
@@ -514,19 +569,25 @@ export function TimelineView({
             <div>
               <div className="flex items-center gap-1.5">
                 <GitBranch className="h-3 w-3 text-muted-foreground" />
-                <span className="text-[11px] font-semibold text-foreground">GitHub Signals</span>
+                <span className="text-[11px] font-semibold text-foreground">
+                  {t("timeline.githubSignals", "GitHub Signals")}
+                </span>
               </div>
               <div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground">
                 {failingChecks > 0 ? (
                   <span className="flex items-center gap-1 text-danger">
                     <AlertTriangle className="h-3 w-3" />
-                    {failingChecks} failing
+                    {failingChecks} {t("timeline.failing", "failing")}
                   </span>
                 ) : (
-                  <span className="text-success">All checks green</span>
+                  <span className="text-success">
+                    {t("timeline.allChecksGreen", "All checks green")}
+                  </span>
                 )}
                 <span>·</span>
-                <span>{staleWork} stale</span>
+                <span>
+                  {staleWork} {t("timeline.stale", "stale")}
+                </span>
               </div>
             </div>
             <div className="grid gap-2 sm:grid-cols-3">
@@ -544,10 +605,10 @@ export function TimelineView({
                   </div>
                   <div className="mt-2 flex flex-wrap gap-1 text-[10px]">
                     <span className="rounded border border-border/60 bg-surface-raised px-1.5 py-0.5 text-muted-foreground">
-                      PR {report.pull_requests_count ?? 0}
+                      {t("timeline.prBadge", "PR")} {report.pull_requests_count ?? 0}
                     </span>
                     <span className="rounded border border-border/60 bg-surface-raised px-1.5 py-0.5 text-muted-foreground">
-                      CI {report.checks_count ?? 0}
+                      {t("timeline.ciBadge", "CI")} {report.checks_count ?? 0}
                     </span>
                     <span
                       className={cn(
@@ -557,7 +618,7 @@ export function TimelineView({
                           : "border-border/60 bg-surface-raised text-muted-foreground",
                       )}
                     >
-                      Fail {report.failing_checks_count ?? 0}
+                      {t("timeline.failBadge", "Fail")} {report.failing_checks_count ?? 0}
                     </span>
                   </div>
                 </div>

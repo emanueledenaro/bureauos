@@ -8,6 +8,7 @@ import { BaseCard, BaseCardHeader } from "../components/dashboard/BaseCard";
 import { KpiBar } from "../components/dashboard/KpiBar";
 import { ViewToolbar } from "../components/dashboard/ViewToolbar";
 import { useAsyncAction } from "../hooks/useAsyncAction";
+import { useT } from "../i18n/i18n";
 import { clientName } from "../lib/builders";
 import { formatLabel, timeAgo } from "../lib/format";
 import type {
@@ -26,11 +27,14 @@ const policyTone: Record<PolicyExplainOutcome, Tone> = {
   escalate: "warning",
 };
 
-function policyOutcomeLabel(outcome: PolicyExplainOutcome): string {
-  if (outcome === "allow") return "Allowed";
-  if (outcome === "deny") return "Denied";
-  if (outcome === "require_approval") return "Approval Required";
-  return "Escalated";
+function policyOutcomeLabel(
+  outcome: PolicyExplainOutcome,
+  t: (key: string, fallback: string) => string,
+): string {
+  if (outcome === "allow") return t("risk.outcomeAllowed", "Allowed");
+  if (outcome === "deny") return t("risk.outcomeDenied", "Denied");
+  if (outcome === "require_approval") return t("risk.outcomeApprovalRequired", "Approval Required");
+  return t("risk.outcomeEscalated", "Escalated");
 }
 
 function decisionTitle(decision: PolicyExplainDecision): string {
@@ -54,16 +58,17 @@ function runBlocker(run: RunRecord): string {
   );
 }
 
-function retryLineage(run: RunRecord): string {
+function retryLineage(run: RunRecord, t: (key: string, fallback: string) => string): string {
   if (run.retry_parent_run_id) {
-    return `Retry ${run.retry_attempt ?? "?"}/${run.retry_max_attempts ?? "?"} of ${run.retry_parent_run_id}`;
+    return `${t("risk.retryLineageRetry", "Retry")} ${run.retry_attempt ?? "?"}/${run.retry_max_attempts ?? "?"} ${t("risk.retryLineageOf", "of")} ${run.retry_parent_run_id}`;
   }
   if (run.retry_child_runs?.length) {
-    return `${run.retry_child_runs.length} retry run${run.retry_child_runs.length === 1 ? "" : "s"} started`;
+    return `${run.retry_child_runs.length} ${run.retry_child_runs.length === 1 ? t("risk.retryLineageRunStarted", "retry run started") : t("risk.retryLineageRunsStarted", "retry runs started")}`;
   }
-  if (run.retry_escalated_at) return `Escalated ${timeAgo(run.retry_escalated_at)}`;
+  if (run.retry_escalated_at)
+    return `${t("risk.retryLineageEscalated", "Escalated")} ${timeAgo(run.retry_escalated_at)}`;
   if (run.retry_attempts)
-    return `${run.retry_attempts} attempt${run.retry_attempts === 1 ? "" : "s"} used`;
+    return `${run.retry_attempts} ${run.retry_attempts === 1 ? t("risk.retryLineageAttemptUsed", "attempt used") : t("risk.retryLineageAttemptsUsed", "attempts used")}`;
   return "";
 }
 
@@ -74,6 +79,7 @@ export function RiskView({
   state: DashboardState;
   onRetryScan: () => Promise<AutonomousRetryResult>;
 }) {
+  const t = useT();
   const blocked = state.projects.filter((project) => project.status === "blocked");
   const failed = state.runs.filter((run) => run.status === "failed");
   const blockedRuns = state.runs.filter((run) => run.status === "blocked");
@@ -92,16 +98,19 @@ export function RiskView({
 
   return (
     <SectionShell
-      title="Risk"
-      description="Approvals, blocked work, and policy-controlled execution."
+      title={t("risk.title", "Risk")}
+      description={t(
+        "risk.description",
+        "Approvals, blocked work, and policy-controlled execution.",
+      )}
       action={
         <ViewToolbar
           primary={{
-            label: "Retry scan",
+            label: t("risk.retryScan", "Retry scan"),
             icon: RotateCcw,
             onClick: () => void retry.run(),
             busy: retry.busy,
-            busyLabel: "Retrying",
+            busyLabel: t("risk.retrying", "Retrying"),
           }}
         />
       }
@@ -109,7 +118,7 @@ export function RiskView({
       {retry.error ? (
         <ActionBanner
           tone="danger"
-          title="Retry scan failed"
+          title={t("risk.retryScanFailed", "Retry scan failed")}
           detail={retry.error}
           onDismiss={retry.reset}
           className="mb-3"
@@ -118,31 +127,31 @@ export function RiskView({
       {latestRetryReport ? (
         <ActionBanner
           tone="info"
-          title="Last retry scan"
-          detail={`${latestRetryReport.retry_count ?? 0} retries · ${latestRetryReport.escalation_count ?? 0} escalations · ${latestRetryReport.created ? timeAgo(latestRetryReport.created) : "now"} · max ${latestRetryReport.max_attempts ?? "policy"}`}
+          title={t("risk.lastRetryScan", "Last retry scan")}
+          detail={`${latestRetryReport.retry_count ?? 0} ${t("risk.retries", "retries")} · ${latestRetryReport.escalation_count ?? 0} ${t("risk.escalations", "escalations")} · ${latestRetryReport.created ? timeAgo(latestRetryReport.created) : t("risk.now", "now")} · ${t("risk.max", "max")} ${latestRetryReport.max_attempts ?? t("risk.policy", "policy")}`}
           className="mb-3"
         />
       ) : null}
 
       <KpiBar>
         <MetricTile
-          label="Pending approvals"
+          label={t("risk.pendingApprovals", "Pending approvals")}
           value={String(state.approvals.length)}
-          detail="Owner review required"
+          detail={t("risk.ownerReviewRequired", "Owner review required")}
           icon={ShieldCheck}
           tone={state.approvals.length > 0 ? "warning" : "success"}
         />
         <MetricTile
-          label="Blocked projects"
+          label={t("risk.blockedProjects", "Blocked projects")}
           value={String(blocked.length)}
-          detail="Delivery risk"
+          detail={t("risk.deliveryRisk", "Delivery risk")}
           icon={AlertTriangle}
           tone={blocked.length > 0 ? "danger" : "success"}
         />
         <MetricTile
-          label="Run recovery"
+          label={t("risk.runRecovery", "Run recovery")}
           value={String(failed.length + blockedRuns.length)}
-          detail="Failed or blocked runs"
+          detail={t("risk.failedOrBlockedRuns", "Failed or blocked runs")}
           icon={ShieldAlert}
           tone={failed.length + blockedRuns.length > 0 ? "danger" : "success"}
         />
@@ -151,21 +160,29 @@ export function RiskView({
       <div className="mt-section rounded-lg border border-border/70 bg-surface-subtle/60 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="text-[13px] font-semibold text-foreground">Policy Explain</div>
+            <div className="text-[13px] font-semibold text-foreground">
+              {t("risk.policyExplain", "Policy Explain")}
+            </div>
             <div className="mt-1 text-[10px] text-muted-foreground">
               {policyExplain
-                ? `${policyExplain.decisions.length} recent decisions · ${policyExplain.counts.require_approval} approval gates`
-                : "Loading policy decisions"}
+                ? `${policyExplain.decisions.length} ${t("risk.recentDecisions", "recent decisions")} · ${policyExplain.counts.require_approval} ${t("risk.approvalGates", "approval gates")}`
+                : t("risk.loadingPolicyDecisions", "Loading policy decisions")}
             </div>
           </div>
           <div className="flex flex-wrap justify-end gap-1.5">
-            <StatusPill value={`Allow ${policyExplain?.counts.allow ?? 0}`} tone="success" />
-            <StatusPill value={`Deny ${policyExplain?.counts.deny ?? 0}`} tone="danger" />
+            <StatusPill
+              value={`${t("risk.allow", "Allow")} ${policyExplain?.counts.allow ?? 0}`}
+              tone="success"
+            />
+            <StatusPill
+              value={`${t("risk.deny", "Deny")} ${policyExplain?.counts.deny ?? 0}`}
+              tone="danger"
+            />
             {/* "Gated" = recent policy DECISIONS that required approval — distinct
                 from the "Pending approvals" KPI above (the owner's pending queue).
                 Labeled to avoid reading as a contradictory approval count (SER-224). */}
             <StatusPill
-              value={`Gated ${policyExplain?.counts.require_approval ?? 0}`}
+              value={`${t("risk.gated", "Gated")} ${policyExplain?.counts.require_approval ?? 0}`}
               tone="warning"
             />
           </div>
@@ -174,8 +191,11 @@ export function RiskView({
         {!policyExplain ? (
           <EmptyState
             className="mt-3"
-            title="Loading policy decisions"
-            description="Fetching recent capability checks and their policy outcomes."
+            title={t("risk.loadingPolicyDecisions", "Loading policy decisions")}
+            description={t(
+              "risk.loadingPolicyDecisionsDesc",
+              "Fetching recent capability checks and their policy outcomes.",
+            )}
             icon={ShieldCheck}
           />
         ) : policyDecisions.length > 0 ? (
@@ -184,29 +204,31 @@ export function RiskView({
               <BaseCard key={decision.id} className="min-w-0 gap-2">
                 <BaseCardHeader title={decisionTitle(decision)}>
                   <StatusPill
-                    value={policyOutcomeLabel(decision.outcome)}
+                    value={policyOutcomeLabel(decision.outcome, t)}
                     tone={policyTone[decision.outcome]}
                   />
                 </BaseCardHeader>
                 <div className="grid gap-1 text-[10px] text-muted-foreground">
                   <div className="flex justify-between gap-2">
-                    <span>Agent</span>
+                    <span>{t("risk.agent", "Agent")}</span>
                     <span className="truncate font-mono text-foreground">{decision.agent}</span>
                   </div>
                   <div className="flex justify-between gap-2">
-                    <span>Rule</span>
+                    <span>{t("risk.rule", "Rule")}</span>
                     <span className="truncate font-mono text-foreground">
                       {decision.matched_rule}
                     </span>
                   </div>
                   <div className="flex justify-between gap-2">
-                    <span>Risk</span>
+                    <span>{t("risk.risk", "Risk")}</span>
                     <span className="truncate text-foreground">{decision.risk_class}</span>
                   </div>
                   <div className="flex justify-between gap-2">
-                    <span>Approval</span>
+                    <span>{t("risk.approval", "Approval")}</span>
                     <span className="truncate text-foreground">
-                      {decision.approval_required ? decision.approval_id || "required" : "none"}
+                      {decision.approval_required
+                        ? decision.approval_id || t("risk.required", "required")
+                        : t("risk.none", "none")}
                     </span>
                   </div>
                 </div>
@@ -234,8 +256,11 @@ export function RiskView({
         ) : (
           <EmptyState
             className="mt-3"
-            title="No policy decisions"
-            description="Capability checks will appear here with their matched rule and approval boundary."
+            title={t("risk.noPolicyDecisions", "No policy decisions")}
+            description={t(
+              "risk.noPolicyDecisionsDesc",
+              "Capability checks will appear here with their matched rule and approval boundary.",
+            )}
             icon={ShieldCheck}
           />
         )}
@@ -245,12 +270,13 @@ export function RiskView({
         {state.approvals.map((approval) => (
           <BaseCard key={approval.id} variant="accent" accentTone="warning" className="gap-2">
             <BaseCardHeader title={formatLabel(approval.action)}>
-              <StatusPill value="Pending" tone="warning" />
+              <StatusPill value={t("risk.pending", "Pending")} tone="warning" />
             </BaseCardHeader>
             <div className="text-body-secondary text-muted-foreground">{approval.scope}</div>
             <div className="text-meta font-mono">{approval.target}</div>
             <div className="text-meta">
-              {approval.actor} · {approval.created ? timeAgo(approval.created) : "now"}
+              {approval.actor} ·{" "}
+              {approval.created ? timeAgo(approval.created) : t("risk.now", "now")}
             </div>
           </BaseCard>
         ))}
@@ -263,12 +289,14 @@ export function RiskView({
             className="gap-2"
           >
             <BaseCardHeader title={project.name}>
-              <StatusPill value="Blocked" tone="danger" />
+              <StatusPill value={t("risk.blocked", "Blocked")} tone="danger" />
             </BaseCardHeader>
             <div className="text-body-secondary text-muted-foreground">
               {clientName(state.clients, project.client_id)}
             </div>
-            <div className="text-meta">{project.stack || "Stack not set"}</div>
+            <div className="text-meta">
+              {project.stack || t("risk.stackNotSet", "Stack not set")}
+            </div>
           </BaseCard>
         ))}
 
@@ -284,8 +312,8 @@ export function RiskView({
             </BaseCardHeader>
             <div className="text-body-secondary text-muted-foreground">{run.scope}</div>
             <div className="text-meta font-mono">{run.id}</div>
-            {retryLineage(run) ? (
-              <div className="text-meta text-muted-foreground">{retryLineage(run)}</div>
+            {retryLineage(run, t) ? (
+              <div className="text-meta text-muted-foreground">{retryLineage(run, t)}</div>
             ) : null}
             {runBlocker(run) ? (
               <div className="line-clamp-2 text-[11px] leading-relaxed text-warning">
@@ -294,12 +322,12 @@ export function RiskView({
             ) : null}
             {run.retry_blocker_approval_id ? (
               <div className="text-meta font-mono text-warning">
-                Approval {run.retry_blocker_approval_id}
+                {t("risk.approval", "Approval")} {run.retry_blocker_approval_id}
               </div>
             ) : null}
             {run.next_retry_at ? (
               <div className="text-meta text-muted-foreground">
-                Next retry {timeAgo(run.next_retry_at)}
+                {t("risk.nextRetry", "Next retry")} {timeAgo(run.next_retry_at)}
               </div>
             ) : null}
           </BaseCard>
@@ -308,8 +336,11 @@ export function RiskView({
         {isClean ? (
           <div className="md:col-span-2">
             <EmptyState
-              title="No active risk"
-              description="Policy gates and blocked project signals will appear here."
+              title={t("risk.noActiveRisk", "No active risk")}
+              description={t(
+                "risk.noActiveRiskDesc",
+                "Policy gates and blocked project signals will appear here.",
+              )}
               icon={ShieldCheck}
             />
           </div>

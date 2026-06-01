@@ -20,3 +20,6 @@ artifacts/interface-visual-qa/
 # Local agent/operator context. Keep public agent guidance in docs instead.
 /AGENTS.md
 /docs/superpowers/
+
+# Claude Code local state (worktrees, agent transcripts)
+.claude/

@@ -8,6 +8,7 @@ import { DataTable, type DataTableColumn } from "../components/dashboard/DataTab
 import { Button } from "../components/ui/button";
 import { buildGoalItems } from "../lib/builders";
 import type { AdaptiveMode, DashboardState, GoalItem } from "../lib/types";
+import { useT } from "../i18n/i18n";
 
 export function GoalsView({
   state,
@@ -16,6 +17,7 @@ export function GoalsView({
   state: DashboardState;
   onModeChange: (mode: AdaptiveMode) => void;
 }) {
+  const t = useT();
   const goals = buildGoalItems(state);
   const averageProgress = goals.length
     ? Math.round(goals.reduce((sum, goal) => sum + goal.progress, 0) / goals.length)
@@ -26,7 +28,7 @@ export function GoalsView({
   const columns: DataTableColumn<GoalItem>[] = [
     {
       id: "milestone",
-      header: "Milestone",
+      header: t("goals.colMilestone", "Milestone"),
       width: "minmax(0,1fr)",
       render: (goal) => (
         <div className="min-w-0">
@@ -37,7 +39,7 @@ export function GoalsView({
     },
     {
       id: "progress",
-      header: "Progress",
+      header: t("goals.colProgress", "Progress"),
       width: "120px",
       render: (goal) => <StatusPill value={`${goal.progress}%`} tone={goal.tone} />,
     },
@@ -49,7 +51,7 @@ export function GoalsView({
       hideOnMobile: true,
       render: (goal) => (
         <Button variant="outline" size="sm" onClick={() => onModeChange(goal.route)}>
-          Open
+          {t("goals.open", "Open")}
           <ArrowRight className="h-3 w-3" />
         </Button>
       ),
@@ -58,28 +60,31 @@ export function GoalsView({
 
   return (
     <SectionShell
-      title="Goals"
-      description="Company OKRs and operating milestones derived from current registries."
+      title={t("goals.title", "Goals")}
+      description={t(
+        "goals.description",
+        "Company OKRs and operating milestones derived from current registries.",
+      )}
     >
       <KpiBar>
         <MetricTile
-          label="Goal health"
+          label={t("goals.goalHealth", "Goal health")}
           value={`${averageProgress}%`}
-          detail="Average objective progress"
+          detail={t("goals.goalHealthDetail", "Average objective progress")}
           icon={Target}
           tone={averageProgress >= 70 ? "success" : averageProgress >= 40 ? "warning" : "danger"}
         />
         <MetricTile
-          label="At risk"
+          label={t("goals.atRisk", "At risk")}
           value={String(atRisk)}
-          detail="Needs owner or coordinator attention"
+          detail={t("goals.atRiskDetail", "Needs owner or coordinator attention")}
           icon={TrendingDown}
           tone={atRisk > 0 ? "warning" : "success"}
         />
         <MetricTile
-          label="Next milestone"
+          label={t("goals.nextMilestone", "Next milestone")}
           value={nextGoal ? `${nextGoal.progress}%` : "0%"}
-          detail={nextGoal?.title ?? "No goals loaded"}
+          detail={nextGoal?.title ?? t("goals.noGoalsLoaded", "No goals loaded")}
           icon={Flag}
           tone={nextGoal?.tone ?? "neutral"}
         />
@@ -98,8 +103,11 @@ export function GoalsView({
         rowKey={(goal) => `milestone:${goal.id}`}
         mobileFallback="cards"
         emptyState={{
-          title: "No goals loaded",
-          description: "Goals derive from the current company registries.",
+          title: t("goals.noGoalsLoaded", "No goals loaded"),
+          description: t(
+            "goals.emptyDescription",
+            "Goals derive from the current company registries.",
+          ),
         }}
       />
     </SectionShell>

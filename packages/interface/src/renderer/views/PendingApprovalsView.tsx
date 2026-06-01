@@ -5,6 +5,7 @@ import { Badge } from "../components/ui/badge";
 import { EmptyState } from "../components/dashboard/EmptyState";
 import { formatLabel, timeAgo } from "../lib/format";
 import type { ApprovalRecord } from "../lib/api";
+import { useT } from "../i18n/i18n";
 
 export function PendingApprovalsView({
   approvals,
@@ -13,19 +14,22 @@ export function PendingApprovalsView({
   approvals: ApprovalRecord[];
   onOpen: () => void;
 }) {
+  const t = useT();
   const visible = approvals.slice(0, 3);
   return (
     <Card className="flex flex-col overflow-hidden">
       <div className="flex items-center justify-between border-b border-border/60 px-5 py-3.5">
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground" />
-          <h2 className="text-[14px] font-semibold text-foreground">Pending Approvals</h2>
+          <h2 className="text-[14px] font-semibold text-foreground">
+            {t("pendingApprovals.title", "Pending Approvals")}
+          </h2>
           <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
             {approvals.length}
           </Badge>
         </div>
         <Button variant="ghost" size="sm" onClick={onOpen}>
-          View all
+          {t("pendingApprovals.viewAll", "View all")}
           <ChevronRight className="h-3 w-3" />
         </Button>
       </div>
@@ -54,7 +58,7 @@ export function PendingApprovalsView({
                 </div>
                 <div className="flex gap-2">
                   <Button size="sm" variant="outline" className="flex-1" onClick={onOpen}>
-                    Review
+                    {t("pendingApprovals.review", "Review")}
                     <ChevronRight className="h-3 w-3" />
                   </Button>
                 </div>
@@ -64,8 +68,11 @@ export function PendingApprovalsView({
         ) : (
           <div className="p-5">
             <EmptyState
-              title="No pending approvals"
-              description="External commitments and high-risk actions will appear here before execution."
+              title={t("pendingApprovals.emptyTitle", "No pending approvals")}
+              description={t(
+                "pendingApprovals.emptyDescription",
+                "External commitments and high-risk actions will appear here before execution.",
+              )}
               icon={ShieldCheck}
             />
           </div>
@@ -73,9 +80,9 @@ export function PendingApprovalsView({
       </div>
       <div className="flex items-center gap-2 border-t border-border/60 px-5 py-3 text-[11px] text-muted-foreground">
         <span className="h-1.5 w-1.5 rounded-full bg-success" />
-        Autonomous mode is handling{" "}
-        <span className="text-foreground">{Math.max(0, 100 - approvals.length * 5)}%</span> of
-        operations.
+        {t("pendingApprovals.autonomousPrefix", "Autonomous mode is handling")}{" "}
+        <span className="text-foreground">{Math.max(0, 100 - approvals.length * 5)}%</span>{" "}
+        {t("pendingApprovals.autonomousSuffix", "of operations.")}
       </div>
     </Card>
   );

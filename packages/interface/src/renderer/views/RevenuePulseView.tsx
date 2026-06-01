@@ -13,6 +13,7 @@ import { Button } from "../components/ui/button";
 import { MetricTile } from "../components/dashboard/MetricTile";
 import { EmptyState } from "../components/dashboard/EmptyState";
 import { formatMoney } from "../lib/format";
+import { useT, type TFunction } from "../i18n/i18n";
 import type {
   ArtifactRecord,
   BusinessReportResult,
@@ -63,16 +64,18 @@ function revenueHistory(
 }
 
 function metricTrend(
+  t: TFunction,
   current: number,
   previous: number | undefined,
   format: (value: number) => string,
 ): { value: string; tone: "success" | "warning" | "neutral" } | undefined {
   if (previous === undefined) return undefined;
   const delta = current - previous;
-  if (delta === 0) return { value: "flat vs last report", tone: "neutral" };
+  if (delta === 0)
+    return { value: t("revenuePulse.trendFlat", "flat vs last report"), tone: "neutral" };
   const prefix = delta > 0 ? "+" : "-";
   return {
-    value: `${prefix}${format(Math.abs(delta))} vs last report`,
+    value: `${prefix}${format(Math.abs(delta))} ${t("revenuePulse.trendVsLastReport", "vs last report")}`,
     tone: delta > 0 ? "success" : "warning",
   };
 }
@@ -108,6 +111,7 @@ export function RevenuePulseView({
   pipelineValue: number;
   onGenerateReport: () => Promise<BusinessReportResult>;
 }) {
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [report, setReport] = useState<BusinessReportResult | undefined>();
 
@@ -152,10 +156,12 @@ export function RevenuePulseView({
         <div>
           <div className="flex items-center gap-2">
             <Wallet className="h-3.5 w-3.5 text-muted-foreground" />
-            <h2 className="text-[14px] font-semibold text-foreground">Revenue Pulse</h2>
+            <h2 className="text-[14px] font-semibold text-foreground">
+              {t("revenuePulse.title", "Revenue Pulse")}
+            </h2>
           </div>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            Revenue and pipeline health from stored BOS records.
+            {t("revenuePulse.description", "Revenue and pipeline health from stored BOS records.")}
           </p>
           <Button
             variant="outline"
@@ -169,63 +175,74 @@ export function RevenuePulseView({
             ) : (
               <ChevronRight className="h-3 w-3" />
             )}
-            {busy ? "Generating" : "View full report"}
+            {busy
+              ? t("revenuePulse.generating", "Generating")
+              : t("revenuePulse.viewFullReport", "View full report")}
           </Button>
           {report ? (
             <div className="mt-2 text-[10px] text-success">
-              Portfolio report {report.cross_project_report.id} ready
+              {t("revenuePulse.portfolioReport", "Portfolio report")}{" "}
+              {report.cross_project_report.id} {t("revenuePulse.ready", "ready")}
             </div>
           ) : null}
         </div>
 
         <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 xl:grid-cols-5">
           <MetricTile
-            label="Pipeline Value"
+            label={t("revenuePulse.pipelineValue", "Pipeline Value")}
             value={formatMoney(pipeline)}
-            detail={hasHistory ? `${history.length} stored snapshots` : "No trend history yet"}
+            detail={
+              hasHistory
+                ? `${history.length} ${t("revenuePulse.storedSnapshots", "stored snapshots")}`
+                : t("revenuePulse.noTrendHistory", "No trend history yet")
+            }
             tone="success"
             icon={DollarSign}
             sparkline={historyValues(history, "pipeline")}
-            trend={metricTrend(pipeline, previous?.pipeline, formatMoney)}
+            trend={metricTrend(t, pipeline, previous?.pipeline, formatMoney)}
           />
           <MetricTile
-            label="Expected Margin"
+            label={t("revenuePulse.expectedMargin", "Expected Margin")}
             value={`${Math.round(margin)}%`}
             detail={
               opportunities.length > 0
-                ? "Average expected margin"
-                : "No opportunity margin data yet"
+                ? t("revenuePulse.averageExpectedMargin", "Average expected margin")
+                : t("revenuePulse.noMarginData", "No opportunity margin data yet")
             }
             tone="info"
             icon={Target}
           />
           <MetricTile
-            label="Active Opportunities"
+            label={t("revenuePulse.activeOpportunities", "Active Opportunities")}
             value={String(active)}
-            detail={hasHistory ? "Tracked from pipeline reports" : "No trend history yet"}
+            detail={
+              hasHistory
+                ? t("revenuePulse.trackedFromReports", "Tracked from pipeline reports")
+                : t("revenuePulse.noTrendHistory", "No trend history yet")
+            }
             tone="warning"
             icon={Activity}
             sparkline={historyValues(history, "active")}
-            trend={metricTrend(active, previous?.active, (value) => String(value))}
+            trend={metricTrend(t, active, previous?.active, (value) => String(value))}
           />
           <MetricTile
-            label="Won Revenue"
+            label={t("revenuePulse.wonRevenue", "Won Revenue")}
             value={formatMoney(won)}
             detail={
               clientIntelligence
-                ? "Closed won value from client memory"
-                : "Waiting for client intelligence"
+                ? t("revenuePulse.closedWonValue", "Closed won value from client memory")
+                : t("revenuePulse.waitingForIntelligence", "Waiting for client intelligence")
             }
             tone="success"
             icon={TrendingUp}
           />
           <MetricTile
-            label="Clients With Pipeline"
+            label={t("revenuePulse.clientsWithPipeline", "Clients With Pipeline")}
             value={String(clientsWithPipeline)}
             detail={
               clientIntelligence
-                ? `${clients.length} clients total`
-                : "Waiting for client intelligence"
+                ? `${clients.length} ${t("revenuePulse.clientsTotal", "clients total")}`
+                : t("revenuePulse.waitingForIntelligence", "Waiting for client intelligence")
             }
             tone="neutral"
             icon={Wallet}
@@ -234,8 +251,12 @@ export function RevenuePulseView({
 
         <div className="rounded-lg border border-border/70 bg-surface-subtle/60 p-4">
           <div className="flex items-center justify-between">
-            <div className="text-[12px] font-semibold text-foreground">Top Clients by LTV</div>
-            <span className="text-[10px] text-muted-foreground">Client memory</span>
+            <div className="text-[12px] font-semibold text-foreground">
+              {t("revenuePulse.topClientsByLtv", "Top Clients by LTV")}
+            </div>
+            <span className="text-[10px] text-muted-foreground">
+              {t("revenuePulse.clientMemory", "Client memory")}
+            </span>
           </div>
           {topClients.length > 0 ? (
             <ol className="mt-3 space-y-2">
@@ -250,7 +271,10 @@ export function RevenuePulseView({
                     </span>
                     <span className="truncate text-foreground">{item.client.name}</span>
                   </div>
-                  <span className="font-mono text-muted-foreground" title="Won + open pipeline">
+                  <span
+                    className="font-mono text-muted-foreground"
+                    title={t("revenuePulse.wonPlusOpenPipeline", "Won + open pipeline")}
+                  >
                     {formatMoney(item.value)}
                   </span>
                 </li>
@@ -258,11 +282,21 @@ export function RevenuePulseView({
             </ol>
           ) : (
             <EmptyState
-              title={clientIntelligence ? "No client revenue yet" : "Client intelligence loading"}
+              title={
+                clientIntelligence
+                  ? t("revenuePulse.noClientRevenue", "No client revenue yet")
+                  : t("revenuePulse.intelligenceLoading", "Client intelligence loading")
+              }
               description={
                 clientIntelligence
-                  ? "Top accounts will appear once durable client revenue or pipeline exists."
-                  : "Top clients use client intelligence, not inferred UI-only totals."
+                  ? t(
+                      "revenuePulse.emptyDescriptionHasIntel",
+                      "Top accounts will appear once durable client revenue or pipeline exists.",
+                    )
+                  : t(
+                      "revenuePulse.emptyDescriptionNoIntel",
+                      "Top clients use client intelligence, not inferred UI-only totals.",
+                    )
               }
               className="mt-3 min-h-0 border-0 bg-transparent p-2"
             />
