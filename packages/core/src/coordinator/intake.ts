@@ -207,6 +207,52 @@ function extractNamedBusiness(message: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Extract an explicitly-stated project name (e.g. "nome del progetto: giovanniprova",
+ * "progetto chiamato X", "project name: X"). The owner's exact casing is preserved
+ * — an explicit name is theirs to spell, so it is NOT title-cased.
+ */
+function extractProjectName(message: string): string | undefined {
+  const patterns = [
+    /\b(?:nome|name)(?:\s+del)?\s+(?:del\s+)?(?:progetto|app)[:\s]+["']?([A-Za-z0-9À-ÿ&'._ -]{2,60}?)["']?(?=[.;,\n]|$)/i,
+    /\b(?:progetto|app)\s+(?:si\s+chiama|chiamato|chiamata|denominato|named|called)\s+["']?([A-Za-z0-9À-ÿ&'._ -]{2,60}?)["']?(?=[.;,\n]|$)/i,
+    /\bproject\s+name[:\s]+["']?([A-Za-z0-9À-ÿ&'._ -]{2,60}?)["']?(?=[.;,\n]|$)/i,
+  ];
+  for (const pattern of patterns) {
+    const match = pattern.exec(message);
+    const raw = cleanBusinessName(match?.[1] ?? "");
+    if (raw && raw.length >= 2) return raw;
+  }
+  return undefined;
+}
+
+/** Frameworks/stacks BureauOS recognizes by name in a request. */
+const TECH_STACKS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/\bflutter\b/i, "Flutter"],
+  [/\breact native\b/i, "React Native"],
+  [/\bswiftui\b|\bswift\b/i, "Swift"],
+  [/\bkotlin\b|\bjetpack compose\b/i, "Kotlin"],
+  [/\bnext\.?js\b/i, "Next.js"],
+  [/\breact\b/i, "React"],
+  [/\bvue(?:\.js)?\b/i, "Vue"],
+  [/\bangular\b/i, "Angular"],
+  [/\bnode(?:\.js)?\b/i, "Node.js"],
+  [/\bdjango\b/i, "Django"],
+  [/\b(?:ruby on )?rails\b/i, "Rails"],
+  [/\blaravel\b/i, "Laravel"],
+  [/\bshopify\b/i, "Shopify"],
+];
+
+/** Detect explicitly-named tech stacks/frameworks in the request, in priority order. */
+function extractTechStack(message: string): string[] {
+  const found: string[] = [];
+  for (const [pattern, label] of TECH_STACKS) {
+    if (pattern.test(message) && !found.includes(label)) found.push(label);
+  }
+  // "React Native" already implies React; don't list both.
+  return found.includes("React Native") ? found.filter((label) => label !== "React") : found;
+}
+
 function hasProjectScopeIntent(message: string): boolean {
   return includesAny(message, [
     "app",
@@ -305,9 +351,16 @@ function classify(input: CoordinatorIntakeInput): IntakeClassification {
             ? "business_operations"
             : "unspecified");
 
+  // An explicitly-stated project name ("nome del progetto: giovanniprova") is
+  // honored verbatim, and — when no business name was given — also names the
+  // client, so the owner's chosen name appears everywhere instead of a generic
+  // "Restaurant Lead" placeholder.
+  const explicitProjectName = extractProjectName(message);
+
   const clientName =
     input.clientName ??
     extractNamedBusiness(message) ??
+    explicitProjectName ??
     (isRestaurant
       ? "Restaurant Lead"
       : isSalon
@@ -341,8 +394,8 @@ function classify(input: CoordinatorIntakeInput): IntakeClassification {
               ? "Website"
               : "Software Project";
 
-  const projectName = input.projectName ?? `${clientName} ${projectLabel}`;
-  const stack =
+  const projectName = input.projectName ?? explicitProjectName ?? `${clientName} ${projectLabel}`;
+  const baseStack =
     projectKind === "mobile_app"
       ? "mobile, api, analytics"
       : projectKind === "booking_website"
@@ -352,6 +405,10 @@ function classify(input: CoordinatorIntakeInput): IntakeClassification {
           : projectKind === "business_automation"
             ? "workflow automation, integrations, dashboard"
             : "web, api, analytics";
+  // Lead the stack with any framework the owner named (e.g. Flutter) so the
+  // technical plan reflects the actual request, not just the project kind.
+  const detectedTech = extractTechStack(message);
+  const stack = detectedTech.length ? [...detectedTech, baseStack].join(", ") : baseStack;
 
   const opportunityTitle = `${projectLabel} for ${clientName}`;
   const riskLevel = includesAny(lower, ["pagamento", "payment", "privacy", "dati", "legal"])
