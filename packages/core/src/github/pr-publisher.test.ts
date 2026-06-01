@@ -171,6 +171,46 @@ describe("GitHubPullRequestPublishService", () => {
     expect(audit).toContain("github.pr_publish.created");
   });
 
+  it("satisfies the linked_issue gate with a Linear issue alone (no numeric GitHub issue) (SER-242)", async () => {
+    // A run tracked only by a Linear issue clears the dev edit_code linked_issue
+    // gate (capability layer, SER-242); the PR publisher must clear the SAME gate
+    // the SAME way, or a Linear-tracked autonomous run would be re-blocked here.
+    const project = await prepareProject();
+    const githubClient = new RecordingGitHubPrClient();
+    const agentEvidence = await writeReadyAgentEvidence("run_pr_linear_only");
+
+    const result = await new GitHubPullRequestPublishService(dir, {
+      config: defaultConfig("agency"),
+      githubClient,
+    }).publish({
+      projectSlug: project.slug,
+      owner: "emanueledenaro",
+      repo: "pizzeria-aurora",
+      title: "Implement booking website",
+      head: "feature/booking-website",
+      base: "main",
+      // Only a Linear issue links the run — deliberately NO linkedIssueNumbers.
+      linkedLinearIssue: {
+        identifier: "SER-242",
+        url: "https://linear.app/serium/issue/SER-242",
+      },
+      testEvidence: ["npm test passed"],
+      runId: "run_pr_linear_only",
+      evidenceArtifactIds: [
+        agentEvidence.qa.id,
+        agentEvidence.reviewer.id,
+        agentEvidence.security.id,
+      ],
+    });
+
+    // The PR opened: the linked_issue gate was satisfied by the Linear issue
+    // alone (no numeric GitHub issue), and was NOT surfaced as a blocker.
+    expect(result.status).toBe("created");
+    expect(githubClient.created).toHaveLength(1);
+    expect(result.approval).toBeUndefined();
+    expect(githubClient.created[0]?.input.body).toContain("[SER-242]");
+  });
+
   it("blocks run-backed PR creation when agent verification artifacts are missing", async () => {
     const project = await prepareProject();
     const githubClient = new RecordingGitHubPrClient();

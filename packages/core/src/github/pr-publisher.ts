@@ -470,7 +470,12 @@ export class GitHubPullRequestPublishService {
     }
 
     const missingGates: string[] = [];
-    if (decision.required_gates.includes("linked_issue") && linkedIssues.length === 0) {
+    // A linked work item satisfies `linked_issue` whether it is a numeric GitHub
+    // issue OR a Linear issue tracking the run — consistent with the capability
+    // layer's gate (SER-242). Without this, a Linear-tracked run that legitimately
+    // cleared the dev `edit_code` gate would be re-blocked here for the same gate.
+    const hasLinkedWorkItem = linkedIssues.length > 0 || Boolean(input.linkedLinearIssue);
+    if (decision.required_gates.includes("linked_issue") && !hasLinkedWorkItem) {
       missingGates.push("linked_issue");
     }
     if (decision.required_gates.includes("tests_required") && testEvidence.length === 0) {

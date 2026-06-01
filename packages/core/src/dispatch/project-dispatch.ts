@@ -12,7 +12,11 @@ import { AuditLog } from "../audit/log.js";
 import { buildDevelopmentExecution } from "../execution/development-execution.js";
 import { ProjectWorkspaceService, type RunCommitResult } from "../execution/project-workspace.js";
 import type { GitHubPullRequestPublishClient } from "../github/pr-publisher.js";
-import { deliverDispatchedRun, type DispatchDeliveryResult } from "./delivery.js";
+import {
+  deliverDispatchedRun,
+  type DispatchBranchPusher,
+  type DispatchDeliveryResult,
+} from "./delivery.js";
 import type { BureauConfig } from "../config/schema.js";
 import { defaultConfig } from "../config/loader.js";
 import { workspacePaths } from "../paths.js";
@@ -28,6 +32,7 @@ import { dispatchRun, pipelineForRunType, type DispatchOutput } from "../runs/co
 import { RunEngine, type RunRecord, type RunType } from "../runs/engine.js";
 import { AGENT_INDEX, type AgentDefinition } from "../agents/roles.js";
 import { agentHandoffBody, agentHandoffMetadata } from "../agents/handoff.js";
+import type { ProjectTestRunnerFactory } from "../agents/runtime.js";
 
 export interface ProjectDispatchInput {
   projectSlug: string;
@@ -83,6 +88,22 @@ export interface ProjectDispatchDeps {
   githubPrPublishClient?: GitHubPullRequestPublishClient;
   /** Owner-provided GitHub token; defaults to `GITHUB_TOKEN`. Never used in tests. */
   githubToken?: string;
+  /**
+   * Factory for the project test runner the QA agent runs in the development
+   * worktree (SER-240). Optional fake-injection seam for the end-to-end
+   * orchestration proof (SER-242): a test supplies a deterministic passing or
+   * failing runner so QA gates on a real result without spawning a subprocess.
+   * Omitted in production, where the real {@link ProjectTestRunnerService} runs.
+   */
+  projectTestRunnerFactory?: ProjectTestRunnerFactory;
+  /**
+   * Git push surface for the delivery step (SER-241). Defaults to a real
+   * {@link ProjectWorkspaceService} that pushes the run branch to the project's
+   * linked remote. The end-to-end proof (SER-242) injects a pusher that
+   * redirects the push to a local bare repo so no real GitHub account is ever
+   * touched — mirroring the delivery unit test's `LocalBareRepoPusher`.
+   */
+  dispatchBranchPusher?: DispatchBranchPusher;
 }
 
 function artifactList(items: readonly ArtifactRecord[]): string {
@@ -246,6 +267,8 @@ export class ProjectDispatchService {
   private readonly providerRouter?: ProviderRouter;
   private readonly providerEnv: ProviderEnv;
   private readonly githubPrPublishClient?: GitHubPullRequestPublishClient;
+  private readonly projectTestRunnerFactory?: ProjectTestRunnerFactory;
+  private readonly dispatchBranchPusher?: DispatchBranchPusher;
 
   constructor(
     private readonly workspaceRoot: string,
@@ -275,6 +298,8 @@ export class ProjectDispatchService {
     this.githubPrPublishClient =
       deps.githubPrPublishClient ??
       (githubToken ? new OctokitGitHubClient({ token: githubToken }) : undefined);
+    this.projectTestRunnerFactory = deps.projectTestRunnerFactory;
+    this.dispatchBranchPusher = deps.dispatchBranchPusher;
   }
 
   async dispatch(input: ProjectDispatchInput): Promise<ProjectDispatchResult> {
@@ -420,6 +445,9 @@ export class ProjectDispatchService {
           ...(providerRouter ? { providerRouter } : {}),
           ...(developmentRuntime ? { developmentRuntime } : {}),
           ...(capabilityUse ? { capabilityUse } : {}),
+          ...(this.projectTestRunnerFactory
+            ? { projectTestRunnerFactory: this.projectTestRunnerFactory }
+            : {}),
         },
         {
           workspaceRoot: this.workspaceRoot,
@@ -562,7 +590,7 @@ export class ProjectDispatchService {
       {
         workspaceRoot: this.workspaceRoot,
         config: this.config,
-        workspace: new ProjectWorkspaceService(this.workspaceRoot),
+        workspace: this.dispatchBranchPusher ?? new ProjectWorkspaceService(this.workspaceRoot),
         policy: this.policy,
         audit: this.audit,
         artifacts: this.artifacts,
