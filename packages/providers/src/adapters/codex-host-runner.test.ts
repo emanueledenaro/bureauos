@@ -96,6 +96,25 @@ describe("HostCodexRuntimeRunner", () => {
     expect(executor.calls.some((call) => call.command === "codex")).toBe(false);
   });
 
+  it("codegen mode: shell metacharacters in the task stay inside one literal argument", async () => {
+    const executor = new FakeExecutor({}, ok(""));
+    const runner = new HostCodexRuntimeRunner({
+      executor,
+      codegenCommand: ["codex", "exec"],
+      allowedCommands: ["codex"],
+    });
+
+    const malicious = '"; rm -rf / # `whoami` $(id) && echo pwned';
+    await runner.execute(input({ scope: malicious }));
+
+    const call = executor.calls.find((entry) => entry.command === "codex");
+    expect(call).toBeDefined();
+    // Exactly base args + ONE prompt arg — the malicious text is never split
+    // into separate argv entries (spawn runs shell:false, so it stays inert).
+    expect(call?.args).toHaveLength(2);
+    expect(call?.args[1]).toContain(malicious);
+  });
+
   it("codegen mode is refused when its binary is not on the allow-list", async () => {
     const executor = new FakeExecutor({}, ok(""));
     const runner = new HostCodexRuntimeRunner({
