@@ -24,6 +24,7 @@ import { useAsyncAction } from "../hooks/useAsyncAction";
 import { clientName, pipelineValue, sortNewest } from "../lib/builders";
 import { opportunityTone } from "../lib/tone";
 import { formatLabel, formatMoney } from "../lib/format";
+import { statusLabel } from "../lib/status-labels";
 import type { OpportunityRecord, RevenuePipelineResult } from "../lib/api";
 import type { DashboardState } from "../lib/types";
 import { useT } from "../i18n/i18n";
@@ -69,7 +70,7 @@ export function RevenueView({
     ? revenueFocus.next_action ||
       revenueFocus.proposal_status ||
       revenueFocus.qualification_status ||
-      `${t("revenue.advance", "Advance")} ${formatLabel(revenueFocus.status)} ${t("revenue.with", "with")} ${clientName(state.clients, revenueFocus.client_id)}.`
+      `${t("revenue.advance", "Advance")} ${statusLabel(revenueFocus.status, t)} ${t("revenue.with", "with")} ${clientName(state.clients, revenueFocus.client_id)}.`
     : t(
         "revenue.noOpportunityDetail",
         "No commercial opportunity is recorded yet. The coordinator needs a client, scope, value, and next action before proposal work.",
@@ -167,7 +168,7 @@ export function RevenueView({
       width: "140px",
       render: (opportunity) => (
         <StatusPill
-          value={formatLabel(opportunity.status)}
+          value={statusLabel(opportunity.status, t)}
           tone={opportunityTone(opportunity.status)}
         />
       ),
@@ -226,7 +227,7 @@ export function RevenueView({
             ? [
                 formatMoney(revenueFocus.expected_value || 0),
                 `${Math.round(revenueFocus.expected_margin || 0)}% ${t("revenue.marginSignal", "margin")}`,
-                formatLabel(revenueFocus.status),
+                statusLabel(revenueFocus.status, t),
               ]
             : [
                 t("revenue.zeroOpenPipeline", "0 open pipeline"),

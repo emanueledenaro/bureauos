@@ -23,6 +23,7 @@ import {
 } from "../components/ui/sheet";
 import { cn } from "../lib/utils";
 import { formatLabel, formatMoney, timeAgo } from "../lib/format";
+import { statusLabel } from "../lib/status-labels";
 import { buildTodayActions, pipelineValue, sortNewest } from "../lib/builders";
 import { actionStateLabel } from "../lib/tone";
 import { useT } from "../i18n/i18n";
@@ -143,7 +144,7 @@ function ContextColumn({
 }) {
   const t = useT();
   const recentArtifacts = useMemo(() => sortNewest(state.artifacts).slice(0, 4), [state.artifacts]);
-  const nextActions = useMemo(() => buildTodayActions(state).slice(0, 4), [state]);
+  const nextActions = useMemo(() => buildTodayActions(state, t).slice(0, 4), [state, t]);
   const pendingApprovals = state.approvals.length;
   const pipeline = pipelineValue(state);
   const blockedProjects = state.projects.filter((project) => project.status === "blocked").length;
@@ -197,9 +198,9 @@ function ContextColumn({
               {t("coordinator.noUrgentAction", "No urgent owner action.")}
             </div>
           ) : (
-            nextActions.map((action) => (
+            nextActions.map((action, index) => (
               <button
-                key={action.id}
+                key={action.id || `action-${index}`}
                 type="button"
                 onClick={() => onModeChange(action.route)}
                 className="group rounded-md border border-border/60 bg-background/35 p-3 text-left transition-colors hover:border-border hover:bg-surface-subtle focus-ring"
@@ -209,7 +210,7 @@ function ContextColumn({
                     {action.title}
                   </span>
                   <StatusPill
-                    value={formatLabel(actionStateLabel(action.tone))}
+                    value={statusLabel(actionStateLabel(action.tone), t)}
                     tone={action.tone}
                     className="shrink-0"
                   />
@@ -238,9 +239,9 @@ function ContextColumn({
             {recentArtifacts.length === 0 ? (
               <div className="text-meta">{t("coordinator.noArtifacts", "No artifacts yet.")}</div>
             ) : (
-              recentArtifacts.map((artifact) => (
+              recentArtifacts.map((artifact, index) => (
                 <div
-                  key={artifact.id}
+                  key={artifact.id || `artifact-${index}`}
                   className="flex items-start gap-2.5 rounded-md border border-border/60 bg-background/35 p-2.5"
                 >
                   <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-border/60 bg-surface-subtle text-muted-foreground">

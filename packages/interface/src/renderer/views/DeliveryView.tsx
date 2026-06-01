@@ -22,7 +22,8 @@ import { Button } from "../components/ui/button";
 import { useAsyncAction } from "../hooks/useAsyncAction";
 import { buildLinkedWorkItems, clientName, linkedWorkTone, sortNewest } from "../lib/builders";
 import { projectTone } from "../lib/tone";
-import { formatLabel, timeAgo } from "../lib/format";
+import { timeAgo } from "../lib/format";
+import { statusLabel } from "../lib/status-labels";
 import { useState } from "react";
 import { useT } from "../i18n/i18n";
 import type { ProjectRepositoryVerificationResult } from "../lib/api";
@@ -124,9 +125,9 @@ export function DeliveryView({
     typeof deliveryFocus === "object"
       ? `${deliveryFocus.name} · ${clientName(state.clients, deliveryFocus.client_id)}`
       : deliveryFocus === "stale-linked-work" && staleLinkedWork
-        ? `${formatLabel(staleLinkedWork.runType)} · ${t("delivery.staleGithubSignal", "stale GitHub signal")}`
+        ? `${statusLabel(staleLinkedWork.runType, t)} · ${t("delivery.staleGithubSignal", "stale GitHub signal")}`
         : deliveryFocus === "missing-pr-run" && missingPrRun
-          ? `${formatLabel(missingPrRun.runType)} · ${t("delivery.prMissing", "PR missing")}`
+          ? `${statusLabel(missingPrRun.runType, t)} · ${t("delivery.prMissing", "PR missing")}`
           : state.projects.length > 0
             ? t("delivery.queueClearTitle", "Delivery queue is clear enough to keep moving")
             : t("delivery.createFirstStreamTitle", "Create the first delivery stream");
@@ -168,11 +169,11 @@ export function DeliveryView({
       render: (item) => (
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <StatusPill value={formatLabel(item.runStatus)} tone={item.runTone} />
+            <StatusPill value={statusLabel(item.runStatus, t)} tone={item.runTone} />
             <span className="text-meta truncate font-mono">{item.runId}</span>
           </div>
           <div className="text-body mt-1 truncate font-medium text-foreground">
-            {formatLabel(item.runType)}
+            {statusLabel(item.runType, t)}
           </div>
           <div className="text-meta mt-0.5 truncate">{item.runScope}</div>
         </div>
@@ -185,7 +186,7 @@ export function DeliveryView({
       mobileLabel: "Linear",
       render: (item) => (
         <div className="flex min-w-0 flex-col gap-1">
-          <Badge variant={linkedWorkTone(item.issueState)}>{formatLabel(item.issueState)}</Badge>
+          <Badge variant={linkedWorkTone(item.issueState)}>{statusLabel(item.issueState, t)}</Badge>
           <ExternalLinkText label={item.issueLabel} url={item.issueUrl} />
           <span className="text-meta truncate">{item.issueDetail}</span>
         </div>
@@ -199,7 +200,7 @@ export function DeliveryView({
       render: (item) => (
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <Badge variant={linkedWorkTone(item.prState)}>{formatLabel(item.prState)}</Badge>
+            <Badge variant={linkedWorkTone(item.prState)}>{statusLabel(item.prState, t)}</Badge>
             <PullRequestLinks links={item.pullRequests} />
           </div>
           <div className="text-meta mt-1 truncate font-mono">{item.repository}</div>
@@ -385,7 +386,10 @@ export function DeliveryView({
               title={project.name}
               subtitle={clientName(state.clients, project.client_id)}
             >
-              <StatusPill value={formatLabel(project.status)} tone={projectTone(project.status)} />
+              <StatusPill
+                value={statusLabel(project.status, t)}
+                tone={projectTone(project.status)}
+              />
             </BaseCardHeader>
             <div className="text-body-secondary text-muted-foreground">
               {project.stack || t("delivery.stackNotSet", "Stack not set")}

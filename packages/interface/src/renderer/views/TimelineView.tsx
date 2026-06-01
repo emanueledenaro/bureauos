@@ -20,6 +20,7 @@ import { EmptyState } from "../components/dashboard/EmptyState";
 import { StatusPill } from "../components/dashboard/StatusPill";
 import { cn } from "../lib/utils";
 import { formatLabel, timeAgo } from "../lib/format";
+import { actionLabel, statusLabel } from "../lib/status-labels";
 import { runTone, type Tone } from "../lib/tone";
 import { approvalMatchesRun, approvalRiskLevel, approvalRiskTone } from "../lib/approvals";
 import type { ApprovalRecord, ArtifactRecord, AuditEvent, RunRecord } from "../lib/api";
@@ -294,10 +295,10 @@ export function TimelineView({
                         selectedRun.id === run.id ? "bg-surface-subtle" : "bg-transparent",
                       )}
                     >
-                      <StatusPill value={formatLabel(run.status)} tone={runTone(run.status)} />
+                      <StatusPill value={statusLabel(run.status, t)} tone={runTone(run.status)} />
                       <span className="min-w-0">
                         <span className="block truncate text-[12px] font-semibold text-foreground">
-                          {formatLabel(run.type)}
+                          {statusLabel(run.type, t)}
                         </span>
                         <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
                           {run.scope}
@@ -307,7 +308,7 @@ export function TimelineView({
                         </span>
                       </span>
                       <span className="flex justify-end">
-                        <StatusPill value={risk} tone={riskTone[risk]} />
+                        <StatusPill value={statusLabel(risk, t)} tone={riskTone[risk]} />
                       </span>
                     </button>
                   );
@@ -320,11 +321,11 @@ export function TimelineView({
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusPill
-                      value={formatLabel(selectedRun.status)}
+                      value={statusLabel(selectedRun.status, t)}
                       tone={runTone(selectedRun.status)}
                     />
                     <StatusPill
-                      value={`${selectedRunRisk} ${t("timeline.riskSuffix", "risk")}`}
+                      value={`${statusLabel(selectedRunRisk, t)} ${t("timeline.riskSuffix", "risk")}`}
                       tone={riskTone[selectedRunRisk]}
                     />
                   </div>
@@ -389,7 +390,7 @@ export function TimelineView({
                         >
                           <span className="min-w-0">
                             <span className="block truncate font-medium text-foreground">
-                              {formatLabel(approval.action)}
+                              {actionLabel(approval.action, t)}
                             </span>
                             <span className="block truncate text-muted-foreground">
                               {approval.reason || approval.scope}
@@ -397,7 +398,7 @@ export function TimelineView({
                           </span>
                           <span className="flex justify-end">
                             <StatusPill
-                              value={formatLabel(approval.status)}
+                              value={statusLabel(approval.status, t)}
                               tone={
                                 approval.status === "pending"
                                   ? "warning"
@@ -408,7 +409,10 @@ export function TimelineView({
                             />
                           </span>
                           <span className="flex justify-end">
-                            <StatusPill value={risk} tone={approvalRiskTone(risk)} />
+                            <StatusPill
+                              value={statusLabel(risk, t)}
+                              tone={approvalRiskTone(risk)}
+                            />
                           </span>
                         </div>
                       );
@@ -465,7 +469,7 @@ export function TimelineView({
                           </span>
                           <span className="flex justify-end">
                             <StatusPill
-                              value={formatLabel(artifact.status)}
+                              value={statusLabel(artifact.status, t)}
                               tone={artifact.status === "superseded" ? "warning" : "neutral"}
                             />
                           </span>

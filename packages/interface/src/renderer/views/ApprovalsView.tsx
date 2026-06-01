@@ -25,7 +25,8 @@ import {
 } from "../lib/approvals";
 import { cn } from "../lib/utils";
 import { approvalTone } from "../lib/tone";
-import { formatLabel, timeAgo } from "../lib/format";
+import { timeAgo } from "../lib/format";
+import { actionLabel, statusLabel } from "../lib/status-labels";
 import type { ApprovalRecord } from "../lib/api";
 import type { DashboardState } from "../lib/types";
 import { useT, type TFunction } from "../i18n/i18n";
@@ -193,7 +194,7 @@ export function ApprovalsView({
       render: (approval) => (
         <div className="min-w-0">
           <div className="text-body truncate font-medium text-foreground">
-            {formatLabel(approval.action)}
+            {actionLabel(approval.action, t)}
           </div>
           <div className="text-meta mt-0.5 truncate font-mono">{approval.id}</div>
         </div>
@@ -205,12 +206,15 @@ export function ApprovalsView({
       width: "140px",
       render: (approval) => (
         <div className="flex flex-col gap-1">
-          <StatusPill value={formatLabel(approval.status)} tone={approvalTone(approval.status)} />
           <StatusPill
-            value={approvalRiskLevel(approval)}
+            value={statusLabel(approval.status, t)}
+            tone={approvalTone(approval.status)}
+          />
+          <StatusPill
+            value={statusLabel(approvalRiskLevel(approval), t)}
             tone={approvalRiskTone(approvalRiskLevel(approval))}
           />
-          <StatusPill value={approvalType(approval)} tone="neutral" />
+          <StatusPill value={statusLabel(approvalType(approval), t)} tone="neutral" />
         </div>
       ),
     },
@@ -351,7 +355,7 @@ export function ApprovalsView({
                   {group.riskGroups.map((riskGroup) => (
                     <StatusPill
                       key={riskGroup.risk}
-                      value={`${riskGroup.risk} ${riskGroup.approvals.length}`}
+                      value={`${statusLabel(riskGroup.risk, t)} ${riskGroup.approvals.length}`}
                       tone={approvalRiskTone(riskGroup.risk)}
                     />
                   ))}
@@ -361,7 +365,7 @@ export function ApprovalsView({
                 <div key={riskGroup.risk} className="border-t border-border/60">
                   <div className="flex items-center justify-between gap-2 bg-surface-raised/50 px-4 py-2">
                     <StatusPill
-                      value={`${riskGroup.risk} ${t("approvals.risk", "risk")}`}
+                      value={`${statusLabel(riskGroup.risk, t)} ${t("approvals.risk", "risk")}`}
                       tone={approvalRiskTone(riskGroup.risk)}
                     />
                     <span className="text-[10px] text-muted-foreground">
@@ -380,9 +384,12 @@ export function ApprovalsView({
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="truncate text-[12px] font-semibold text-foreground">
-                              {formatLabel(approval.action)}
+                              {actionLabel(approval.action, t)}
                             </span>
-                            <StatusPill value={approvalType(approval)} tone="neutral" />
+                            <StatusPill
+                              value={statusLabel(approvalType(approval), t)}
+                              tone="neutral"
+                            />
                             {approvalRequiresDecisionNote(approval) ? (
                               <span className="inline-flex items-center gap-1 rounded border border-warning/40 bg-warning-subtle/30 px-1.5 py-0.5 text-[10px] text-warning">
                                 <AlertTriangle className="h-3 w-3" />
@@ -504,12 +511,12 @@ export function ApprovalsView({
                 ? t("approvals.approve", "Approve")
                 : t("approvals.reject", "Reject")}{" "}
               {decision
-                ? formatLabel(decision.approval.action)
+                ? actionLabel(decision.approval.action, t)
                 : t("approvals.approval", "approval")}
             </DialogTitle>
             <DialogDescription>
               {decision?.approval.scope ?? t("approvals.ownerDecision", "Owner decision")} ·{" "}
-              {decisionRisk} {t("approvals.risk", "risk")}
+              {statusLabel(decisionRisk, t)} {t("approvals.risk", "risk")}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-2">

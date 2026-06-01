@@ -11,6 +11,15 @@ import {
   runTone,
 } from "./tone";
 import { formatLabel, formatMoney, ratioPercent, timeAgo } from "./format";
+import { actionLabel, statusLabel } from "./status-labels";
+import type { TFunction } from "../i18n/i18n";
+
+/**
+ * Resolver used when a builder is invoked outside a React render (e.g. the
+ * auto-selection helpers below, which only read array lengths). It returns the
+ * English fallback so non-UI call sites keep working without an i18n context.
+ */
+const fallbackT: TFunction = (_key, fallback) => fallback ?? "";
 import type {
   AdaptiveMode,
   CapacitySegment,
@@ -318,7 +327,10 @@ export function buildProjectDeliverySignal(
   };
 }
 
-export function buildPortfolioLanes(state: DashboardState): PortfolioLane[] {
+export function buildPortfolioLanes(
+  state: DashboardState,
+  t: TFunction = fallbackT,
+): PortfolioLane[] {
   const clientsById = new Map(state.clients.map((client) => [client.id, client]));
   const ownershipByProjectId = new Map(
     state.projectOwnership.map((ownership) => [ownership.project_id, ownership]),
@@ -346,7 +358,7 @@ export function buildPortfolioLanes(state: DashboardState): PortfolioLane[] {
       id: project.id,
       title: project.name,
       kind: "project",
-      status: formatLabel(project.status),
+      status: statusLabel(project.status, t),
       tone: projectTone(project.status),
       progress: projectProgress(project.status),
       meta: `${formatLabel(manager)} · ${project.stack || "Project memory"}`,
@@ -362,7 +374,7 @@ export function buildPortfolioLanes(state: DashboardState): PortfolioLane[] {
       id: opportunity.id,
       title: opportunity.title,
       kind: "opportunity",
-      status: formatLabel(opportunity.status),
+      status: statusLabel(opportunity.status, t),
       tone: opportunityTone(opportunity.status),
       progress: opportunityProgress(opportunity.status),
       meta:
@@ -445,7 +457,7 @@ export function buildCapacitySegments(state: DashboardState): CapacitySegment[] 
   ];
 }
 
-export function buildGoalItems(state: DashboardState): GoalItem[] {
+export function buildGoalItems(state: DashboardState, t: TFunction): GoalItem[] {
   const activeClients = state.clients.filter((client) => client.status === "active").length;
   const clientTarget = Math.max(activeClients, state.clients.length, 1);
   const openOpportunities = state.opportunities.filter(isOpenOpportunity);
@@ -496,102 +508,171 @@ export function buildGoalItems(state: DashboardState): GoalItem[] {
   const goals: GoalItem[] = [
     {
       id: "revenue-engine",
-      title: "Revenue Engine",
-      description: "Maintain active commercial pipeline across client accounts.",
+      title: t("goals.revenueEngineTitle", "Revenue Engine"),
+      description: t(
+        "goals.revenueEngineDescription",
+        "Maintain active commercial pipeline across client accounts.",
+      ),
       progress: ratioPercent(clientsWithPipeline, clientTarget),
       tone: progressTone(ratioPercent(clientsWithPipeline, clientTarget)),
-      current: `${clientsWithPipeline}/${clientTarget} accounts`,
-      target: "Every active client has an open opportunity",
+      current: `${clientsWithPipeline}/${clientTarget} ${t("goals.unitAccounts", "accounts")}`,
+      target: t("goals.revenueEngineTarget", "Every active client has an open opportunity"),
       nextAction:
         openPipelineValue > 0
-          ? "Prioritize the highest-value opportunity and move it to proposal."
-          : "Create or import the first qualified opportunity.",
+          ? t(
+              "goals.revenueEngineNextActive",
+              "Prioritize the highest-value opportunity and move it to proposal.",
+            )
+          : t("goals.revenueEngineNextEmpty", "Create or import the first qualified opportunity."),
       route: "revenue",
       signals: [
-        `${formatMoney(openPipelineValue)} open pipeline`,
-        `${openOpportunities.length} open opportunities`,
+        `${formatMoney(openPipelineValue)} ${t("goals.signalOpenPipeline", "open pipeline")}`,
+        `${openOpportunities.length} ${t("goals.signalOpenOpportunities", "open opportunities")}`,
       ],
     },
     {
       id: "delivery-health",
-      title: "Delivery Health",
-      description: "Keep client and internal projects unblocked and repository-backed.",
+      title: t("goals.deliveryHealthTitle", "Delivery Health"),
+      description: t(
+        "goals.deliveryHealthDescription",
+        "Keep client and internal projects unblocked and repository-backed.",
+      ),
       progress:
         totalProjects === 0 ? 0 : ratioPercent(totalProjects - blockedProjects, totalProjects),
       tone: blockedProjects > 0 ? "danger" : progressTone(totalProjects === 0 ? 0 : 100),
-      current: `${blockedProjects} blocked`,
-      target: "0 blocked projects",
+      current: `${blockedProjects} ${t("goals.unitBlocked", "blocked")}`,
+      target: t("goals.deliveryHealthTarget", "0 blocked projects"),
       nextAction:
         blockedProjects > 0
-          ? "Open the blocked project queue and assign a recovery action."
-          : "Dispatch the next project-manager run for active work.",
+          ? t(
+              "goals.deliveryHealthNextBlocked",
+              "Open the blocked project queue and assign a recovery action.",
+            )
+          : t(
+              "goals.deliveryHealthNextClear",
+              "Dispatch the next project-manager run for active work.",
+            ),
       route: "delivery",
       signals: [
-        `${activeProjects} active projects`,
-        `${repositoryCoverage}/${Math.max(totalProjects, 1)} repositories linked`,
+        `${activeProjects} ${t("goals.signalActiveProjects", "active projects")}`,
+        `${repositoryCoverage}/${Math.max(totalProjects, 1)} ${t("goals.signalRepositoriesLinked", "repositories linked")}`,
       ],
     },
     {
       id: "client-success",
-      title: "Client Success",
-      description: "Protect relationships with follow-up discipline and account visibility.",
+      title: t("goals.clientSuccessTitle", "Client Success"),
+      description: t(
+        "goals.clientSuccessDescription",
+        "Protect relationships with follow-up discipline and account visibility.",
+      ),
       progress:
         clientsWithAnyMemory === 0
           ? 0
           : ratioPercent(clientsWithAnyMemory - followUpsDue, clientsWithAnyMemory),
       tone: followUpsDue > 0 ? "warning" : progressTone(clientsWithAnyMemory === 0 ? 0 : 100),
-      current: `${followUpsDue} due`,
-      target: "No overdue client follow-ups",
+      current: `${followUpsDue} ${t("goals.unitDue", "due")}`,
+      target: t("goals.clientSuccessTarget", "No overdue client follow-ups"),
       nextAction:
         followUpsDue > 0
-          ? "Review clients due for follow-up and prepare safe response drafts."
-          : "Create the next account plan for the most valuable client.",
+          ? t(
+              "goals.clientSuccessNextDue",
+              "Review clients due for follow-up and prepare safe response drafts.",
+            )
+          : t(
+              "goals.clientSuccessNextClear",
+              "Create the next account plan for the most valuable client.",
+            ),
       route: "clients",
-      signals: [`${state.clients.length} client profiles`, `${clientsWithAnyMemory} account views`],
+      signals: [
+        `${state.clients.length} ${t("goals.signalClientProfiles", "client profiles")}`,
+        `${clientsWithAnyMemory} ${t("goals.signalAccountViews", "account views")}`,
+      ],
     },
     {
       id: "growth-foundation",
-      title: "Growth Foundation",
-      description: "Keep brand, offers, channels, and draft assets ready for visibility work.",
+      title: t("goals.growthFoundationTitle", "Growth Foundation"),
+      description: t(
+        "goals.growthFoundationDescription",
+        "Keep brand, offers, channels, and draft assets ready for visibility work.",
+      ),
       progress: ratioPercent(configuredGrowthSections + Math.min(growthArtifacts, 1), 4),
       tone: progressTone(ratioPercent(configuredGrowthSections + Math.min(growthArtifacts, 1), 4)),
-      current: `${configuredGrowthSections}/3 memory sections`,
-      target: "Brand, offers, channels, and one draft asset ready",
+      current: `${configuredGrowthSections}/3 ${t("goals.unitMemorySections", "memory sections")}`,
+      target: t(
+        "goals.growthFoundationTarget",
+        "Brand, offers, channels, and one draft asset ready",
+      ),
       nextAction:
         state.growthMemory?.ready === true
-          ? "Generate the next draft-only growth asset from current positioning."
-          : "Complete missing growth memory before campaign work.",
+          ? t(
+              "goals.growthFoundationNextReady",
+              "Generate the next draft-only growth asset from current positioning.",
+            )
+          : t(
+              "goals.growthFoundationNextIncomplete",
+              "Complete missing growth memory before campaign work.",
+            ),
       route: "growth",
-      signals: [`${growthArtifacts} growth artifacts`, `${state.approvals.length} owner decisions`],
+      signals: [
+        `${growthArtifacts} ${t("goals.signalGrowthArtifacts", "growth artifacts")}`,
+        `${state.approvals.length} ${t("goals.signalOwnerDecisions", "owner decisions")}`,
+      ],
     },
     {
       id: "autonomy-readiness",
-      title: "Autonomy Readiness",
-      description: "Make the operating system capable of running without owner babysitting.",
+      title: t("goals.autonomyReadinessTitle", "Autonomy Readiness"),
+      description: t(
+        "goals.autonomyReadinessDescription",
+        "Make the operating system capable of running without owner babysitting.",
+      ),
       progress: ratioPercent(autonomyReady, autonomyChecks.length),
       tone: progressTone(ratioPercent(autonomyReady, autonomyChecks.length)),
-      current: `${autonomyReady}/${autonomyChecks.length} checks`,
-      target: "API, agents, capabilities, provider, and growth memory ready",
+      current: `${autonomyReady}/${autonomyChecks.length} ${t("goals.unitChecks", "checks")}`,
+      target: t(
+        "goals.autonomyReadinessTarget",
+        "API, agents, capabilities, provider, and growth memory ready",
+      ),
       nextAction: providerReady
-        ? "Review remaining autonomy checks and keep policy gates tight."
-        : "Connect a provider or fix missing provider credentials.",
+        ? t(
+            "goals.autonomyReadinessNextReady",
+            "Review remaining autonomy checks and keep policy gates tight.",
+          )
+        : t(
+            "goals.autonomyReadinessNextProvider",
+            "Connect a provider or fix missing provider credentials.",
+          ),
       route: providerReady ? "agents" : "settings",
-      signals: [`${state.agents.length} agents`, `${state.capabilities.length} capabilities`],
+      signals: [
+        `${state.agents.length} ${t("goals.signalAgents", "agents")}`,
+        `${state.capabilities.length} ${t("goals.signalCapabilities", "capabilities")}`,
+      ],
     },
     {
       id: "execution-cadence",
-      title: "Execution Cadence",
-      description: "Track whether autonomous runs are completing instead of piling up.",
+      title: t("goals.executionCadenceTitle", "Execution Cadence"),
+      description: t(
+        "goals.executionCadenceDescription",
+        "Track whether autonomous runs are completing instead of piling up.",
+      ),
       progress: state.runs.length === 0 ? 0 : ratioPercent(healthyRuns, state.runs.length),
       tone: runIssues > 0 ? "warning" : progressTone(state.runs.length === 0 ? 0 : 100),
-      current: `${completedRuns}/${state.runs.length} completed`,
-      target: "Runs complete without human-blocked drift",
+      current: `${completedRuns}/${state.runs.length} ${t("goals.unitCompleted", "completed")}`,
+      target: t("goals.executionCadenceTarget", "Runs complete without human-blocked drift"),
       nextAction:
         runIssues > 0
-          ? "Resolve runs needing human input before starting more work."
-          : "Start the next useful run from Today or project dispatch.",
+          ? t(
+              "goals.executionCadenceNextIssues",
+              "Resolve runs needing human input before starting more work.",
+            )
+          : t(
+              "goals.executionCadenceNextClear",
+              "Start the next useful run from Today or project dispatch.",
+            ),
       route: runIssues > 0 ? "risk" : "today",
-      signals: [`${runIssues} issue runs`, `${state.audit.length} recent audit events`],
+      signals: [
+        `${runIssues} ${t("goals.signalIssueRuns", "issue runs")}`,
+        `${state.audit.length} ${t("goals.signalAuditEvents", "recent audit events")}`,
+      ],
     },
   ];
 
@@ -600,7 +681,7 @@ export function buildGoalItems(state: DashboardState): GoalItem[] {
   );
 }
 
-export function buildTodayActions(state: DashboardState): TodayAction[] {
+export function buildTodayActions(state: DashboardState, t: TFunction = fallbackT): TodayAction[] {
   const actions: TodayAction[] = [];
   const clientById = new Map(state.clients.map((client) => [client.id, client]));
 
@@ -610,7 +691,7 @@ export function buildTodayActions(state: DashboardState): TodayAction[] {
       priority: 10,
       tone: "warning",
       source: "Approval",
-      title: formatLabel(approval.action),
+      title: actionLabel(approval.action, t),
       detail: approval.scope || approval.target || "Owner decision required",
       meta: approval.created ? timeAgo(approval.created) : approval.actor,
       route: "approvals",
@@ -641,9 +722,9 @@ export function buildTodayActions(state: DashboardState): TodayAction[] {
       priority: run.status === "needs_human" ? 30 : 25,
       tone: runTone(run.status),
       source: "Run",
-      title: formatLabel(run.type),
+      title: statusLabel(run.type, t),
       detail: run.scope,
-      meta: run.created ? timeAgo(run.created) : formatLabel(run.status),
+      meta: run.created ? timeAgo(run.created) : statusLabel(run.status, t),
       route: "risk",
       created: run.created,
     });
@@ -661,7 +742,7 @@ export function buildTodayActions(state: DashboardState): TodayAction[] {
       meta:
         item.relationship.next_follow_up_at && item.relationship.follow_up_due
           ? `Due ${timeAgo(item.relationship.next_follow_up_at)}`
-          : formatLabel(item.risk),
+          : statusLabel(item.risk, t),
       route: "clients",
       created: item.latest_activity_at,
     });
@@ -678,7 +759,7 @@ export function buildTodayActions(state: DashboardState): TodayAction[] {
       title: opportunity.title,
       detail:
         opportunity.next_action ||
-        `${formatMoney(opportunity.expected_value || 0)} pipeline · ${formatLabel(opportunity.status)}`,
+        `${formatMoney(opportunity.expected_value || 0)} pipeline · ${statusLabel(opportunity.status, t)}`,
       meta: opportunity.updated ? timeAgo(opportunity.updated) : "opportunity",
       route: "revenue",
       created: opportunity.updated ?? opportunity.created,

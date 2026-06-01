@@ -10,7 +10,8 @@ import { OperationalFocus } from "../components/dashboard/OperationalFocus";
 import { useAsyncAction } from "../hooks/useAsyncAction";
 import { pipelineValue } from "../lib/builders";
 import { clientRiskTone } from "../lib/tone";
-import { formatLabel, formatMoney, timeAgo } from "../lib/format";
+import { formatMoney, timeAgo } from "../lib/format";
+import { statusLabel } from "../lib/status-labels";
 import type { ClientSuccessStatusResult, MemoryTriggerResult } from "../lib/api";
 import type { AdaptiveMode, DashboardState } from "../lib/types";
 import { useT } from "../i18n/i18n";
@@ -133,7 +134,7 @@ export function ClientsView({
         signals={
           focusClient
             ? [
-                formatLabel(focusClient.risk),
+                statusLabel(focusClient.risk, t),
                 formatMoney(focusClient.revenue.pipeline_value),
                 focusClient.relationship.follow_up_due && focusClient.relationship.next_follow_up_at
                   ? `${t("clients.due", "Due")} ${timeAgo(focusClient.relationship.next_follow_up_at)}`

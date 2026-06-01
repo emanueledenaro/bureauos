@@ -20,6 +20,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "../../lib/utils";
 import { agentAbbr, runTone } from "../../lib/tone";
 import { formatLabel, timeAgo } from "../../lib/format";
+import { statusLabel } from "../../lib/status-labels";
 import type { AgentDefinition, CapabilityDefinition, RunRecord } from "../../lib/api";
 import { type TFunction, useT } from "../../i18n/i18n";
 
@@ -174,7 +175,7 @@ export function AgentLayer({
                     <div className="mt-0.5 text-muted-foreground">{agent.category}</div>
                     <div className="mt-1 text-muted-foreground">
                       {run
-                        ? `${runLabel(t, run)}: ${formatLabel(run.type)}`
+                        ? `${runLabel(t, run)}: ${statusLabel(run.type, t)}`
                         : t("agentLayer.noRecentRun", "No recent run")}
                     </div>
                     <div className="mt-0.5 text-muted-foreground">
@@ -245,7 +246,7 @@ export function AgentLayer({
                           </div>
                           <div className="truncate text-[10px] text-muted-foreground">
                             {run
-                              ? `${runLabel(t, run)} · ${formatLabel(run.status)}`
+                              ? `${runLabel(t, run)} · ${statusLabel(run.status, t)}`
                               : agent.category}
                           </div>
                         </div>
@@ -322,7 +323,7 @@ function AgentDetailPanel({
               <div className="text-[12px] font-semibold text-foreground">{runLabel(t, run)}</div>
               <div className="mt-1 text-[10px] text-muted-foreground">
                 {run
-                  ? `${formatLabel(run.type)} · ${timeAgo(run.updated ?? run.created)}`
+                  ? `${statusLabel(run.type, t)} · ${timeAgo(run.updated ?? run.created)}`
                   : t("agentLayer.noActiveOrRecentRun", "No active or recent run for this agent.")}
               </div>
             </div>
@@ -339,7 +340,7 @@ function AgentDetailPanel({
                         : "bg-surface-raised text-muted-foreground",
                 )}
               >
-                {formatLabel(run.status)}
+                {statusLabel(run.status, t)}
               </span>
             ) : null}
           </div>
