@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bell, Command, Menu, MessageSquare, Moon } from "lucide-react";
+import { Bell, Command, Menu, MessageSquare, Moon, Sun } from "lucide-react";
 import { Avatar, AvatarFallback } from "../ui/avatar";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
@@ -8,6 +8,7 @@ import { formatDate, formatMoney, formatTime } from "../../lib/format";
 import { buildTodayActions, pipelineValue } from "../../lib/builders";
 import { MODE_LABELS } from "../../lib/modes";
 import { toneIndicatorClass, toneTextClass, type Tone } from "../../lib/tone";
+import type { Theme } from "../../lib/theme";
 import type { AdaptiveMode, DashboardState } from "../../lib/types";
 
 const QUICK_MODES: AdaptiveMode[] = ["portfolio", "today", "goals"];
@@ -15,6 +16,8 @@ const QUICK_MODES: AdaptiveMode[] = ["portfolio", "today", "goals"];
 export function Header({
   state,
   mode,
+  theme,
+  onToggleTheme,
   onModeChange,
   onOpenSidebar,
   onOpenQuickChat,
@@ -22,6 +25,8 @@ export function Header({
 }: {
   state: DashboardState;
   mode: AdaptiveMode;
+  theme: Theme;
+  onToggleTheme: () => void;
   onModeChange: (mode: AdaptiveMode) => void;
   onOpenSidebar: () => void;
   onOpenQuickChat: () => void;
@@ -157,12 +162,13 @@ export function Header({
               variant="ghost"
               size="icon"
               className="hidden sm:inline-flex"
+              onClick={onToggleTheme}
               aria-label="Theme"
             >
-              <Moon className="h-4 w-4" />
+              {theme === "light" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Dark mode</TooltipContent>
+          <TooltipContent>{theme === "light" ? "Light mode" : "Dark mode"}</TooltipContent>
         </Tooltip>
 
         <Tooltip>

@@ -30,6 +30,7 @@ import { SettingsView } from "./views/SettingsView";
 import { TimelineView } from "./views/TimelineView";
 import { RevenuePulseView } from "./views/RevenuePulseView";
 import { useDashboard } from "./hooks/useDashboard";
+import { useTheme } from "./lib/theme";
 import { nextAutoSelection, pipelineValue } from "./lib/builders";
 import {
   Api,
@@ -49,6 +50,7 @@ import type { AdaptiveMode, DashboardState } from "./lib/types";
 
 export function App() {
   const { state, refresh } = useDashboard();
+  const { theme, toggleTheme } = useTheme();
   const [mode, setMode] = useState<AdaptiveMode>("portfolio");
   const [modeTouched, setModeTouched] = useState(false);
   const [autoSelected, setAutoSelected] = useState(false);
@@ -228,6 +230,8 @@ export function App() {
           <Header
             state={state}
             mode={mode}
+            theme={theme}
+            onToggleTheme={toggleTheme}
             onModeChange={onModeChange}
             onOpenSidebar={() => setSidebarOpen(true)}
             onOpenQuickChat={() => setQuickChatOpen(true)}
