@@ -34,7 +34,7 @@ export function DelegationCard({ result }: { result: CoordinatorIntakeResult }) 
         </div>
       ) : null}
       <div className="flex justify-end">
-        <Button variant="ghost" size="sm">
+        <Button variant="ghost" size="sm" type="button" disabled>
           {t("delegation.openOpportunity", "Open opportunity")}
           <ArrowRight className="h-3 w-3" />
         </Button>
