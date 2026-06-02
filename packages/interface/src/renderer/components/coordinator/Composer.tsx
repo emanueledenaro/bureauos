@@ -1,17 +1,16 @@
 import { useRef, type FormEvent, type KeyboardEvent } from "react";
-import { Loader2, Paperclip, SendHorizontal } from "lucide-react";
+import { Loader2, Paperclip, Square } from "lucide-react";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { AttachmentChip } from "./AttachmentChip";
+import { ModelPicker } from "./ModelPicker";
+import { SlashCommandMenu } from "./SlashCommandMenu";
 import { useAutosizeTextarea } from "../../hooks/useAutosizeTextarea";
-import type { ChatAttachment } from "../../lib/types";
+import { parseSlash, type SlashCommand } from "../../lib/slash-commands";
+import type { ChatAttachment, DashboardState } from "../../lib/types";
 import { cn } from "../../lib/utils";
 import { useT } from "../../i18n/i18n";
 
-/**
- * Composer della chat del coordinator. Textarea auto-espandente, attachment
- * row e submit via form/Cmd+Enter.
- */
 export function Composer({
   value,
   onChange,
@@ -19,8 +18,10 @@ export function Composer({
   onAddFiles,
   onRemoveAttachment,
   onSubmit,
+  onStop,
   busy = false,
   placeholder,
+  providers,
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -28,8 +29,10 @@ export function Composer({
   onAddFiles: (files: FileList | null) => void;
   onRemoveAttachment: (id: string) => void;
   onSubmit: () => void;
+  onStop?: () => void;
   busy?: boolean;
   placeholder?: string;
+  providers?: DashboardState["providers"];
 }) {
   const t = useT();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -37,11 +40,12 @@ export function Composer({
   useAutosizeTextarea(textareaRef, value, { minRows: 1, maxRows: 12 });
 
   const resolvedPlaceholder = placeholder ?? t("composer.placeholder", "Message BureauOS…");
-
   const canSend = !busy && (value.trim().length > 0 || attachments.length > 0);
+  const slash = parseSlash(value);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
-    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+    // Enter sends; Shift+Enter inserts a newline. Cmd/Ctrl+Enter kept as an alias.
+    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       if (canSend) onSubmit();
     }
@@ -52,8 +56,15 @@ export function Composer({
     if (canSend) onSubmit();
   };
 
+  const applySlash = (command: SlashCommand): void => {
+    onChange(command.template);
+    textareaRef.current?.focus();
+  };
+
   return (
     <form onSubmit={handleSubmit} className="border-t border-border/60 bg-surface-subtle/25 p-3">
+      {slash.isSlash ? <SlashCommandMenu query={slash.query} onPick={applySlash} /> : null}
+
       {attachments.length > 0 ? (
         <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
           {attachments.map((attachment) => (
@@ -81,7 +92,7 @@ export function Composer({
           onKeyDown={handleKeyDown}
           placeholder={resolvedPlaceholder}
           rows={1}
-          className="w-full resize-none bg-transparent px-3 py-2.5 text-body-lg leading-[20px] text-foreground placeholder:text-muted-foreground/70 focus-visible:outline-none"
+          className="text-body-lg w-full resize-none bg-transparent px-3 py-2.5 leading-[20px] text-foreground placeholder:text-muted-foreground/70 focus-visible:outline-none"
         />
         <div className="flex items-center justify-between gap-2 border-t border-border/50 px-2 py-1.5">
           <div className="flex items-center gap-1">
@@ -110,15 +121,20 @@ export function Composer({
               </TooltipTrigger>
               <TooltipContent>{t("composer.attachFiles", "Attach files")}</TooltipContent>
             </Tooltip>
+            <ModelPicker providers={providers ?? []} />
           </div>
-          <Button type="submit" size="sm" disabled={!canSend}>
-            {busy ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <SendHorizontal className="h-3 w-3" />
-            )}
-            {busy ? t("composer.sending", "Sending") : t("composer.send", "Send")}
-          </Button>
+
+          {busy && onStop ? (
+            <Button type="button" variant="outline" size="sm" onClick={onStop}>
+              <Square className="h-3 w-3" />
+              {t("composer.stop", "Stop")}
+            </Button>
+          ) : (
+            <Button type="submit" size="sm" disabled={!canSend}>
+              {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+              {busy ? t("composer.sending", "Sending") : t("composer.send", "Send")}
+            </Button>
+          )}
         </div>
       </div>
     </form>
