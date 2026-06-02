@@ -20,6 +20,10 @@ import {
   type GitHubPullRequestPublishClientPr,
 } from "../github/pr-publisher.js";
 import {
+  type GitHubRepositoryProvisionClient,
+  type GitHubRepositoryProvisionClientRepo,
+} from "../github/repository-provisioner.js";
+import {
   deliverDispatchedRun,
   type DispatchBranchPusher,
   type DispatchDeliveryDeps,
@@ -52,6 +56,41 @@ class RecordingPrClient implements GitHubPullRequestPublishClient {
       base: input.base,
       state: "open",
       updatedAt: "2026-05-30T00:00:00.000Z",
+    };
+  }
+}
+
+/**
+ * Fake repo-provision client: records create calls and returns a synthetic repo,
+ * never touching a real GitHub account. Stands in for the Octokit createRepository.
+ */
+class RecordingRepoProvisionClient implements GitHubRepositoryProvisionClient {
+  readonly created: Array<{
+    owner: string;
+    name: string;
+    ownerType: "user" | "org";
+    private: boolean;
+    description?: string;
+    autoInit?: boolean;
+  }> = [];
+
+  async createRepository(input: {
+    owner: string;
+    name: string;
+    ownerType: "user" | "org";
+    private: boolean;
+    description?: string;
+    autoInit?: boolean;
+  }): Promise<GitHubRepositoryProvisionClientRepo> {
+    this.created.push(input);
+    return {
+      owner: input.owner,
+      repo: input.name,
+      fullName: `${input.owner}/${input.name}`,
+      url: `https://github.com/${input.owner}/${input.name}`,
+      private: input.private,
+      defaultBranch: "main",
+      createdAt: "2026-05-30T00:00:00.000Z",
     };
   }
 }
@@ -151,6 +190,21 @@ describe("deliverDispatchedRun (SER-241)", () => {
     return project;
   }
 
+  /**
+   * Create a project with NO linked repository but a committed run branch — the
+   * auto-provision precondition. The push (when provisioning succeeds) is still
+   * redirected to the local bare repo by {@link LocalBareRepoPusher}.
+   */
+  async function seedProjectNoRepoWithCommit(runId: string): Promise<ProjectRecord> {
+    const project = await projects.create({ name: "Aurora Booking", clientId: "client_acme" });
+    expect(project.repository).toBe("");
+    await workspace.acquireRunWorktree(project.slug, runId);
+    await writeFile(join(workspace.worktreePath(project.slug, runId), "feature.ts"), "// work\n");
+    const commit = await workspace.commitRunWork(project.slug, runId, "feat: booking page");
+    expect(commit.committed).toBe(true);
+    return project;
+  }
+
   /** Seed the qa/reviewer/security evidence the PR publisher's gate validates. */
   async function seedReadyEvidence(runId: string): Promise<ArtifactRecord[]> {
     const qa = await artifacts.write({
@@ -192,6 +246,7 @@ describe("deliverDispatchedRun (SER-241)", () => {
   function deps(
     config: BureauConfig,
     githubClient?: GitHubPullRequestPublishClient,
+    provision?: { client?: GitHubRepositoryProvisionClient; owner?: string },
   ): DispatchDeliveryDeps {
     return {
       workspaceRoot: dir,
@@ -205,6 +260,8 @@ describe("deliverDispatchedRun (SER-241)", () => {
       clients,
       approvals,
       ...(githubClient ? { githubClient } : {}),
+      ...(provision?.client ? { githubRepoProvisionClient: provision.client } : {}),
+      ...(provision?.owner ? { githubOwner: provision.owner } : {}),
     };
   }
 
@@ -352,7 +409,10 @@ describe("deliverDispatchedRun (SER-241)", () => {
     expect(result.reason).toBe("no committed work");
   });
 
-  it("skips delivery when the project has no linked repository", async () => {
+  it("blocks as a pending owner decision when no repo + no provision client/owner (never calls GitHub)", async () => {
+    // No linked repository AND no repo-provision client/owner configured: rather
+    // than create a repo implicitly, surface a pending owner decision and push
+    // nothing — never an implicit real GitHub call.
     const config = defaultConfig("agency");
     const project = await projects.create({ name: "No Repo", clientId: "client_acme" });
     const run = runRecord("run_norepo", project.id, project.client_id);
@@ -367,8 +427,11 @@ describe("deliverDispatchedRun (SER-241)", () => {
       producedArtifacts: [],
     });
 
-    expect(result.status).toBe("skipped");
-    expect(result.reason).toBe("no linked repository");
+    expect(result.status).toBe("blocked");
+    expect(result.pushed).toBe(false);
+    expect(result.reason).toContain("no GitHub owner configured");
+    const log = await readFile(workspacePaths(dir).auditLog, "utf8");
+    expect(log).toContain("project.dispatch.repo_provision_blocked");
   });
 
   it(
@@ -431,4 +494,152 @@ describe("deliverDispatchedRun (SER-241)", () => {
     },
     TIMEOUT_MS,
   );
+
+  // Auto-provision the project GitHub repo when missing (gated). The owner never
+  // has to create the repo by hand: when delivery is reached and the project has
+  // no linked repository, the system creates one (behind `create_repositories`)
+  // and links it, then proceeds to the separately-gated push/PR.
+  describe("auto-provision the project repository when missing (gated)", () => {
+    it(
+      "provisioning allowed: creates the repo via the fake client, links it, and delivery proceeds",
+      async () => {
+        // Default autonomy enables create_repositories + push_commits +
+        // open_pull_requests: the repo is auto-created, linked, then the branch
+        // pushes and a draft PR opens — all via fakes, never real GitHub.
+        const config = defaultConfig("agency");
+        const runId = "run_provision_ok";
+        const project = await seedProjectNoRepoWithCommit(runId);
+        const evidence = await seedReadyEvidence(runId);
+        const run = runRecord(runId, project.id, project.client_id);
+        const pr = new RecordingPrClient();
+        const repo = new RecordingRepoProvisionClient();
+
+        const result = await deliverDispatchedRun(
+          deps(config, pr, { client: repo, owner: "owner-acct" }),
+          {
+            project,
+            run,
+            scope: "Build the booking page",
+            commit: { committed: true, branch: workspace.branchForRun(project.slug, runId) },
+            hadWorktree: true,
+            runOk: true,
+            producedArtifacts: evidence,
+          },
+        );
+
+        // The repo was created in the owner's account, named from the project slug,
+        // private by default, with a description.
+        expect(repo.created).toHaveLength(1);
+        expect(repo.created[0]).toMatchObject({
+          owner: "owner-acct",
+          name: project.slug,
+          private: true,
+        });
+        expect(repo.created[0]?.description).toContain(project.name);
+
+        // The project is now linked to the created repository.
+        const linked = await projects.get(project.slug);
+        expect(linked?.repository).toBe(`https://github.com/owner-acct/${project.slug}`);
+
+        // Delivery proceeded against the freshly-linked repo: branch pushed, PR opened.
+        expect(result.status).toBe("delivered");
+        expect(result.pushed).toBe(true);
+        expect(result.pullRequestUrl).toContain("/pull/1");
+        expect(pr.created).toHaveLength(1);
+        expect(pr.created[0]?.owner).toBe("owner-acct");
+
+        const log = await readFile(workspacePaths(dir).auditLog, "utf8");
+        expect(log).toContain("project.dispatch.repo_provisioned");
+        expect(log).toContain("project.dispatch.branch_pushed");
+        expect(log).toContain("project.dispatch.delivered");
+      },
+      TIMEOUT_MS,
+    );
+
+    it(
+      "provisioning requires approval (not granted): pending owner decision, no repo created, no push",
+      async () => {
+        // create_repositories disabled and no approval exists: the provision
+        // service requests approval and blocks — nothing is created or pushed.
+        const config = defaultConfig("agency");
+        config.autonomy.create_repositories = false;
+        const runId = "run_provision_gated";
+        const project = await seedProjectNoRepoWithCommit(runId);
+        const run = runRecord(runId, project.id, project.client_id);
+        const pr = new RecordingPrClient();
+        const repo = new RecordingRepoProvisionClient();
+
+        const result = await deliverDispatchedRun(
+          deps(config, pr, { client: repo, owner: "owner-acct" }),
+          {
+            project,
+            run,
+            scope: "x",
+            commit: { committed: true, branch: workspace.branchForRun(project.slug, runId) },
+            hadWorktree: true,
+            runOk: true,
+            producedArtifacts: [],
+          },
+        );
+
+        expect(result.status).toBe("blocked");
+        expect(result.pushed).toBe(false);
+        expect(result.reason).toContain("repository provisioning blocked");
+        expect(result.approvalId).toBeTruthy();
+
+        // No repo created, no PR opened, project still unlinked.
+        expect(repo.created).toHaveLength(0);
+        expect(pr.created).toHaveLength(0);
+        const stillUnlinked = await projects.get(project.slug);
+        expect(stillUnlinked?.repository).toBe("");
+
+        // A pending owner decision was surfaced to create the repository.
+        const pending = await approvals.listPending();
+        expect(pending.map((a) => a.action)).toContain("create_repositories");
+        const log = await readFile(workspacePaths(dir).auditLog, "utf8");
+        expect(log).toContain("project.dispatch.repo_provision_blocked");
+      },
+      TIMEOUT_MS,
+    );
+
+    it(
+      "repo already linked: no provisioning happens (unchanged delivery)",
+      async () => {
+        // The project already has a linked repository: provisioning must not run,
+        // even with a provision client + owner available. Delivery is exactly as
+        // before (branch pushed, PR opened).
+        const config = defaultConfig("agency");
+        const runId = "run_already_linked";
+        const project = await seedProjectWithCommit(runId);
+        const evidence = await seedReadyEvidence(runId);
+        const run = runRecord(runId, project.id, project.client_id);
+        const pr = new RecordingPrClient();
+        const repo = new RecordingRepoProvisionClient();
+
+        const result = await deliverDispatchedRun(
+          deps(config, pr, { client: repo, owner: "owner-acct" }),
+          {
+            project,
+            run,
+            scope: "Build the booking page",
+            commit: { committed: true, branch: workspace.branchForRun(project.slug, runId) },
+            hadWorktree: true,
+            runOk: true,
+            producedArtifacts: evidence,
+          },
+        );
+
+        // No repo was provisioned; the original linked repo is untouched.
+        expect(repo.created).toHaveLength(0);
+        expect(result.status).toBe("delivered");
+        expect(pr.created[0]?.owner).toBe("acme");
+        const linked = await projects.get(project.slug);
+        expect(linked?.repository).toBe("https://github.com/acme/site");
+
+        const log = await readFile(workspacePaths(dir).auditLog, "utf8");
+        expect(log).not.toContain("project.dispatch.repo_provisioned");
+      },
+      TIMEOUT_MS,
+    );
+  });
 });
