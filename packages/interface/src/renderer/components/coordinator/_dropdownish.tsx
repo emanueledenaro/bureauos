@@ -42,7 +42,7 @@ export function Dropdownish({
         type="button"
         disabled={disabled}
         aria-label={ariaLabel}
-        aria-haspopup="listbox"
+        aria-haspopup="menu"
         aria-expanded={open}
         className="focus-ring rounded disabled:opacity-50"
         onClick={() => setOpen((v) => !v)}

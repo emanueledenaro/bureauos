@@ -247,7 +247,25 @@ export function CoordinatorPanel({
       });
     } catch (e) {
       const aborted = e instanceof DOMException && e.name === "AbortError";
-      if (!aborted) setError(e instanceof Error ? e.message : String(e));
+      if (aborted) {
+        // User stopped mid-stream: finalize the partial reply so it becomes a
+        // normal, copyable message (drop the streaming flag), and clear the
+        // submitted draft + attachments, mirroring a completed turn.
+        setMessages((current) =>
+          current.map((message) =>
+            message.id === assistantStreamId ? { ...message, meta: undefined } : message,
+          ),
+        );
+        setDraft("");
+        setAttachments((current) => {
+          current.forEach((item) => {
+            if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+          });
+          return [];
+        });
+      } else {
+        setError(e instanceof Error ? e.message : String(e));
+      }
       setStreamingMessageId(undefined);
     } finally {
       setBusy(false);
