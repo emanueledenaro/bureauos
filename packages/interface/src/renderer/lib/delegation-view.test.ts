@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CoordinatorIntakeResult } from "./api";
-import { runTone, toDelegationView } from "./delegation-view";
+import { toDelegationView } from "./delegation-view";
 
 const intake = (): CoordinatorIntakeResult => ({
   summary: "Created",
@@ -14,14 +14,6 @@ const intake = (): CoordinatorIntakeResult => ({
 });
 
 describe("delegation-view", () => {
-  it("maps run status to a tone", () => {
-    expect(runTone("completed")).toBe("success");
-    expect(runTone("failed")).toBe("danger");
-    expect(runTone("needs_human")).toBe("warning");
-    expect(runTone("in_progress")).toBe("info");
-    expect(runTone("weird")).toBe("neutral");
-  });
-
   it("builds a card view model from an intake result", () => {
     const view = toDelegationView(intake());
     expect(view).toMatchObject({
@@ -29,10 +21,14 @@ describe("delegation-view", () => {
       projectName: "Acme Website",
       clientName: "Acme Labs",
       runId: "run_1",
-      runTone: "info",
+      runTone: "neutral",
       artifactCount: 1,
       approvalCount: 0,
       nextAction: "Qualify the opportunity",
     });
+  });
+
+  it("leaves nextAction undefined when there are no next actions", () => {
+    expect(toDelegationView({ ...intake(), next_actions: [] }).nextAction).toBeUndefined();
   });
 });

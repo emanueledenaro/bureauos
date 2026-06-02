@@ -1,5 +1,5 @@
 import type { CoordinatorIntakeResult } from "./api";
-import type { Tone } from "./design-tokens";
+import { runTone, type Tone } from "./tone";
 
 export interface DelegationView {
   opportunityId: string;
@@ -11,23 +11,6 @@ export interface DelegationView {
   artifactCount: number;
   approvalCount: number;
   nextAction?: string;
-}
-
-export function runTone(status: string): Tone {
-  switch (status) {
-    case "completed":
-      return "success";
-    case "failed":
-    case "blocked":
-      return "danger";
-    case "needs_human":
-      return "warning";
-    case "in_progress":
-    case "queued":
-      return "info";
-    default:
-      return "neutral";
-  }
 }
 
 export function toDelegationView(result: CoordinatorIntakeResult): DelegationView {

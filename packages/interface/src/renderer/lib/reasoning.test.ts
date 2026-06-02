@@ -11,4 +11,9 @@ describe("reasoning", () => {
   it("exposes an i18n key per step", () => {
     expect(reasoningStepForStatus("started").key).toBe("reasoning.readingContext");
   });
+
+  it("falls back to the generic 'working' step for an unknown status", () => {
+    // @ts-expect-error — exercising the default branch with a status outside the union
+    expect(reasoningStepForStatus("mystery").key).toBe("reasoning.working");
+  });
 });

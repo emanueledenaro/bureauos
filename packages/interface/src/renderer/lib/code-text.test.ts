@@ -11,7 +11,11 @@ describe("code-text", () => {
 
   it("joins arrays and walks element children", () => {
     expect(nodeText(["a", "b"])).toBe("ab");
-    const tree = createElement("span", null, ["const ", createElement("em", null, "x"), " = 1"]);
+    const tree = createElement("span", null, [
+      "const ",
+      createElement("em", { key: "em" }, "x"),
+      " = 1",
+    ]);
     expect(nodeText(tree)).toBe("const x = 1");
   });
 });
