@@ -1,6 +1,6 @@
 import { FileText } from "lucide-react";
 import { Avatar, AvatarFallback } from "../ui/avatar";
-import { ResultCard } from "./ResultCard";
+import { DelegationCard } from "./DelegationCard";
 import { MessageActions } from "./MessageActions";
 import { MessageContent } from "./MessageContent";
 import { cn } from "../../lib/utils";
@@ -84,7 +84,7 @@ export function MessageBubble({
             {...(isOwner ? { onEdit } : { onRegenerate })}
           />
         ) : null}
-        {message.result ? <ResultCard result={message.result} /> : null}
+        {message.result ? <DelegationCard result={message.result} /> : null}
       </div>
     </div>
   );
