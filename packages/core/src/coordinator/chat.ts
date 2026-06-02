@@ -69,6 +69,10 @@ export interface CoordinatorChatResult {
 export type CoordinatorChatStreamEvent =
   | { type: "status"; status: "started" | "provider_streaming" | "persisting" }
   | { type: "reasoning"; text: string }
+  // Delegation/run/artifact events are derived from the completed intake result
+  // (see stream-events.ts), emitted before `final`. Phases beyond "dispatched"
+  // and the optional `detail` fields are reserved for the future
+  // during-execution emission refinement.
   | {
       type: "delegation";
       phase: "planned" | "dispatched" | "running" | "completed" | "escalated";
