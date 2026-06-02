@@ -7,7 +7,7 @@ import { MessageBubble } from "./MessageBubble";
 import { ReasoningBlock } from "./ReasoningBlock";
 import { Composer } from "./Composer";
 import { buildTodayActions } from "../../lib/builders";
-import { truncateBefore, truncateToLastOwnerInclusive } from "../../lib/chat-thread";
+import { lastOwnerMessage, truncateBefore, truncateToLastOwnerInclusive } from "../../lib/chat-thread";
 import {
   Api,
   type CoordinatorAttachmentInput,
@@ -254,9 +254,9 @@ export function CoordinatorPanel({
   const stop = (): void => abortRef.current?.abort();
 
   const regenerate = (): void => {
-    const base = truncateToLastOwnerInclusive(messages);
-    const lastOwner = base[base.length - 1];
+    const lastOwner = lastOwnerMessage(messages);
     if (!lastOwner) return;
+    const base = truncateToLastOwnerInclusive(messages);
     void submit({ text: lastOwner.text, base: base.slice(0, -1) });
   };
 
