@@ -41,7 +41,11 @@ describe("intakeToStreamEvents", () => {
     const events = intakeToStreamEvents(intake());
     expect(events.map((e) => e.type)).toEqual(["delegation", "run_status", "artifact"]);
     const delegation = events.find((e) => e.type === "delegation");
-    expect(delegation).toMatchObject({ phase: "dispatched", runId: "run_1", agentRole: "supreme_coordinator" });
+    expect(delegation).toMatchObject({
+      phase: "dispatched",
+      runId: "run_1",
+      agentRole: "supreme_coordinator",
+    });
     const run = events.find((e) => e.type === "run_status");
     expect(run).toMatchObject({ runId: "run_1", status: "in_progress" });
     const artifact = events.find((e) => e.type === "artifact");

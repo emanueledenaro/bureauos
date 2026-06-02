@@ -1047,7 +1047,9 @@ describe("CoordinatorChatService", () => {
 
     const events: CoordinatorChatStreamEvent[] = [];
     // Use a message that triggers intake mode (hasIntakeIntent returns true)
-    for await (const event of service.stream({ message: "Il cliente Acme vuole un nuovo sito web" })) {
+    for await (const event of service.stream({
+      message: "Il cliente Acme vuole un nuovo sito web",
+    })) {
       events.push(event);
     }
 
@@ -1057,7 +1059,9 @@ describe("CoordinatorChatService", () => {
       expect(events.some((e) => e.type === "run_status")).toBe(true);
       // every delegation/run_status/artifact event precedes final
       const finalIdx = events.findIndex((e) => e.type === "final");
-      for (const e of events.filter((x) => ["delegation", "run_status", "artifact"].includes(x.type))) {
+      for (const e of events.filter((x) =>
+        ["delegation", "run_status", "artifact"].includes(x.type),
+      )) {
         expect(events.indexOf(e)).toBeLessThan(finalIdx);
       }
     }

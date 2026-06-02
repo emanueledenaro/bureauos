@@ -8,7 +8,9 @@ import type { CoordinatorIntakeResult } from "./intake.js";
  * `process()`; emitting *during* that work is a future refinement that would only
  * change where these events are yielded — not their shape or the frontend.
  */
-export function intakeToStreamEvents(result: CoordinatorIntakeResult): CoordinatorChatStreamEvent[] {
+export function intakeToStreamEvents(
+  result: CoordinatorIntakeResult,
+): CoordinatorChatStreamEvent[] {
   const events: CoordinatorChatStreamEvent[] = [];
   const run = result.run;
   if (run) {
@@ -22,7 +24,12 @@ export function intakeToStreamEvents(result: CoordinatorIntakeResult): Coordinat
     events.push({ type: "run_status", runId: run.id, status: run.status });
   }
   for (const artifact of result.artifacts ?? []) {
-    events.push({ type: "artifact", artifactId: artifact.id, artifactType: artifact.type, status: artifact.status });
+    events.push({
+      type: "artifact",
+      artifactId: artifact.id,
+      artifactType: artifact.type,
+      status: artifact.status,
+    });
   }
   return events;
 }
