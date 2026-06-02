@@ -15,6 +15,9 @@ import { AutonomousRetryService } from "../autonomy/retry.js";
 import { RootMemoryConsolidationService } from "../memory/consolidation.js";
 import { MorningBriefService } from "../memory/morning-brief.js";
 import { parseGitHubRepository } from "../github/repository-utils.js";
+import { ArtifactStore } from "../artifacts/store.js";
+import { AuditLog } from "../audit/log.js";
+import { workspacePaths } from "../paths.js";
 import { DaemonSchedulerStateStore } from "./state.js";
 
 /**
@@ -101,11 +104,49 @@ const TICKS: Array<Omit<TickJob, "last">> = [
   },
 ];
 
+function failureReportBody(
+  job: Omit<TickJob, "last">,
+  occurredAt: string,
+  error: string,
+  failureCount: number,
+): string {
+  return `# Daemon Job Failure
+
+The always-on scheduler job **${job.name}** threw and did not complete.
+
+- Job: ${job.name}
+- Run type: ${job.type}
+- Scope: ${job.scope}
+- Occurred at: ${occurredAt}
+- Consecutive failures: ${failureCount}
+- Error: ${error}
+
+## What this means
+
+This is a reliability signal, not an action. The daemon recorded the failure and
+backed the job off by its normal interval (it will be retried on a later tick).
+No external action was taken.
+
+## Owner next steps
+
+- Inspect the daemon heartbeat (\`bureau daemon status\`) for the latest error and failure count.
+- If the failure persists across ticks, investigate the underlying job before the next interval.
+`;
+}
+
 export class Scheduler {
   private interval: NodeJS.Timeout | undefined;
   private jobs: TickJob[];
   private running = false;
   private readonly state?: DaemonSchedulerStateStore;
+  // Stores used to make a job failure durable + owner-visible (SER-16). Prefer
+  // the coordinator's wired instances; otherwise fall back to workspace-rooted
+  // stores so failures still leave an artifact + audit trail even on the
+  // lightweight (no-coordinator) daemon path. Undefined only when neither a
+  // coordinator nor a workspace root is configured (e.g. a pure unit harness),
+  // in which case failure recording degrades to logging.
+  private readonly failureArtifacts?: ArtifactStore;
+  private readonly failureAudit?: AuditLog;
 
   constructor(private readonly options: SchedulerOptions) {
     // ROOT consolidation is gated by the owner's memory policy: when
@@ -118,6 +159,14 @@ export class Scheduler {
     this.state =
       options.schedulerState ??
       (options.workspaceRoot ? new DaemonSchedulerStateStore(options.workspaceRoot) : undefined);
+    this.failureArtifacts =
+      options.coordinator?.artifacts ??
+      (options.workspaceRoot ? new ArtifactStore(options.workspaceRoot) : undefined);
+    this.failureAudit =
+      options.coordinator?.audit ??
+      (options.workspaceRoot
+        ? new AuditLog(workspacePaths(options.workspaceRoot).auditLog)
+        : undefined);
   }
 
   start(everyMs = 60_000): void {
@@ -262,12 +311,18 @@ export class Scheduler {
         await this.markSucceeded(job, now, run.id);
       } catch (err) {
         const message = (err as Error).message;
-        await this.state?.markFailed({
+        const cursor = await this.state?.markFailed({
           trigger: job.name,
           now: new Date(now),
           error: message,
         });
         this.log(`scheduler: ${job.name} failed: ${message}`);
+        // A thrown job must not fail silently: leave a durable artifact + audit
+        // event so the owner sees it in the Operating Room, not only in the
+        // ephemeral cursor/log (SER-16). Recording is best-effort and must never
+        // surface its own error — a logging failure cannot be allowed to crash
+        // the always-on daemon or abort the remaining due jobs in this tick.
+        await this.recordJobFailure(job, now, message, cursor?.failure_count);
       }
     }
   }
@@ -308,6 +363,59 @@ export class Scheduler {
       everyMs: job.everyMs,
       ...(runId ? { runId } : {}),
     });
+  }
+
+  /**
+   * Make a thrown tick job durably owner-visible (SER-16).
+   *
+   * Writes a `daemon-job-failure-report` artifact and appends a
+   * `daemon.job.failed` audit event (linking the artifact). This complements the
+   * scheduler cursor — which only surfaces the latest error via the heartbeat
+   * and only when a state store is configured — with a permanent record in the
+   * artifact store and the append-only audit log, the two surfaces the owner
+   * actually inspects. It records visibility only; it never retries or takes any
+   * external action. The whole operation is best-effort: any error raised while
+   * recording is swallowed (and logged) so it cannot crash the always-on daemon
+   * or abort the rest of the tick.
+   */
+  private async recordJobFailure(
+    job: TickJob,
+    now: number,
+    message: string,
+    failureCount?: number,
+  ): Promise<void> {
+    try {
+      const occurredAt = new Date(now).toISOString();
+      const attempts = failureCount ?? 1;
+      const artifact = await this.failureArtifacts?.write({
+        type: "daemon-job-failure-report",
+        createdBy: "daemon_scheduler",
+        status: "submitted",
+        metadata: {
+          job: job.name,
+          run_type: job.type,
+          scope: job.scope,
+          every_ms: job.everyMs,
+          failure_count: attempts,
+          error: message,
+          occurred_at: occurredAt,
+        },
+        body: failureReportBody(job, occurredAt, message, attempts),
+      });
+      await this.failureAudit?.append({
+        actor: "daemon_scheduler",
+        action: "daemon.job.failed",
+        target: job.name,
+        capability: "bureauos.daemon",
+        ...(artifact ? { artifact_id: artifact.id } : {}),
+        result: "error",
+        error: message,
+      });
+    } catch (recordError) {
+      this.log(
+        `scheduler: failed to record failure artifact for ${job.name}: ${(recordError as Error).message}`,
+      );
+    }
   }
 
   private async syncGitHubProjectSignals(): Promise<void> {
