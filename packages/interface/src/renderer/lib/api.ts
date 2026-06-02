@@ -503,6 +503,8 @@ export type CoordinatorChatStreamEvent =
 export interface CoordinatorChatStreamHandlers {
   onStatus?: (status: Extract<CoordinatorChatStreamEvent, { type: "status" }>["status"]) => void;
   onDelta?: (text: string) => void;
+  /** Optional external cancellation (composer Stop). Aborting ends the stream cleanly. */
+  signal?: AbortSignal;
 }
 export interface CoordinatorGlobalMemoryPacket {
   rootMemory: string;
@@ -984,6 +986,10 @@ export const Api = {
     };
 
     armInactivityTimer();
+    if (handlers.signal) {
+      if (handlers.signal.aborted) controller.abort();
+      else handlers.signal.addEventListener("abort", () => controller.abort(), { once: true });
+    }
     try {
       const res = await fetch(`${base}/coordinator/messages/stream`, {
         method: "POST",
