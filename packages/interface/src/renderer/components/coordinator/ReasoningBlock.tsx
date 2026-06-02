@@ -12,10 +12,18 @@ type StreamStatus = Extract<CoordinatorChatStreamEvent, { type: "status" }>["sta
  * (started/provider_streaming/persisting). Phase 2 will feed it richer `reasoning`
  * deltas. `active` keeps the spinner running until the turn completes.
  */
+// Canonical Phase-1 step sequence. Phase 2 will replace this static list with
+// streamed `reasoning` deltas; for now it gives the disclosure something more
+// than the collapsed one-liner by showing the whole arc with the live step lit.
+const STEP_KEYS: StreamStatus[] = ["started", "provider_streaming", "persisting"];
+
 export function ReasoningBlock({ status, active }: { status?: StreamStatus; active: boolean }) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  const step = status ? reasoningStepForStatus(status) : reasoningStepForStatus("started");
+  // Before the first status event arrives, the turn is in its opening phase, so
+  // default to "started" for the collapsed label and the emphasized step.
+  const effectiveStatus = status ?? "started";
+  const step = reasoningStepForStatus(effectiveStatus);
   const label = t(step.key, step.fallback);
 
   return (
@@ -34,7 +42,20 @@ export function ReasoningBlock({ status, active }: { status?: StreamStatus; acti
           <span>{label}</span>
         </button>
         {open ? (
-          <div className={cn("mt-1 border-l-2 border-primary/40 pl-3 text-meta")}>{label}</div>
+          <ul className="mt-1 space-y-0.5 border-l-2 border-primary/40 pl-3 text-meta">
+            {STEP_KEYS.map((stepStatus) => {
+              const s = reasoningStepForStatus(stepStatus);
+              const isCurrent = stepStatus === effectiveStatus;
+              return (
+                <li
+                  key={stepStatus}
+                  className={cn(isCurrent ? "text-foreground" : "text-muted-foreground")}
+                >
+                  {t(s.key, s.fallback)}
+                </li>
+              );
+            })}
+          </ul>
         ) : null}
       </div>
     </div>

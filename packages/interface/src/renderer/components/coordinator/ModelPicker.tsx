@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { Api, type ProviderConnection } from "../../lib/api";
 import { activeModelLabel, buildModelOptions } from "../../lib/model-options";
@@ -21,6 +21,9 @@ export function ModelPicker({
   const [label, setLabel] = useState(() => activeModelLabel(providers));
   const [busy, setBusy] = useState(false);
   const options = buildModelOptions(providers);
+
+  // Re-sync the displayed label after an external provider refresh (e.g. a connect in Settings).
+  useEffect(() => setLabel(activeModelLabel(providers)), [providers]);
 
   const choose = async (provider: string, model: string, optionLabel: string): Promise<void> => {
     setBusy(true);
@@ -46,16 +49,22 @@ export function ModelPicker({
       }
       ariaLabel={t("composer.model", "Model")}
     >
-      {options.map((o) => (
-        <button
-          key={`${o.provider}:${o.model}`}
-          type="button"
-          className="text-body-secondary block w-full rounded px-2 py-1 text-left hover:bg-surface-subtle"
-          onClick={() => void choose(o.provider, o.model, `${o.providerName} · ${o.model}`)}
-        >
-          {o.providerName} · {o.model}
-        </button>
-      ))}
+      {(close) =>
+        options.map((o) => (
+          <button
+            key={`${o.provider}:${o.model}`}
+            type="button"
+            role="menuitem"
+            className="text-body-secondary block w-full rounded px-2 py-1 text-left hover:bg-surface-subtle"
+            onClick={() => {
+              void choose(o.provider, o.model, `${o.providerName} · ${o.model}`);
+              close();
+            }}
+          >
+            {o.providerName} · {o.model}
+          </button>
+        ))
+      }
     </Dropdownish>
   );
 }

@@ -16,11 +16,15 @@ export function SlashCommandMenu({
   const commands = filterSlashCommands(query);
   if (commands.length === 0) return null;
   return (
-    <div className="mb-2 overflow-hidden rounded-md border border-border bg-popover p-1 shadow-lg">
+    <div
+      role="menu"
+      className="mb-2 overflow-hidden rounded-md border border-border bg-popover p-1 shadow-lg"
+    >
       {commands.map((c) => (
         <button
           key={c.id}
           type="button"
+          role="menuitem"
           className="text-body-secondary block w-full rounded px-2 py-1.5 text-left hover:bg-surface-subtle"
           onClick={() => onPick(c)}
         >

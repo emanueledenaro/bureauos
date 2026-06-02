@@ -8,12 +8,17 @@ export function Dropdownish({
   disabled,
 }: {
   trigger: ReactNode;
-  children: ReactNode;
+  children: (close: () => void) => ReactNode;
   ariaLabel: string;
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  // Close the panel if it becomes disabled while open (e.g. a model switch is in flight).
+  useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
 
   useEffect(() => {
     if (!open) return;
@@ -37,6 +42,7 @@ export function Dropdownish({
         type="button"
         disabled={disabled}
         aria-label={ariaLabel}
+        aria-haspopup="listbox"
         aria-expanded={open}
         className="focus-ring rounded disabled:opacity-50"
         onClick={() => setOpen((v) => !v)}
@@ -44,8 +50,11 @@ export function Dropdownish({
         {trigger}
       </button>
       {open ? (
-        <div className="absolute bottom-full right-0 z-50 mb-1 max-h-64 min-w-[200px] overflow-auto rounded-md border border-border bg-popover p-1 shadow-lg">
-          <div onClick={() => setOpen(false)}>{children}</div>
+        <div
+          role="menu"
+          className="absolute bottom-full right-0 z-50 mb-1 max-h-64 min-w-[200px] overflow-auto rounded-md border border-border bg-popover p-1 shadow-lg"
+        >
+          {children(() => setOpen(false))}
         </div>
       ) : null}
     </div>
