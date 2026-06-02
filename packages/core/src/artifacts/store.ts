@@ -33,6 +33,7 @@ export type ArtifactType =
   | "project-health-report"
   | "repository-verification-report"
   | "autonomy-retry-report"
+  | "daemon-job-failure-report"
   | "revenue-pipeline-report"
   | "growth-review"
   | "content-pipeline-report"

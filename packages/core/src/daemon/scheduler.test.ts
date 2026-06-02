@@ -21,6 +21,7 @@ import type {
   GitHubSignalPullRequest,
 } from "../github/signal-sync.js";
 import { Scheduler } from "./scheduler.js";
+import { DaemonSchedulerStateStore } from "./state.js";
 
 class FakeGitHubSignalClient implements GitHubSignalClient {
   async listIssues(owner: string, repo: string): Promise<readonly GitHubSignalIssue[]> {
@@ -486,5 +487,106 @@ describe("Scheduler", () => {
 
     const log = await readFile(workspacePaths(dir).auditLog, "utf8");
     expect(log).toContain("operational.signal_trigger.run_started");
+  });
+
+  it("records a durable failure artifact and audit event when a tick job throws (SER-16)", async () => {
+    const config = defaultConfig("freelancer");
+    const approvals = new ApprovalRegistry(dir);
+    const policy = new PolicyEngine(config, approvals);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const runs = new RunEngine(dir, { audit, artifacts, policy });
+
+    // Force every run-backed job to throw on this tick.
+    runs.start = (async () => {
+      throw new Error("provider unavailable");
+    }) as typeof runs.start;
+
+    const scheduler = new Scheduler({
+      config,
+      runs,
+      workspaceRoot: dir,
+      coordinator: { audit, artifacts, policy },
+      logger: () => {},
+    });
+
+    const t0 = new Date("2026-05-26T10:00:00.000Z").getTime();
+    await scheduler.tick(t0);
+
+    // Failure is durably visible as an artifact, not just in the cursor/log.
+    const failureArtifacts = await artifacts.list({ type: "daemon-job-failure-report" });
+    expect(failureArtifacts.length).toBeGreaterThan(0);
+    const healthFailure = failureArtifacts.find(
+      (artifact) => artifact["job"] === "project_health_check",
+    );
+    expect(healthFailure).toMatchObject({
+      created_by: "daemon_scheduler",
+      status: "submitted",
+      error: "provider unavailable",
+      failure_count: 1,
+      occurred_at: "2026-05-26T10:00:00.000Z",
+    });
+    const failureBody = await artifacts.read(healthFailure!.id);
+    expect(failureBody?.body).toContain("provider unavailable");
+    expect(failureBody?.body).toContain("project_health_check");
+
+    // Failure is durably visible in the append-only audit log.
+    const log = await readFile(workspacePaths(dir).auditLog, "utf8");
+    const failedEvents = log
+      .split("\n")
+      .filter((line) => line.trim())
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .filter((event) => event["action"] === "daemon.job.failed");
+    expect(failedEvents.length).toBeGreaterThan(0);
+    const healthEvent = failedEvents.find((event) => event["target"] === "project_health_check");
+    expect(healthEvent).toMatchObject({
+      actor: "daemon_scheduler",
+      action: "daemon.job.failed",
+      target: "project_health_check",
+      capability: "bureauos.daemon",
+      result: "error",
+      error: "provider unavailable",
+    });
+    // The audit event links the durable failure artifact.
+    expect(healthEvent!["artifact_id"]).toBe(healthFailure!.id);
+  });
+
+  it("does not crash the daemon when recording a job failure itself fails (SER-16)", async () => {
+    const config = defaultConfig("freelancer");
+    const approvals = new ApprovalRegistry(dir);
+    const policy = new PolicyEngine(config, approvals);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const runs = new RunEngine(dir, { audit, artifacts, policy });
+
+    runs.start = (async () => {
+      throw new Error("boom");
+    }) as typeof runs.start;
+
+    // Make the failure-artifact write itself throw. Recording is best-effort and
+    // must never crash the always-on daemon or abort the rest of the tick.
+    artifacts.write = (async () => {
+      throw new Error("artifact store offline");
+    }) as typeof artifacts.write;
+
+    const lines: string[] = [];
+    const scheduler = new Scheduler({
+      config,
+      runs,
+      workspaceRoot: dir,
+      coordinator: { audit, artifacts, policy },
+      logger: (message) => lines.push(message),
+    });
+
+    const t0 = new Date("2026-05-26T10:00:00.000Z").getTime();
+    // The tick resolves (does not reject) even though both the job and the
+    // failure recording threw.
+    await expect(scheduler.tick(t0)).resolves.toBeUndefined();
+
+    // The recording error is logged, and the underlying failure is still tracked
+    // on the persisted cursor so the daemon is not silent.
+    expect(lines.some((line) => line.includes("failed to record failure artifact"))).toBe(true);
+    const cursor = await new DaemonSchedulerStateStore(dir).cursor("project_health_check");
+    expect(cursor).toMatchObject({ failure_count: 1, last_error: "boom" });
   });
 });
