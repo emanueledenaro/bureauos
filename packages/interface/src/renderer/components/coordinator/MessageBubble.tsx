@@ -1,6 +1,7 @@
 import { FileText } from "lucide-react";
 import { Avatar, AvatarFallback } from "../ui/avatar";
 import { ResultCard } from "./ResultCard";
+import { MessageActions } from "./MessageActions";
 import { MessageContent } from "./MessageContent";
 import { cn } from "../../lib/utils";
 import { formatBytes, formatTime } from "../../lib/format";
@@ -11,7 +12,15 @@ import type { CoordinatorMessageRecord } from "../../lib/api";
  * Singolo messaggio della chat. Owner compatto a destra, Coordinator più
  * simile a un executive note: avatar, metadati, contenuto leggibile e poco boxy.
  */
-export function MessageBubble({ message }: { message: CoordinatorMessageRecord }) {
+export function MessageBubble({
+  message,
+  onRegenerate,
+  onEdit,
+}: {
+  message: CoordinatorMessageRecord;
+  onRegenerate?: () => void;
+  onEdit?: () => void;
+}) {
   const t = useT();
   const isOwner = message.role === "owner";
   return (
@@ -68,6 +77,13 @@ export function MessageBubble({ message }: { message: CoordinatorMessageRecord }
             </div>
           ) : null}
         </div>
+        {!message.meta?.streaming ? (
+          <MessageActions
+            text={message.text}
+            variant={isOwner ? "owner" : "coordinator"}
+            {...(isOwner ? { onEdit } : { onRegenerate })}
+          />
+        ) : null}
         {message.result ? <ResultCard result={message.result} /> : null}
       </div>
     </div>
