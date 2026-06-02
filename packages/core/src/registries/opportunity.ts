@@ -1,3 +1,4 @@
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { newId } from "../ids.js";
 import { workspacePaths } from "../paths.js";
@@ -97,6 +98,28 @@ export class OpportunityRegistry {
       out.push(doc.front);
     }
     return out;
+  }
+
+  async listForClient(clientId: string): Promise<OpportunityRecord[]> {
+    const all = await this.list();
+    return all.filter((opportunity) => opportunity.client_id === clientId);
+  }
+
+  /**
+   * Remove an opportunity's `<id>.md` file. Returns whether a record existed:
+   * deleting a missing opportunity is a no-op (`false`), not an error, so
+   * cascade callers stay idempotent.
+   */
+  async delete(id: string): Promise<boolean> {
+    const path = this.file(id);
+    if (!(await fileExists(path))) return false;
+    // Serialize against any concurrent read-modify-write on the same file so a
+    // delete cannot race a status patch into recreating a half-written record.
+    return withFileLock(path, async () => {
+      if (!(await fileExists(path))) return false;
+      await rm(path, { force: true });
+      return true;
+    });
   }
 
   async update(

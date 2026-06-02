@@ -1,3 +1,4 @@
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { newId, slugify } from "../ids.js";
 import { workspacePaths } from "../paths.js";
@@ -234,6 +235,25 @@ export class ProjectRegistry {
   async listForClient(clientId: string): Promise<ProjectRecord[]> {
     const all = await this.list();
     return all.filter((p) => p.client_id === clientId);
+  }
+
+  /**
+   * Remove a project's `projects/<slug>/` directory (profile, ownership,
+   * backlog, project memory). Returns whether the project existed: deleting a
+   * missing project is a no-op (`false`), not an error, so cascade callers stay
+   * idempotent.
+   */
+  async delete(slug: string): Promise<boolean> {
+    const dir = this.projectDir(slug);
+    const path = join(dir, "PROJECT.md");
+    if (!(await fileExists(path))) return false;
+    // Serialize against any concurrent read-modify-write on PROJECT.md so a
+    // delete cannot race a status patch into recreating a half-written record.
+    return withFileLock(path, async () => {
+      if (!(await fileExists(path))) return false;
+      await rm(dir, { recursive: true, force: true });
+      return true;
+    });
   }
 
   async getOwnership(slug: string): Promise<ProjectOwnershipRecord | undefined> {

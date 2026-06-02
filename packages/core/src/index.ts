@@ -38,7 +38,13 @@ export {
 export type { FrontMatter, ParsedDocument } from "./registries/base.js";
 
 export { ClientRegistry } from "./registries/client.js";
-export type { ClientRecord, ClientStatus, CreateClientInput } from "./registries/client.js";
+export type {
+  ClientRecord,
+  ClientRegistryDeps,
+  ClientStatus,
+  CreateClientInput,
+  DeletedClientSummary,
+} from "./registries/client.js";
 
 export { ProjectRegistry } from "./registries/project.js";
 export type {
@@ -244,6 +250,9 @@ export { CoordinatorToolRuntime, coordinatorToolMeta } from "./coordinator/tool-
 export type {
   CoordinatorCreateIntakeToolExecution,
   CoordinatorCreateIntakeToolInput,
+  CoordinatorDeleteClientToolExecution,
+  CoordinatorDeleteClientToolInput,
+  CoordinatorDeleteClientToolStatus,
   CoordinatorToolExecutionSource,
   CoordinatorToolMeta,
   CoordinatorToolRuntimeDeps,
