@@ -32,6 +32,7 @@ export function Composer({
   onStop?: () => void;
   busy?: boolean;
   placeholder?: string;
+  // Intentionally optional only until Task 17 wires `state.providers` from the panel.
   providers?: DashboardState["providers"];
 }) {
   const t = useT();
@@ -44,7 +45,7 @@ export function Composer({
   const slash = parseSlash(value);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
-    // Enter sends; Shift+Enter inserts a newline. Cmd/Ctrl+Enter kept as an alias.
+    // Plain Enter sends. Shift+Enter inserts a newline. IME composition is ignored. Cmd/Ctrl+Enter also sends (modifier is not blocked).
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       if (canSend) onSubmit();
@@ -125,12 +126,23 @@ export function Composer({
           </div>
 
           {busy && onStop ? (
-            <Button type="button" variant="outline" size="sm" onClick={onStop}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onStop}
+              aria-label={t("composer.stop", "Stop")}
+            >
               <Square className="h-3 w-3" />
               {t("composer.stop", "Stop")}
             </Button>
           ) : (
-            <Button type="submit" size="sm" disabled={!canSend}>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={!canSend}
+              aria-label={busy ? t("composer.sending", "Sending") : t("composer.send", "Send")}
+            >
               {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
               {busy ? t("composer.sending", "Sending") : t("composer.send", "Send")}
             </Button>

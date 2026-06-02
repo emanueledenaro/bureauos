@@ -986,9 +986,10 @@ export const Api = {
     };
 
     armInactivityTimer();
+    const onCallerAbort = (): void => controller.abort();
     if (handlers.signal) {
       if (handlers.signal.aborted) controller.abort();
-      else handlers.signal.addEventListener("abort", () => controller.abort(), { once: true });
+      else handlers.signal.addEventListener("abort", onCallerAbort, { once: true });
     }
     try {
       const res = await fetch(`${base}/coordinator/messages/stream`, {
@@ -1037,6 +1038,7 @@ export const Api = {
       throw err;
     } finally {
       if (inactivityTimer) clearTimeout(inactivityTimer);
+      if (handlers.signal) handlers.signal.removeEventListener("abort", onCallerAbort);
     }
   },
   coordinatorMemory: (query: string, limit = 12) =>
