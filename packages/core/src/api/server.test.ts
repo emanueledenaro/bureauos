@@ -1207,8 +1207,18 @@ describe("API server", () => {
     expect(response.headers.get("content-type")).toContain("text/event-stream");
     const events = parseSseEvents(await response.text());
     expect(events.map((event) => event.event)).toEqual(
-      expect.arrayContaining(["status", "delta", "final"]),
+      expect.arrayContaining(["status", "reasoning", "delta", "final"]),
     );
+    // Assert the reasoning frame is forwarded with its JSON payload intact
+    const reasoningFrames = events.filter((event) => event.event === "reasoning");
+    expect(reasoningFrames.length).toBeGreaterThan(0);
+    const firstReasoning = reasoningFrames[0]?.data as { type: string; text: string } | undefined;
+    expect(firstReasoning?.type).toBe("reasoning");
+    expect(typeof firstReasoning?.text).toBe("string");
+    // reasoning must precede final
+    const finalEventIdx = events.findIndex((event) => event.event === "final");
+    const firstReasoningIdx = events.findIndex((event) => event.event === "reasoning");
+    expect(firstReasoningIdx).toBeLessThan(finalEventIdx);
     const deltas = events
       .filter((event) => event.event === "delta")
       .map((event) => (event.data as { text: string }).text)
