@@ -67,6 +67,17 @@ export interface CoordinatorChatResult {
 
 export type CoordinatorChatStreamEvent =
   | { type: "status"; status: "started" | "provider_streaming" | "persisting" }
+  | { type: "reasoning"; text: string }
+  | {
+      type: "delegation";
+      phase: "planned" | "dispatched" | "running" | "completed" | "escalated";
+      label: string;
+      runId?: string;
+      agentRole?: string;
+      detail?: string;
+    }
+  | { type: "run_status"; runId: string; status: string; detail?: string }
+  | { type: "artifact"; artifactId: string; artifactType: string; status?: string }
   | { type: "delta"; text: string }
   | { type: "final"; result: CoordinatorChatResult };
 
