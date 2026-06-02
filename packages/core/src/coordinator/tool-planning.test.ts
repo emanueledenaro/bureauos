@@ -43,10 +43,35 @@ describe("coordinator tool planning contract", () => {
       "save_client",
       "create_intake",
       "list_clients",
+      "delete_client",
       "answer",
     ]);
     expect(coordinatorToolPromptCatalog()).toContain("create_project");
     expect(coordinatorToolPromptCatalog()).toContain("planned, do not choose yet");
+  });
+
+  it("parses the destructive delete_client tool with its target and confirmation gate", () => {
+    const unconfirmed = parseCoordinatorToolPlan(
+      JSON.stringify({ action: "delete_client", clientName: "Pizzeria Aurora" }),
+    );
+    expect(unconfirmed).toMatchObject({ action: "delete_client", clientName: "Pizzeria Aurora" });
+    // No confirmation flag => `confirmed` stays unset so the runtime gate fails closed.
+    expect(unconfirmed?.confirmed).toBeUndefined();
+
+    const confirmed = parseCoordinatorToolPlan(
+      JSON.stringify({ action: "client.delete", clientSlug: "pizzeria-aurora", confirmed: true }),
+    );
+    expect(confirmed).toMatchObject({
+      action: "delete_client",
+      clientSlug: "pizzeria-aurora",
+      confirmed: true,
+    });
+
+    // A non-true confirmation value must NOT confirm the deletion.
+    const softNo = parseCoordinatorToolPlan(
+      JSON.stringify({ action: "delete_client", clientName: "Acme", confirmed: "maybe" }),
+    );
+    expect(softNo?.confirmed).toBeUndefined();
   });
 
   it("parses and cleans provider-selected tool arguments", () => {
@@ -67,7 +92,7 @@ describe("coordinator tool planning contract", () => {
 
   it("rejects unsupported provider-selected tools", () => {
     expect(
-      parseCoordinatorToolPlan(JSON.stringify({ action: "delete_client", clientName: "Acme" })),
+      parseCoordinatorToolPlan(JSON.stringify({ action: "wire_money", clientName: "Acme" })),
     ).toBeUndefined();
   });
 });

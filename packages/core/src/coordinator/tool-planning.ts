@@ -2,6 +2,7 @@ export type CoordinatorToolAction =
   | "save_client"
   | "create_intake"
   | "list_clients"
+  | "delete_client"
   | "create_project"
   | "create_approval"
   | "draft_message"
@@ -11,6 +12,7 @@ export type CoordinatorImplementedToolAction =
   | "save_client"
   | "create_intake"
   | "list_clients"
+  | "delete_client"
   | "answer";
 
 export type CoordinatorToolRouteClass = "agentic_tool_path" | "safety_fallback" | "legacy";
@@ -25,8 +27,16 @@ export interface CoordinatorToolDefinition {
 export interface CoordinatorToolPlan {
   action: CoordinatorImplementedToolAction;
   clientName?: string;
+  /** Explicit slug for a target client, when the owner/provider gives one. */
+  clientSlug?: string;
   industry?: string;
   answer?: string;
+  /**
+   * Owner confirmation flag for destructive actions (e.g. delete_client). The
+   * runtime refuses to delete unless this is explicitly `true`, honoring the
+   * "deleting data requires approval" policy.
+   */
+  confirmed?: boolean;
   confidence?: number;
 }
 
@@ -56,6 +66,13 @@ export const COORDINATOR_TOOL_DEFINITIONS: readonly CoordinatorToolDefinition[] 
     status: "implemented",
     mutates: false,
     description: "Read the local client registry and answer with concise registry state.",
+  },
+  {
+    name: "delete_client",
+    status: "implemented",
+    mutates: true,
+    description:
+      "Permanently delete a client and cascade-delete its projects and opportunities. Destructive: requires explicit owner confirmation before it removes anything.",
   },
   {
     name: "create_project",
@@ -149,12 +166,21 @@ export const COORDINATOR_MUTATION_PATH_INVENTORY: readonly CoordinatorMutationPa
       rationale:
         "CLI command builds an explicit create_intake tool execution and runs it through the shared Coordinator tool runtime.",
     },
+    {
+      id: "coordinator.runtime.delete_client",
+      entrypoint: "CoordinatorToolRuntime.executeDeleteClient",
+      classification: "agentic_tool_path",
+      tool: "delete_client",
+      rationale:
+        "Executive destructive tool: resolves the target client by slug or name and cascade-deletes it only after explicit owner confirmation (confirmed: true), honoring the delete-requires-approval policy.",
+    },
   ];
 
 const IMPLEMENTED_ACTIONS = new Set<CoordinatorImplementedToolAction>([
   "save_client",
   "create_intake",
   "list_clients",
+  "delete_client",
   "answer",
 ]);
 
@@ -198,8 +224,13 @@ export function parseCoordinatorToolPlan(raw: string): CoordinatorToolPlan | und
   const clientName = cleanCoordinatorToolClientName(
     stringArg(args, "clientName") ?? stringArg(args, "client_name") ?? "",
   );
+  const clientSlug = stringArg(args, "clientSlug") ?? stringArg(args, "client_slug");
   const industry = stringArg(args, "industry");
   const answer = stringArg(args, "answer");
+  // Only a literal boolean `true` confirms a destructive action. A missing
+  // flag, a string, or `false` all leave `confirmed` unset so the runtime
+  // refuses to delete without an explicit owner go-ahead.
+  const confirmed = parseConfirmedFlag(args);
   const confidence =
     typeof value["confidence"] === "number" && Number.isFinite(value["confidence"])
       ? Math.max(0, Math.min(1, value["confidence"]))
@@ -208,10 +239,25 @@ export function parseCoordinatorToolPlan(raw: string): CoordinatorToolPlan | und
   return {
     action,
     ...(clientName ? { clientName } : {}),
+    ...(clientSlug ? { clientSlug } : {}),
     ...(industry ? { industry } : {}),
     ...(answer ? { answer } : {}),
+    ...(confirmed ? { confirmed } : {}),
     ...(confidence !== undefined ? { confidence } : {}),
   };
+}
+
+/**
+ * Parse a destructive-action confirmation flag. Only a literal boolean `true`
+ * (or the explicit string "true") counts as confirmation; everything else —
+ * missing, "false", "yes", 1, etc. — is treated as NOT confirmed, so the
+ * delete gate fails closed.
+ */
+function parseConfirmedFlag(source: Record<string, unknown>): boolean {
+  const value = source["confirmed"] ?? source["confirm"];
+  if (value === true) return true;
+  if (typeof value === "string") return value.trim().toLowerCase() === "true";
+  return false;
 }
 
 function parseAction(value: Record<string, unknown>): CoordinatorImplementedToolAction | undefined {
@@ -223,9 +269,11 @@ function parseAction(value: Record<string, unknown>): CoordinatorImplementedTool
         ? "create_intake"
         : rawAction === "list_clients" || rawAction === "clients.list"
           ? "list_clients"
-          : rawAction === "answer" || rawAction === "clarify"
-            ? "answer"
-            : undefined;
+          : rawAction === "delete_client" || rawAction === "client.delete"
+            ? "delete_client"
+            : rawAction === "answer" || rawAction === "clarify"
+              ? "answer"
+              : undefined;
   return action && IMPLEMENTED_ACTIONS.has(action) ? action : undefined;
 }
 

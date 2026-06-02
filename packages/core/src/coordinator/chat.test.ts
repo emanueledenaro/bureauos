@@ -190,8 +190,60 @@ describe("CoordinatorChatService", () => {
         return {
           model: "fake-model",
           text: JSON.stringify({
+            action: "wire_money",
+            clientName: "Pizzeria Amodeo",
+            confidence: 0.99,
+          }),
+        };
+      },
+      async *stream() {
+        yield "unused";
+      },
+    };
+    const service = new CoordinatorChatService(dir, {
+      config: defaultConfig("freelancer"),
+      providerSelector: async () => ({ provider: fakeProvider, model: "fake-model" }),
+    });
+
+    const result = await service.process({
+      source: "test",
+      message: "manda un bonifico al cliente Pizzeria Amodeo",
+    });
+
+    expect(result.mode).toBe("answer");
+    expect(result.coordinatorMessage.meta?.tool).toMatchObject({
+      status: "rejected",
+      allowed: ["save_client", "create_intake", "list_clients", "delete_client", "answer"],
+    });
+    expect(result.coordinatorMessage.text).toContain("Non ho eseguito azioni");
+    await expect(new ClientRegistry(dir).list()).resolves.toHaveLength(1);
+    await expect(auditText(dir)).resolves.toContain("coordinator.tool.rejected");
+  });
+
+  it("does not delete a client from the free chat flow even when the provider proposes delete_client", async () => {
+    // Safety property: delete_client is a real executive tool, but the chat
+    // free-flow never auto-routes a destructive deletion. A provider plan that
+    // chooses delete_client is refused here; deletion only happens through the
+    // explicit, confirmation-gated executeDeleteClient runtime path.
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    await new ClientRegistry(dir).create({ name: "Pizzeria Amodeo" });
+    const fakeProvider: ProviderAdapter = {
+      id: "fake-provider",
+      type: "custom",
+      name: "Fake Provider",
+      async listModels() {
+        return ["fake-model"];
+      },
+      async validateCredentials() {
+        return { ok: true };
+      },
+      async generateText() {
+        return {
+          model: "fake-model",
+          text: JSON.stringify({
             action: "delete_client",
             clientName: "Pizzeria Amodeo",
+            confirmed: true,
             confidence: 0.99,
           }),
         };
@@ -211,14 +263,10 @@ describe("CoordinatorChatService", () => {
     });
 
     expect(result.mode).toBe("answer");
-    expect(result.coordinatorMessage.meta?.tool).toMatchObject({
-      status: "rejected",
-      allowed: ["save_client", "create_intake", "list_clients", "answer"],
-    });
-    expect(result.coordinatorMessage.text).toContain("Non ho eseguito azioni");
-    expect(result.coordinatorMessage.text).not.toContain("delete_client");
+    // Nothing was deleted: the client is still present and no executed-delete
+    // audit event was written from the chat flow.
     await expect(new ClientRegistry(dir).list()).resolves.toHaveLength(1);
-    await expect(auditText(dir)).resolves.toContain("coordinator.tool.rejected");
+    await expect(auditText(dir)).resolves.not.toContain("coordinator_tool.delete_client");
   });
 
   it("answers obvious client registry questions from local tools when the provider is unavailable", async () => {
