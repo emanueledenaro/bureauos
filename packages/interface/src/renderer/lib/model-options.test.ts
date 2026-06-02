@@ -22,9 +22,16 @@ describe("model-options", () => {
   it("builds options only from connected providers", () => {
     const options = buildModelOptions([
       conn({}),
-      conn({ provider: "openai", provider_name: "OpenAI", default_model: "gpt-x", status: "missing" }),
+      conn({
+        provider: "openai",
+        provider_name: "OpenAI",
+        default_model: "gpt-x",
+        status: "missing",
+      }),
     ]);
-    expect(options).toEqual([{ provider: "anthropic", providerName: "Anthropic", model: "claude-sonnet" }]);
+    expect(options).toEqual([
+      { provider: "anthropic", providerName: "Anthropic", model: "claude-sonnet" },
+    ]);
   });
 
   it("labels the first connected provider, with a fallback when none", () => {

@@ -8,11 +8,41 @@ export interface SlashCommand {
 }
 
 export const SLASH_COMMANDS: SlashCommand[] = [
-  { id: "client", trigger: "/client", labelKey: "slash.client", fallbackLabel: "New client intake", template: "New client: " },
-  { id: "project", trigger: "/project", labelKey: "slash.project", fallbackLabel: "New project", template: "New project: " },
-  { id: "proposal", trigger: "/proposal", labelKey: "slash.proposal", fallbackLabel: "Draft a proposal", template: "Draft a proposal for " },
-  { id: "run", trigger: "/run", labelKey: "slash.run", fallbackLabel: "Dispatch a run", template: "Dispatch a run: " },
-  { id: "approvals", trigger: "/approvals", labelKey: "slash.approvals", fallbackLabel: "Review pending approvals", template: "Review pending approvals" },
+  {
+    id: "client",
+    trigger: "/client",
+    labelKey: "slash.client",
+    fallbackLabel: "New client intake",
+    template: "New client: ",
+  },
+  {
+    id: "project",
+    trigger: "/project",
+    labelKey: "slash.project",
+    fallbackLabel: "New project",
+    template: "New project: ",
+  },
+  {
+    id: "proposal",
+    trigger: "/proposal",
+    labelKey: "slash.proposal",
+    fallbackLabel: "Draft a proposal",
+    template: "Draft a proposal for ",
+  },
+  {
+    id: "run",
+    trigger: "/run",
+    labelKey: "slash.run",
+    fallbackLabel: "Dispatch a run",
+    template: "Dispatch a run: ",
+  },
+  {
+    id: "approvals",
+    trigger: "/approvals",
+    labelKey: "slash.approvals",
+    fallbackLabel: "Review pending approvals",
+    template: "Review pending approvals",
+  },
 ];
 
 export interface SlashQuery {

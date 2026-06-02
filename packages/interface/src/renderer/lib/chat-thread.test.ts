@@ -9,7 +9,12 @@ const msg = (id: string, role: "owner" | "coordinator"): CoordinatorMessageRecor
   created: "2026-06-02T10:00:00.000Z",
 });
 
-const thread = [msg("o1", "owner"), msg("c1", "coordinator"), msg("o2", "owner"), msg("c2", "coordinator")];
+const thread = [
+  msg("o1", "owner"),
+  msg("c1", "coordinator"),
+  msg("o2", "owner"),
+  msg("c2", "coordinator"),
+];
 
 describe("chat-thread", () => {
   it("finds the last owner message", () => {

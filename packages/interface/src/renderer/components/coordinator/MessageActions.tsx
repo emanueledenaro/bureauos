@@ -36,7 +36,12 @@ export function MessageActions({ text, onRegenerate, onEdit, variant }: MessageA
     if (!onEdit) return null;
     return (
       <div className="mt-1 flex items-center gap-1">
-        <button type="button" className={iconBtn} onClick={onEdit} aria-label={t("messageActions.edit", "Edit")}>
+        <button
+          type="button"
+          className={iconBtn}
+          onClick={onEdit}
+          aria-label={t("messageActions.edit", "Edit")}
+        >
           <Pencil className="h-3 w-3" />
         </button>
       </div>
@@ -45,11 +50,21 @@ export function MessageActions({ text, onRegenerate, onEdit, variant }: MessageA
 
   return (
     <div className="mt-1 flex items-center gap-1">
-      <button type="button" className={iconBtn} onClick={() => void copy()} aria-label={t("messageActions.copy", "Copy")}>
+      <button
+        type="button"
+        className={iconBtn}
+        onClick={() => void copy()}
+        aria-label={t("messageActions.copy", "Copy")}
+      >
         {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
       </button>
       {onRegenerate ? (
-        <button type="button" className={iconBtn} onClick={onRegenerate} aria-label={t("messageActions.regenerate", "Regenerate")}>
+        <button
+          type="button"
+          className={iconBtn}
+          onClick={onRegenerate}
+          aria-label={t("messageActions.regenerate", "Regenerate")}
+        >
           <RefreshCw className="h-3 w-3" />
         </button>
       ) : null}

@@ -7,7 +7,11 @@ import { MessageBubble } from "./MessageBubble";
 import { ReasoningBlock } from "./ReasoningBlock";
 import { Composer } from "./Composer";
 import { buildTodayActions } from "../../lib/builders";
-import { lastOwnerMessage, truncateBefore, truncateToLastOwnerInclusive } from "../../lib/chat-thread";
+import {
+  lastOwnerMessage,
+  truncateBefore,
+  truncateToLastOwnerInclusive,
+} from "../../lib/chat-thread";
 import {
   Api,
   type CoordinatorAttachmentInput,
@@ -83,8 +87,9 @@ export function CoordinatorPanel({
   const [error, setError] = useState<string | undefined>();
   const [streamingMessageId, setStreamingMessageId] = useState<string | undefined>();
   const abortRef = useRef<AbortController | undefined>(undefined);
-  const [reasoningStatus, setReasoningStatus] =
-    useState<Extract<CoordinatorChatStreamEvent, { type: "status" }>["status"] | undefined>();
+  const [reasoningStatus, setReasoningStatus] = useState<
+    Extract<CoordinatorChatStreamEvent, { type: "status" }>["status"] | undefined
+  >();
   const attachmentsRef = useRef<ChatAttachment[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastScrollHeightRef = useRef(0);
