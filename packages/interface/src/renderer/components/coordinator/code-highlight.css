@@ -9,6 +9,9 @@
 .bos-markdown pre code.hljs { color: hsl(var(--foreground)); background: transparent; }
 .hljs-comment, .hljs-quote { color: hsl(var(--muted-foreground)); font-style: italic; }
 .hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-name, .hljs-tag { color: hsl(var(--info)); }
+/* Known tradeoff: --success / --warning are calibrated for UI chips/dots and dip slightly
+   below WCAG AA (~3.5-3.7:1) for 12px code text in the LIGHT theme. Accepted for this
+   Electron desktop app; we deliberately do not retune the global tokens here. */
 .hljs-string, .hljs-attr, .hljs-template-tag, .hljs-addition { color: hsl(var(--success)); }
 .hljs-number, .hljs-literal, .hljs-type, .hljs-meta { color: hsl(var(--warning)); }
 .hljs-title, .hljs-section, .hljs-function .hljs-title { color: hsl(var(--primary)); }

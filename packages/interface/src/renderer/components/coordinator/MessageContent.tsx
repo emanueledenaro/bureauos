@@ -31,6 +31,18 @@ export function MessageContent({ text }: { text: string }) {
           h2: ({ children }) => <div className="text-section-title mt-1">{children}</div>,
           h3: ({ children }) => <div className="text-card-title mt-1">{children}</div>,
           h4: ({ children }) => <div className="text-card-title mt-1">{children}</div>,
+          h5: ({ children }) => <div className="text-card-title mt-1">{children}</div>,
+          h6: ({ children }) => <div className="text-card-title mt-1">{children}</div>,
+          img: ({ src, alt }) => (
+            <a
+              href={typeof src === "string" ? src : undefined}
+              target="_blank"
+              rel="noreferrer"
+              className="text-primary underline underline-offset-2"
+            >
+              {alt || (typeof src === "string" ? src : "image")}
+            </a>
+          ),
           ul: ({ children }) => <ul className="list-disc space-y-1 pl-5">{children}</ul>,
           ol: ({ children }) => <ol className="list-decimal space-y-1 pl-5">{children}</ol>,
           blockquote: ({ children }) => (
