@@ -12,6 +12,7 @@ import { AuditLog } from "../audit/log.js";
 import { buildDevelopmentExecution } from "../execution/development-execution.js";
 import { ProjectWorkspaceService, type RunCommitResult } from "../execution/project-workspace.js";
 import type { GitHubPullRequestPublishClient } from "../github/pr-publisher.js";
+import type { GitHubRepositoryProvisionClient } from "../github/repository-provisioner.js";
 import {
   deliverDispatchedRun,
   type DispatchBranchPusher,
@@ -86,8 +87,21 @@ export interface ProjectDispatchDeps {
    * local remote but cannot open a PR.
    */
   githubPrPublishClient?: GitHubPullRequestPublishClient;
+  /**
+   * GitHub client used to AUTO-CREATE the project repository when it has none yet,
+   * so the owner never makes it by hand. Inject a fake in tests; in production a
+   * real Octokit client is built ONLY when an owner-provided token exists. The
+   * `create_repositories` policy gate still applies (via the provision service).
+   */
+  githubRepoProvisionClient?: GitHubRepositoryProvisionClient;
   /** Owner-provided GitHub token; defaults to `GITHUB_TOKEN`. Never used in tests. */
   githubToken?: string;
+  /**
+   * Owner GitHub account handle that an auto-provisioned repository is created
+   * under (the owner's user/org login). Defaults to `GITHUB_OWNER`. When absent,
+   * auto-provisioning surfaces a pending owner decision rather than guessing.
+   */
+  githubOwner?: string;
   /**
    * Factory for the project test runner the QA agent runs in the development
    * worktree (SER-240). Optional fake-injection seam for the end-to-end
@@ -267,6 +281,8 @@ export class ProjectDispatchService {
   private readonly providerRouter?: ProviderRouter;
   private readonly providerEnv: ProviderEnv;
   private readonly githubPrPublishClient?: GitHubPullRequestPublishClient;
+  private readonly githubRepoProvisionClient?: GitHubRepositoryProvisionClient;
+  private readonly githubOwner?: string;
   private readonly projectTestRunnerFactory?: ProjectTestRunnerFactory;
   private readonly dispatchBranchPusher?: DispatchBranchPusher;
 
@@ -295,9 +311,14 @@ export class ProjectDispatchService {
     // Octokit client ONLY when an owner-provided token exists. With no token the
     // client stays undefined so no network call is ever made by default.
     const githubToken = deps.githubToken ?? this.providerEnv["GITHUB_TOKEN"];
-    this.githubPrPublishClient =
-      deps.githubPrPublishClient ??
-      (githubToken ? new OctokitGitHubClient({ token: githubToken }) : undefined);
+    const octokit = githubToken ? new OctokitGitHubClient({ token: githubToken }) : undefined;
+    this.githubPrPublishClient = deps.githubPrPublishClient ?? octokit;
+    // Repo auto-provision client: an injected fake in tests, otherwise the same
+    // real Octokit client (it also implements createRepository) ONLY when a token
+    // exists. The owner handle defaults to GITHUB_OWNER; with no owner, delivery
+    // surfaces a pending owner decision rather than guessing an account.
+    this.githubRepoProvisionClient = deps.githubRepoProvisionClient ?? octokit;
+    this.githubOwner = deps.githubOwner ?? this.providerEnv["GITHUB_OWNER"];
     this.projectTestRunnerFactory = deps.projectTestRunnerFactory;
     this.dispatchBranchPusher = deps.dispatchBranchPusher;
   }
@@ -598,6 +619,10 @@ export class ProjectDispatchService {
         clients: this.clients,
         approvals: this.approvals,
         ...(this.githubPrPublishClient ? { githubClient: this.githubPrPublishClient } : {}),
+        ...(this.githubRepoProvisionClient
+          ? { githubRepoProvisionClient: this.githubRepoProvisionClient }
+          : {}),
+        ...(this.githubOwner ? { githubOwner: this.githubOwner } : {}),
       },
       {
         project: args.project,

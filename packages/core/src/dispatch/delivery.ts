@@ -13,6 +13,10 @@ import {
   type GitHubPullRequestPublishClient,
   type GitHubPullRequestPublishResult,
 } from "../github/pr-publisher.js";
+import {
+  GitHubRepositoryProvisionService,
+  type GitHubRepositoryProvisionClient,
+} from "../github/repository-provisioner.js";
 import { parseGitHubRepository } from "../github/repository-utils.js";
 
 /**
@@ -63,6 +67,22 @@ export interface DispatchDeliveryDeps {
    * decision instead of opening a PR — never an implicit real GitHub call.
    */
   githubClient?: GitHubPullRequestPublishClient;
+  /**
+   * GitHub client used to AUTO-CREATE a repository when the project has none yet
+   * (SER-241 follow-up): the owner never has to make the repo by hand. Undefined
+   * when no owner token is configured (and no fake injected) — delivery then
+   * surfaces a pending owner decision instead of touching a real GitHub account.
+   * The {@link GitHubRepositoryProvisionService} still owns the `create_repositories`
+   * policy gate + approval; this is only the injectable repo-create surface.
+   */
+  githubRepoProvisionClient?: GitHubRepositoryProvisionClient;
+  /**
+   * Owner GitHub account handle the auto-created repository is provisioned under
+   * (the owner's user/org login). Undefined when not configured (`GITHUB_OWNER`):
+   * auto-provisioning then surfaces a pending owner decision rather than guessing
+   * an account. Ignored when the project already has a linked repository.
+   */
+  githubOwner?: string;
 }
 
 export interface DispatchDeliveryInput {
@@ -167,12 +187,147 @@ ${artifactLines}
 `;
 }
 
+/** Short, owner-facing description stamped on an auto-created project repository. */
+function provisionDescription(project: ProjectRecord): string {
+  return `BureauOS project repository for ${project.name}.`;
+}
+
+/**
+ * Outcome of the pre-delivery auto-provision step:
+ * - `provisioned`: a repository exists/was created and the project is linked;
+ *   carries the linked project to continue delivery with.
+ * - otherwise: delivery cannot continue (a pending owner decision, or today's
+ *   no-token skip); carries the `DispatchDeliveryResult` to return.
+ */
+type AutoProvisionOutcome =
+  | { status: "provisioned"; project: ProjectRecord }
+  | { status: "blocked" | "skipped"; result: DispatchDeliveryResult };
+
+/**
+ * Auto-create the project's GitHub repository when it has none yet, so the owner
+ * never has to make it by hand. Delegates the actual create to
+ * {@link GitHubRepositoryProvisionService}, which owns the `create_repositories`
+ * policy gate + approval + audit/record and links the new repo to the project.
+ *
+ * Conservative — creating a repo touches a real external account, so:
+ * - no repo-provision client (no owner token / no injected fake) OR no owner
+ *   handle configured → surface a pending owner decision (never call GitHub);
+ * - provision blocked by policy (approval required, not granted) → surface that
+ *   same pending owner decision and push nothing;
+ * - provision created → re-read the now-linked project, audit `repo_provisioned`,
+ *   and signal `provisioned` so delivery proceeds to the separately-gated push/PR.
+ */
+async function autoProvisionRepository(
+  deps: DispatchDeliveryDeps,
+  input: DispatchDeliveryInput,
+  branch: string,
+): Promise<AutoProvisionOutcome> {
+  const { project, run } = input;
+
+  // No way to create a repo without both a repo-create client and an owner
+  // account handle: surface a pending owner decision rather than guess or call
+  // GitHub implicitly.
+  const owner = deps.githubOwner?.trim();
+  if (!deps.githubRepoProvisionClient || !owner) {
+    const reason = !owner
+      ? "no GitHub owner configured to auto-provision the project repository"
+      : "no GitHub token configured to auto-provision the project repository";
+    await deps.audit.append({
+      actor: "supreme_coordinator",
+      action: "project.dispatch.repo_provision_blocked",
+      target: run.id,
+      error: reason,
+      result: "ok",
+    });
+    return { status: "blocked", result: { status: "blocked", reason, branch, pushed: false } };
+  }
+
+  const provisioner = new GitHubRepositoryProvisionService(deps.workspaceRoot, {
+    config: deps.config,
+    githubClient: deps.githubRepoProvisionClient,
+    projects: deps.projects,
+    clients: deps.clients,
+    artifacts: deps.artifacts,
+    approvals: deps.approvals,
+    policy: deps.policy,
+    audit: deps.audit,
+  });
+
+  let provision: Awaited<ReturnType<GitHubRepositoryProvisionService["provision"]>>;
+  try {
+    provision = await provisioner.provision({
+      projectSlug: project.slug,
+      owner,
+      // Name from the project slug, private by default, with a short description.
+      private: true,
+      description: provisionDescription(project),
+    });
+  } catch (error) {
+    const reason = `repository provisioning failed: ${error instanceof Error ? error.message : String(error)}`;
+    await deps.audit.append({
+      actor: "supreme_coordinator",
+      action: "project.dispatch.repo_provision_blocked",
+      target: run.id,
+      error: reason,
+      result: "error",
+    });
+    return { status: "blocked", result: { status: "blocked", reason, branch, pushed: false } };
+  }
+
+  // Gate required approval (not granted): a pending owner decision exists. Push
+  // nothing — the owner must approve creating the repo first.
+  if (provision.status === "blocked") {
+    const reason = `repository provisioning blocked: ${provision.policy.reason}`;
+    await deps.audit.append({
+      actor: "supreme_coordinator",
+      action: "project.dispatch.repo_provision_blocked",
+      target: run.id,
+      ...(provision.approval ? { approval_id: provision.approval.id } : {}),
+      policy_result:
+        provision.policy.outcome === "require_more_context" ? "escalate" : provision.policy.outcome,
+      error: reason,
+      result: "ok",
+    });
+    return {
+      status: "blocked",
+      result: {
+        status: "blocked",
+        reason,
+        branch,
+        pushed: false,
+        ...(provision.approval ? { approvalId: provision.approval.id } : {}),
+      },
+    };
+  }
+
+  // Created + linked: the provisioner already set project.repository via the
+  // project registry. Audit the link and continue delivery with the linked
+  // project (re-read so downstream parsing sees the new repository URL).
+  await deps.audit.append({
+    actor: "supreme_coordinator",
+    action: "project.dispatch.repo_provisioned",
+    target: provision.repository.repo
+      ? `${provision.repository.owner}/${provision.repository.repo}`
+      : run.id,
+    ...(provision.report ? { artifact_id: provision.report.id } : {}),
+    result: "ok",
+  });
+  const linked = (await deps.projects.get(project.slug)) ?? provision.project;
+  return { status: "provisioned", project: linked };
+}
+
 /**
  * Deliver a successful, committed run: push its branch behind the `push_commits`
  * gate, then open a policy-gated draft PR via {@link GitHubPullRequestPublishService}
  * (which owns the `open_pull_requests` gate, approval, evidence checks, and
- * recording). Fires ONLY when the run was not blocked, a commit was produced, the
- * project has a linked repository, and a development worktree existed.
+ * recording). Fires ONLY when the run was not blocked, a commit was produced, and
+ * a development worktree existed.
+ *
+ * When the project has no linked repository yet, first AUTO-PROVISION one in the
+ * owner's GitHub account via {@link autoProvisionRepository} (gated by the
+ * `create_repositories` policy) and link it — so the owner never has to create
+ * the repo by hand. If that gate requires approval (or no token/owner is
+ * configured), delivery surfaces a pending owner decision and pushes nothing.
  *
  * Never throws for an expected gate/parse failure — returns a `skipped` or
  * `blocked` result so the caller can surface a pending owner decision instead of
@@ -189,9 +344,20 @@ export async function deliverDispatchedRun(
   if (!input.runOk) return { status: "skipped", reason: "run blocked" };
   if (!input.hadWorktree) return { status: "skipped", reason: "no development worktree" };
   if (!input.commit.committed) return { status: "skipped", reason: "no committed work" };
-  if (!project.repository?.trim()) return { status: "skipped", reason: "no linked repository" };
 
   const branch = input.commit.branch;
+
+  // The project has no linked repository yet. Rather than skip delivery (and make
+  // the owner create the repo by hand), auto-provision one in the owner's account
+  // — gated by the `create_repositories` policy. On success the project is linked
+  // and delivery proceeds; if the gate requires approval (or no token/owner is
+  // configured) this surfaces a pending owner decision and pushes nothing.
+  let deliverProject = project;
+  if (!project.repository?.trim()) {
+    const provisioned = await autoProvisionRepository(deps, input, branch);
+    if (provisioned.status !== "provisioned") return provisioned.result;
+    deliverProject = provisioned.project;
+  }
 
   // A committed run on a linked repo wants to deliver, but a PR cannot be opened
   // without a GitHub client (no owner token, no injected fake). Surface that as a
@@ -208,11 +374,11 @@ export async function deliverDispatchedRun(
     return { status: "blocked", reason, branch, pushed: false };
   }
 
-  const parsed = parseGitHubRepository(project.repository);
+  const parsed = parseGitHubRepository(deliverProject.repository);
   if (!parsed) {
     // A malformed linked repository is a configuration issue, not a policy gate:
     // skip delivery with a clear audited reason rather than crash the dispatch.
-    const reason = `unparseable repository "${project.repository}"`;
+    const reason = `unparseable repository "${deliverProject.repository}"`;
     await deps.audit.append({
       actor: "supreme_coordinator",
       action: "project.dispatch.delivery_skipped",
@@ -260,8 +426,8 @@ export async function deliverDispatchedRun(
   // setProjectRemote; a real push targets the linked repo, a local bare repo in
   // tests — never an implicit real GitHub account.
   try {
-    await deps.workspace.setProjectRemote(project.slug, project.repository);
-    await deps.workspace.pushRunBranch(project.slug, run.id);
+    await deps.workspace.setProjectRemote(deliverProject.slug, deliverProject.repository);
+    await deps.workspace.pushRunBranch(deliverProject.slug, run.id);
   } catch (error) {
     const reason = `push failed: ${error instanceof Error ? error.message : String(error)}`;
     await deps.audit.append({
@@ -301,14 +467,14 @@ export async function deliverDispatchedRun(
   let publish: GitHubPullRequestPublishResult;
   try {
     publish = await prPublisher.publish({
-      projectSlug: project.slug,
+      projectSlug: deliverProject.slug,
       owner: parsed.owner,
       repo: parsed.repo,
       head: branch,
       base: "main",
-      title: deliveryTitle(project, input.scope),
+      title: deliveryTitle(deliverProject, input.scope),
       body: deliveryBody({
-        project,
+        project: deliverProject,
         run,
         scope: input.scope,
         producedArtifacts: input.producedArtifacts,
