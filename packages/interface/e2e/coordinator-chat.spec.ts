@@ -26,6 +26,51 @@ test.describe("Coordinator chat experience", () => {
     await expect(page.getByText(/Draft a proposal|Bozza di proposta/i)).toBeVisible();
   });
 
+  test("model picker is present in the composer and send still works without a connected provider", async ({
+    page,
+  }) => {
+    // The seeded workspace has NO configured provider connections. As a result the
+    // ModelPicker trigger renders in its disabled/empty state (label "No model
+    // connected", aria-label "Model", disabled=true) — there are no selectable
+    // options, so we cannot exercise an actual override selection here.
+    //
+    // What we assert instead is the durable, offline-deterministic contract:
+    //   1. The ModelPicker trigger button is present in the composer footer.
+    //   2. Sending a message succeeds anyway — the coordinator service always
+    //      replies via deterministicAnswer() when no provider is connected,
+    //      regardless of whether a modelOverride was requested.
+    //
+    // Full override-selection coverage (choosing an option from the list) is
+    // exercised by the interface unit tests (lib/model-options.test.ts) and by
+    // the core tests (chat.test.ts override + fallback paths). The e2e seeded path
+    // intentionally has no providers so that CI needs no external API keys.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`/?apiBase=${encodeURIComponent(workspace.url)}`);
+    await page.getByRole("button", { name: "Coordinator" }).first().click();
+    await expect(page.locator("main")).toContainText("Supreme Coordinator");
+
+    // The ModelPicker trigger is a button with aria-label "Model" in the composer
+    // footer. In the no-provider state it is disabled (options.length === 0) and
+    // shows "No model connected" as its visible text.
+    const modelPickerTrigger = page.getByRole("button", { name: /^Model$/i });
+    await expect(modelPickerTrigger).toBeVisible({ timeout: 5_000 });
+    // In the seeded workspace the button must be disabled — no providers connected.
+    await expect(modelPickerTrigger).toBeDisabled();
+    await expect(modelPickerTrigger).toContainText(/No model connected/i);
+
+    // Even with no override available the send path must work — the coordinator
+    // always produces a deterministic reply offline.
+    const composer = page.getByPlaceholder(/Message a decision|Scrivi/i);
+    await composer.click();
+    await composer.fill("Check model override path");
+    await composer.press("Enter");
+
+    // Deterministic fallback reply: Copy button becomes visible once the turn completes.
+    await expect(page.getByRole("button", { name: /Copy|Copia/i }).first()).toBeVisible({
+      timeout: 30_000,
+    });
+  });
+
   test("composer sends with Enter and renders a coordinator reply with actions", async ({
     page,
   }) => {

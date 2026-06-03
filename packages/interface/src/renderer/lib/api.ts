@@ -459,6 +459,10 @@ export interface CoordinatorAttachmentInput {
   text?: string;
   dataUrl?: string;
 }
+export interface CoordinatorModelOverride {
+  provider: string;
+  model: string;
+}
 export interface CoordinatorIntakeResult {
   summary: string;
   next_actions: string[];
@@ -970,13 +974,21 @@ export const Api = {
     api<ProviderModelList>(`/provider/models?provider=${encodeURIComponent(provider)}`),
   coordinatorMessages: (limit = 50) =>
     api<CoordinatorMessageRecord[]>(`/coordinator/messages?limit=${limit}`),
-  coordinatorChat: (input: { message: string; attachments?: CoordinatorAttachmentInput[] }) =>
+  coordinatorChat: (input: {
+    message: string;
+    attachments?: CoordinatorAttachmentInput[];
+    modelOverride?: CoordinatorModelOverride;
+  }) =>
     api<CoordinatorChatResult>("/coordinator/messages", {
       method: "POST",
       body: JSON.stringify(input),
     }),
   coordinatorChatStream: async (
-    input: { message: string; attachments?: CoordinatorAttachmentInput[] },
+    input: {
+      message: string;
+      attachments?: CoordinatorAttachmentInput[];
+      modelOverride?: CoordinatorModelOverride;
+    },
     handlers: CoordinatorChatStreamHandlers = {},
   ): Promise<CoordinatorChatResult> => {
     const base = await getBase();

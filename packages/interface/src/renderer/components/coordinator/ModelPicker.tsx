@@ -1,46 +1,53 @@
 import { useEffect, useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { Api, type ProviderConnection } from "../../lib/api";
+import type { ProviderConnection } from "../../lib/api";
 import { activeModelLabel, buildModelOptions } from "../../lib/model-options";
 import { Dropdownish } from "./_dropdownish";
 import { useT } from "../../i18n/i18n";
 
 /**
- * Compact provider/model selector for the composer footer. Lists connected providers
- * and their default model; choosing one persists via the existing endpoint. Non-persisted
- * per-message override is deferred to Phase 2.
+ * Compact provider/model selector for the composer footer. Choosing a model
+ * sets a session-level override via the `onSelect` callback — it is NOT
+ * persisted as the global default. The active label reflects the chosen
+ * override until the providers list changes externally.
  */
 export function ModelPicker({
   providers,
+  onSelect,
   onChanged,
 }: {
   providers: ProviderConnection[];
+  /** Called with the chosen {provider,model} pair (session override) or undefined on reset. */
+  onSelect?: (override: { provider: string; model: string } | undefined) => void;
+  /** @deprecated Legacy callback kept for compatibility; prefer onSelect. */
   onChanged?: () => void;
 }) {
   const t = useT();
   const [label, setLabel] = useState(() => activeModelLabel(providers));
-  const [busy, setBusy] = useState(false);
   const options = buildModelOptions(providers);
 
-  // Re-sync the displayed label after an external provider refresh (e.g. a connect in Settings).
-  useEffect(() => setLabel(activeModelLabel(providers)), [providers]);
+  // Re-sync the displayed label after an external provider refresh (e.g. a connect in Settings),
+  // but only when no session override has been chosen (label still matches the default).
+  useEffect(() => {
+    // Derive from `providers` inside the effect so it's the only dependency.
+    const defaultLabel = activeModelLabel(providers);
+    const opts = buildModelOptions(providers);
+    // Only reset if the label is currently showing the old default (not a chosen override).
+    setLabel((current) => {
+      const stillValid = opts.some((o) => `${o.providerName} · ${o.model}` === current);
+      return stillValid ? current : defaultLabel;
+    });
+  }, [providers]);
 
-  const choose = async (provider: string, model: string, optionLabel: string): Promise<void> => {
-    setBusy(true);
-    try {
-      await Api.providerSetDefaultModel({ provider, defaultModel: model });
-      setLabel(optionLabel);
-      onChanged?.();
-    } catch {
-      /* surfaced by the global API error bar */
-    } finally {
-      setBusy(false);
-    }
+  const choose = (provider: string, model: string, optionLabel: string): void => {
+    setLabel(optionLabel);
+    onSelect?.({ provider, model });
+    onChanged?.();
   };
 
   return (
     <Dropdownish
-      disabled={busy || options.length === 0}
+      disabled={options.length === 0}
       trigger={
         <span className="text-meta inline-flex items-center gap-1 text-muted-foreground">
           {label}
@@ -57,7 +64,7 @@ export function ModelPicker({
             role="menuitem"
             className="text-body-secondary block w-full rounded px-2 py-1 text-left hover:bg-surface-subtle"
             onClick={() => {
-              void choose(o.provider, o.model, `${o.providerName} · ${o.model}`);
+              choose(o.provider, o.model, `${o.providerName} · ${o.model}`);
               close();
             }}
           >
