@@ -88,6 +88,35 @@ export type CoordinatorChatStreamEvent =
   | { type: "delta"; text: string }
   | { type: "final"; result: CoordinatorChatResult };
 
+/**
+ * Quick, non-blocking build kickoff used by the async owner-triggered build path
+ * (Unit 3A). The chat turn AWAITS only this call, which must do the cheap
+ * in-flight guard and then FIRE the heavy `ProjectDispatchService.dispatch`
+ * pipeline in the background (fire-and-forget) and return immediately — it must
+ * NOT await the pipeline. Injected by the API server, and only when provider
+ * codegen is enabled; left undefined elsewhere so chat keeps its current
+ * behavior (no build is ever fired).
+ */
+export type CoordinatorBuildDispatcher = (input: {
+  projectId: string;
+  projectSlug: string;
+  scope: string;
+}) => Promise<{ started: boolean; alreadyRunning: boolean }>;
+
+/**
+ * Marker written to a coordinator message's `meta.build` after an async build is
+ * fired. Its presence tells the renderer (Unit 3B) to start polling the
+ * project's feature run for live progress. `started`/`alreadyRunning` reflect the
+ * in-flight guard outcome so the UI can pick the right copy without re-deriving
+ * it from the message text.
+ */
+export interface CoordinatorBuildMarker {
+  projectId: string;
+  projectSlug: string;
+  started: boolean;
+  alreadyRunning: boolean;
+}
+
 export interface CoordinatorChatDeps {
   config?: BureauConfig;
   messages?: CoordinatorMessageStore;
@@ -107,6 +136,14 @@ export interface CoordinatorChatDeps {
   providerTimeoutMs?: number;
   toolPlanningTimeoutMs?: number;
   toolPlanningDegradedTtlMs?: number;
+  /**
+   * Optional quick build kickoff for the async owner-triggered build path
+   * (Unit 3A). When present AND the owner's plan asks to build AND provider
+   * codegen is enabled, an intake that creates a project also fires a background
+   * build through this closure. Optional so existing constructions/tests that
+   * never opt into builds are unaffected.
+   */
+  dispatchBuild?: CoordinatorBuildDispatcher;
 }
 
 export interface CoordinatorProviderSelection {
@@ -673,8 +710,13 @@ function toolPlanningPrompt(
     "- If the owner says the client wants a website/app/booking/proposal, choose create_intake.",
     "- If unclear, choose answer and ask one concise clarification.",
     "",
+    "Build intent (dispatch_build):",
+    "- Set dispatch_build: true ONLY when the owner wants software BUILT or DEVELOPED right now for themselves or internally (e.g. 'creami/costruisci/sviluppa/fammi un sito/app/gioco/landing'). Use create_intake as the action in that case.",
+    "- Set dispatch_build: false (or omit it) when the client wants something ('il cliente X vuole un sito' -> scope/propose first), for status/read questions, and for any non-build message.",
+    "- Be conservative: when in doubt, leave dispatch_build false.",
+    "",
     "JSON shape:",
-    '{"action":"save_client|create_intake|list_clients|answer","clientName":"optional clean client name","industry":"optional","answer":"optional owner-facing answer","confidence":0.0}',
+    '{"action":"save_client|create_intake|list_clients|answer","clientName":"optional clean client name","industry":"optional","answer":"optional owner-facing answer","dispatch_build":false,"confidence":0.0}',
     "",
     memoryPrompt(packet, recent),
   ].join("\n");
@@ -833,6 +875,28 @@ function toolPlanningHealthKey(
   return `${workspaceRoot}:${selection.provider.id}:${selection.model}`;
 }
 
+/**
+ * Safely read the async-build marker off a coordinator message's `meta.build`
+ * (which is typed loosely as `Record<string, unknown>`). Returns `undefined`
+ * unless a well-formed marker is present.
+ */
+function buildMarkerFromMeta(
+  meta: CoordinatorMessageRecord["meta"],
+): CoordinatorBuildMarker | undefined {
+  const build = meta?.["build"];
+  if (!build || typeof build !== "object") return undefined;
+  const value = build as Record<string, unknown>;
+  if (typeof value["projectId"] !== "string" || typeof value["projectSlug"] !== "string") {
+    return undefined;
+  }
+  return {
+    projectId: value["projectId"],
+    projectSlug: value["projectSlug"],
+    started: value["started"] === true,
+    alreadyRunning: value["alreadyRunning"] === true,
+  };
+}
+
 function requireMessagePair(records: readonly CoordinatorMessageRecord[]): {
   ownerMessage: CoordinatorMessageRecord;
   coordinatorMessage: CoordinatorMessageRecord;
@@ -864,6 +928,7 @@ export class CoordinatorChatService {
   private readonly providerTimeoutMs: number;
   private readonly toolPlanningTimeoutMs: number;
   private readonly toolPlanningDegradedTtlMs: number;
+  private readonly dispatchBuild?: CoordinatorBuildDispatcher;
 
   constructor(
     private readonly workspaceRoot: string,
@@ -904,6 +969,7 @@ export class CoordinatorChatService {
       Math.min(this.providerTimeoutMs, DEFAULT_TOOL_PLANNING_TIMEOUT_MS);
     this.toolPlanningDegradedTtlMs =
       deps.toolPlanningDegradedTtlMs ?? DEFAULT_TOOL_PLANNING_DEGRADED_TTL_MS;
+    this.dispatchBuild = deps.dispatchBuild;
   }
 
   /**
@@ -1009,6 +1075,73 @@ export class CoordinatorChatService {
 
   private async recordRejectedToolPlan(reason: string): Promise<void> {
     await this.tools.recordRejectedToolPlan(reason);
+  }
+
+  /**
+   * Whether the async owner-triggered build path is wired and enabled: a build
+   * dispatcher was injected AND provider codegen is on
+   * (`runtime.codex.enabled && codegen_mode === "provider"`). The same gate that
+   * turns on real provider codegen; off by default, so no build is ever fired
+   * without an explicit opt-in.
+   */
+  private buildDispatchEnabled(): boolean {
+    if (!this.dispatchBuild) return false;
+    const codex = this.config.runtime?.codex;
+    return Boolean(codex?.enabled && codex.codegen_mode === "provider");
+  }
+
+  /**
+   * Fire an async owner-triggered build for a just-created intake project, when
+   * the owner's plan asked to build (`dispatch_build`), provider codegen is on,
+   * and a dispatcher is wired. AWAITS only the quick dispatcher call (in-flight
+   * guard + background kickoff) — never the heavy pipeline. Returns the
+   * owner-facing reply and the `meta.build` marker, or `undefined` when no build
+   * was attempted (so the caller keeps the normal intake summary).
+   */
+  private async maybeDispatchBuild(args: {
+    plan: CoordinatorToolPlan | undefined;
+    project: ProjectRecord;
+    scope: string;
+  }): Promise<{ reply: string; marker: CoordinatorBuildMarker } | undefined> {
+    if (!args.plan?.dispatch_build) return undefined;
+    if (!this.dispatchBuild || !this.buildDispatchEnabled()) return undefined;
+    const { project } = args;
+
+    let outcome: { started: boolean; alreadyRunning: boolean };
+    try {
+      outcome = await this.dispatchBuild({
+        projectId: project.id,
+        projectSlug: project.slug,
+        scope: args.scope,
+      });
+    } catch (error) {
+      // A kickoff failure must never break the intake turn: record it and fall
+      // back to the normal intake summary (no build marker).
+      await this.audit.append({
+        actor: "supreme_coordinator",
+        action: "coordinator.build_dispatch_failed",
+        target: project.id,
+        result: "error",
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    }
+
+    const reply = outcome.alreadyRunning
+      ? `La build di ${project.name} è già in corso.`
+      : outcome.started
+        ? `Ho avviato la build di ${project.name} in background — ti mostro i progressi.`
+        : `Non sono riuscito ad avviare la build di ${project.name}. Riprova tra poco.`;
+
+    return {
+      reply,
+      marker: {
+        projectId: project.id,
+        projectSlug: project.slug,
+        started: outcome.started,
+        alreadyRunning: outcome.alreadyRunning,
+      },
+    };
   }
 
   /**
@@ -1285,6 +1418,22 @@ export class CoordinatorChatService {
       const result = await this.process(input);
       if (result.result) {
         for (const event of intakeToStreamEvents(result.result)) yield event;
+      }
+      // Async owner-triggered build (Unit 3A): if `process()` fired a background
+      // build, surface it as a `delegation` event so the UI can show a build
+      // card immediately. The build run id is not known synchronously (the
+      // dispatcher is fire-and-forget), so the renderer polls the project's
+      // feature run via the `meta.build` marker; this event is just the live
+      // "build started" cue. Skipped when the build was already running.
+      const build = buildMarkerFromMeta(result.coordinatorMessage.meta);
+      if (build?.started) {
+        yield {
+          type: "delegation",
+          phase: "running",
+          label: `Build: ${build.projectSlug}`,
+          agentRole: "development",
+          detail: "background_build_started",
+        };
       }
       for (const text of visibleDeltas(result.coordinatorMessage.text)) {
         yield { type: "delta", text };
@@ -1669,6 +1818,21 @@ export class CoordinatorChatService {
         attachments,
       });
       const result = execution.result;
+
+      // Async owner-triggered build (Unit 3A): when the owner asked to BUILD
+      // software now, provider codegen is enabled, and a dispatcher is wired,
+      // fire the heavy delivery pipeline in the BACKGROUND. The dispatcher does
+      // a cheap in-flight guard then kicks off `ProjectDispatchService.dispatch`
+      // fire-and-forget and returns fast — the turn AWAITS only this quick call,
+      // never the pipeline. A `meta.build` marker tells the renderer to poll the
+      // run for progress.
+      const build = await this.maybeDispatchBuild({
+        plan: plannedIntakePlan,
+        project: result.project,
+        scope: message,
+      });
+
+      const summary = build ? build.reply : result.summary;
       const { ownerMessage, coordinatorMessage } = requireMessagePair(
         await this.messages.appendMany([
           {
@@ -1679,13 +1843,14 @@ export class CoordinatorChatService {
           },
           {
             role: "coordinator",
-            text: result.summary,
+            text: summary,
             result,
             meta: {
               mode: "intake",
               memory,
               provider,
               tool: execution.tool,
+              ...(build ? { build: build.marker } : {}),
             },
           },
         ]),

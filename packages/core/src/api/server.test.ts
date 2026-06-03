@@ -20,7 +20,7 @@ import type {
   GitHubIssuePublishClient,
   GitHubIssuePublishClientIssue,
 } from "../github/issue-publisher.js";
-import { startApiServer, type ApiServer } from "./server.js";
+import { buildBuildDispatcher, startApiServer, type ApiServer } from "./server.js";
 import type { OpenAICodexOAuthFetch } from "@bureauos/providers";
 
 function parseSseEvents(raw: string): Array<{ event: string; data: unknown }> {
@@ -582,6 +582,134 @@ describe("API server", () => {
     const apiArtifact = listedArtifacts.find((item) => item.run_id === run.id);
     expect(apiArtifact?.source_work_item_id).toBe("SER-34");
     expect(apiArtifact?.linear_url).toContain("https://linear.app/serium/issue/SER-34");
+  });
+
+  it("returns a single run via GET /runs?id= and 404 for an unknown id", async () => {
+    const config = defaultConfig("agency");
+    const approvals = new ApprovalRegistry(dir);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const policy = new PolicyEngine(config, approvals);
+    const run = await new RunEngine(dir, { audit, artifacts, policy }).start({
+      type: "feature",
+      triggerType: "owner_request",
+      triggerSource: "project_dispatch",
+      scope: "Build the Pokeball game",
+      projectId: "proj-pokeball",
+    });
+    server = await startApiServer({ workspaceRoot: dir, config });
+
+    const single = await fetch(`${server.url}/runs?id=${run.id}`);
+    expect(single.status).toBe(200);
+    const body = (await single.json()) as { id: string; scope: string };
+    expect(body.id).toBe(run.id);
+    expect(body.scope).toBe("Build the Pokeball game");
+
+    const missing = await fetch(`${server.url}/runs?id=run-does-not-exist`);
+    expect(missing.status).toBe(404);
+  });
+
+  it("filters runs by project via GET /runs?project=", async () => {
+    const config = defaultConfig("agency");
+    const approvals = new ApprovalRegistry(dir);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const policy = new PolicyEngine(config, approvals);
+    const engine = new RunEngine(dir, { audit, artifacts, policy });
+    const mine = await engine.start({
+      type: "feature",
+      triggerType: "owner_request",
+      triggerSource: "project_dispatch",
+      scope: "Build for project A",
+      projectId: "proj-a",
+    });
+    await engine.start({
+      type: "feature",
+      triggerType: "owner_request",
+      triggerSource: "project_dispatch",
+      scope: "Build for project B",
+      projectId: "proj-b",
+    });
+    server = await startApiServer({ workspaceRoot: dir, config });
+
+    const filtered = (await (await fetch(`${server.url}/runs?project=proj-a`)).json()) as Array<{
+      id: string;
+      project_id: string;
+    }>;
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0]?.id).toBe(mine.id);
+    expect(filtered.every((r) => r.project_id === "proj-a")).toBe(true);
+
+    // No params -> the full list (current behavior) still returns every run.
+    const all = (await (await fetch(`${server.url}/runs`)).json()) as Array<unknown>;
+    expect(all.length).toBe(2);
+  });
+
+  it("build dispatcher in-flight guard skips when a non-terminal feature run exists", async () => {
+    const config = defaultConfig("agency");
+    config.runtime.codex.enabled = true;
+    config.runtime.codex.codegen_mode = "provider";
+    const approvals = new ApprovalRegistry(dir);
+    const artifacts = new ArtifactStore(dir);
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const policy = new PolicyEngine(config, approvals);
+    const runEngine = new RunEngine(dir, { audit, artifacts, policy });
+    // Seed an active (non-terminal) feature run for the project.
+    await runEngine.patch(
+      (
+        await runEngine.start({
+          type: "feature",
+          triggerType: "owner_request",
+          triggerSource: "project_dispatch",
+          scope: "Existing build",
+          projectId: "proj-pokeball",
+        })
+      ).id,
+      { status: "in_progress" },
+    );
+
+    let dispatchCalls = 0;
+    const dispatcher = buildBuildDispatcher(
+      { workspaceRoot: dir, config },
+      {
+        runs: runEngine,
+        runProjectDispatch: async () => {
+          dispatchCalls += 1;
+          return {};
+        },
+      },
+    );
+    expect(dispatcher).toBeDefined();
+
+    // Same project with a non-terminal feature run -> guarded, no dispatch.
+    const guarded = await dispatcher!({
+      projectId: "proj-pokeball",
+      projectSlug: "pokeball",
+      scope: "creami un sito per il gioco Pokeball",
+    });
+    expect(guarded).toEqual({ started: false, alreadyRunning: true });
+    expect(dispatchCalls).toBe(0);
+
+    // A different project has no in-flight feature run -> fires once.
+    const started = await dispatcher!({
+      projectId: "proj-other",
+      projectSlug: "other",
+      scope: "build other",
+    });
+    expect(started).toEqual({ started: true, alreadyRunning: false });
+    // The fire-and-forget kickoff ran exactly once (and was not awaited here).
+    await Promise.resolve();
+    expect(dispatchCalls).toBe(1);
+  });
+
+  it("does not build a dispatcher when provider codegen is off", () => {
+    const config = defaultConfig("agency");
+    // Default: codex disabled -> no dispatcher, so chat never fires a build.
+    expect(buildBuildDispatcher({ workspaceRoot: dir, config })).toBeUndefined();
+
+    config.runtime.codex.enabled = true;
+    config.runtime.codex.codegen_mode = "command";
+    expect(buildBuildDispatcher({ workspaceRoot: dir, config })).toBeUndefined();
   });
 
   it("exposes daemon status through the API", async () => {

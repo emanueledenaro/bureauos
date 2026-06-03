@@ -27,7 +27,10 @@ import { PolicyExplainService } from "../policy/explain.js";
 import { RunEngine } from "../runs/engine.js";
 import { AGENT_ROLES } from "../agents/roles.js";
 import type { CoordinatorAttachmentInput } from "../coordinator/intake.js";
-import { CoordinatorChatService } from "../coordinator/chat.js";
+import {
+  CoordinatorChatService,
+  type CoordinatorBuildDispatcher,
+} from "../coordinator/chat.js";
 import { parseModelOverride } from "../coordinator/model-override.js";
 import { CoordinatorMessageStore } from "../coordinator/messages.js";
 import { CoordinatorToolRuntime } from "../coordinator/tool-runtime.js";
@@ -469,6 +472,95 @@ function deps(options: ApiServerOptions) {
       policy,
       recordDecisions: options.config.memory.write_decision_records,
     }),
+  };
+}
+
+/**
+ * Run statuses that count as a finished build for the async-build in-flight
+ * guard and the `GET /runs?project=` view. A `feature` run in any OTHER status
+ * (the active `created..in_progress..verifying` states, or `blocked`/
+ * `needs_human` awaiting the owner) is treated as still in-flight, so a fresh
+ * build request for the same project is skipped rather than double-started.
+ */
+const TERMINAL_RUN_STATUSES: ReadonlySet<string> = new Set(["completed", "failed", "cancelled"]);
+
+/**
+ * Test-only injection seams for {@link buildBuildDispatcher}. Production never
+ * passes these — the dispatcher then lists real runs and builds a real
+ * `ProjectDispatchService`. A test injects a fake `runProjectDispatch` (so no
+ * real codegen/git runs) and/or `runs` (a RunEngine seeded with a non-terminal
+ * feature run) to exercise the in-flight guard and the fire-and-forget kickoff.
+ */
+export interface BuildDispatcherSeams {
+  runs?: Pick<RunEngine, "list">;
+  runProjectDispatch?: (input: {
+    projectSlug: string;
+    scope: string;
+  }) => Promise<unknown>;
+}
+
+/**
+ * Build the quick, non-blocking build dispatcher injected into the Coordinator
+ * chat (Unit 3A) — ONLY when provider codegen is enabled
+ * (`runtime.codex.enabled && codegen_mode === "provider"`); otherwise returns
+ * `undefined` so chat never fires a build. The closure:
+ *   1. lists runs and applies an in-flight guard (a non-terminal `feature` run
+ *      for this project -> `{ started:false, alreadyRunning:true }`);
+ *   2. builds a `ProjectDispatchService` with the SAME deps the
+ *      `POST /projects/dispatch` route uses;
+ *   3. FIRES `dispatch({ projectSlug, runType:"feature", scope })`
+ *      fire-and-forget (`void` + `.catch`) so the heavy pipeline runs in the
+ *      background of this long-lived process and is NEVER awaited by the turn;
+ *   4. returns `{ started:true, alreadyRunning:false }` immediately.
+ */
+export function buildBuildDispatcher(
+  options: ApiServerOptions,
+  seams: BuildDispatcherSeams = {},
+): CoordinatorBuildDispatcher | undefined {
+  const codex = options.config.runtime?.codex;
+  if (!codex?.enabled || codex.codegen_mode !== "provider") return undefined;
+
+  const runProjectDispatch =
+    seams.runProjectDispatch ??
+    ((input: { projectSlug: string; scope: string }) =>
+      new ProjectDispatchService(options.workspaceRoot, { config: options.config }).dispatch({
+        projectSlug: input.projectSlug,
+        runType: "feature",
+        scope: input.scope,
+      }));
+
+  return async ({ projectId, projectSlug, scope }) => {
+    const runEngine = seams.runs ?? deps(options).runs;
+    const runs = await runEngine.list();
+    const inFlight = runs.some(
+      (run) =>
+        run.type === "feature" &&
+        run.project_id === projectId &&
+        !TERMINAL_RUN_STATUSES.has(run.status),
+    );
+    if (inFlight) return { started: false, alreadyRunning: true };
+
+    // Fire-and-forget: the full dev->qa->review pipeline + gated delivery is
+    // minutes long; it runs in the background of this process and writes run
+    // audit lines the UI polls/streams. A dispatch failure must never surface
+    // here (the turn already returned), so it is caught and audited, never
+    // thrown.
+    void runProjectDispatch({ projectSlug, scope }).catch(async (error: unknown) => {
+      try {
+        await deps(options).audit.append({
+          actor: "supreme_coordinator",
+          action: "coordinator.background_build_failed",
+          target: projectId,
+          result: "error",
+          error: error instanceof Error ? error.message : String(error),
+        });
+      } catch {
+        // Auditing the failure must itself never throw out of the detached
+        // background task; swallow as a last resort.
+      }
+    });
+
+    return { started: true, alreadyRunning: false };
   };
 }
 
@@ -975,7 +1067,33 @@ const ROUTES: Record<string, RouteHandler> = {
     ok(res, await deps(options).approvals.listResolved()),
   "GET /notifications": async ({ res, options }) =>
     ok(res, await deps(options).notifications.list()),
-  "GET /runs": async ({ res, options }) => ok(res, await deps(options).runs.list()),
+  "GET /runs": async ({ res, options, url }) => {
+    // The router is exact-match, so query params are parsed here. `?id=<runId>`
+    // returns the single run (or `null` / 404 when absent); `?project=<id>`
+    // filters to that project's runs (oldest-first by `created`, for the build
+    // progress poller); no params -> the full list (current behavior).
+    const runEngine = deps(options).runs;
+    const id = url.searchParams.get("id");
+    if (id !== null) {
+      const run = await runEngine.get(id);
+      if (!run) {
+        ok(res, { error: "run not found" }, 404);
+        return;
+      }
+      ok(res, run);
+      return;
+    }
+    const projectId = url.searchParams.get("project");
+    const runs = await runEngine.list();
+    if (projectId !== null) {
+      const filtered = runs
+        .filter((run) => run.project_id === projectId)
+        .sort((a, b) => (a.created < b.created ? -1 : a.created > b.created ? 1 : 0));
+      ok(res, filtered);
+      return;
+    }
+    ok(res, runs);
+  },
   "GET /artifacts": async ({ res, options }) => ok(res, await deps(options).artifacts.list()),
   "GET /agents": ({ res }) => ok(res, AGENT_ROLES),
 
@@ -1136,8 +1254,10 @@ const ROUTES: Record<string, RouteHandler> = {
       ok(res, { error: "message required" }, 400);
       return;
     }
+    const dispatchBuild = buildBuildDispatcher(options);
     const service = new CoordinatorChatService(options.workspaceRoot, {
       config: options.config,
+      ...(dispatchBuild ? { dispatchBuild } : {}),
     });
     ok(
       res,
@@ -1162,8 +1282,10 @@ const ROUTES: Record<string, RouteHandler> = {
       ok(res, { error: "message required" }, 400);
       return;
     }
+    const dispatchBuild = buildBuildDispatcher(options);
     const service = new CoordinatorChatService(options.workspaceRoot, {
       config: options.config,
+      ...(dispatchBuild ? { dispatchBuild } : {}),
     });
     startSse(res);
     try {

@@ -1087,6 +1087,200 @@ describe("CoordinatorChatService", () => {
     }
   });
 
+  // --- async owner-triggered build (Unit 3A) ---
+
+  /** A fake provider that returns a create_intake plan with dispatch_build set. */
+  function buildIntakeProvider(dispatchBuild: boolean): ProviderAdapter {
+    return {
+      id: "fake-provider",
+      type: "custom",
+      name: "Fake Provider",
+      async listModels() {
+        return ["fake-model"];
+      },
+      async validateCredentials() {
+        return { ok: true };
+      },
+      async generateText() {
+        return {
+          model: "fake-model",
+          text: JSON.stringify({
+            action: "create_intake",
+            projectName: "Pokeball",
+            dispatch_build: dispatchBuild,
+            confidence: 0.95,
+          }),
+        };
+      },
+      async *stream() {
+        yield "unused";
+      },
+    };
+  }
+
+  function providerCodegenConfig() {
+    const config = defaultConfig("freelancer");
+    config.runtime.codex.enabled = true;
+    config.runtime.codex.codegen_mode = "provider";
+    return config;
+  }
+
+  it("fires a background build and marks the message when provider codegen is on", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    const calls: Array<{ projectId: string; projectSlug: string; scope: string }> = [];
+    const service = new CoordinatorChatService(dir, {
+      config: providerCodegenConfig(),
+      providerSelector: async () => ({ provider: buildIntakeProvider(true), model: "fake-model" }),
+      dispatchBuild: async (input) => {
+        calls.push(input);
+        // Resolves immediately: the turn must not await any heavy work.
+        return { started: true, alreadyRunning: false };
+      },
+    });
+
+    const result = await service.process({
+      source: "test",
+      message: "creami un sito per il gioco Pokeball",
+    });
+
+    expect(result.mode).toBe("intake");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.projectSlug).toBe(result.result?.project.slug);
+    expect(calls[0]?.projectId).toBe(result.result?.project.id);
+    expect(calls[0]?.scope).toBe("creami un sito per il gioco Pokeball");
+    // Reply references the background build, not the plain intake summary.
+    expect(result.coordinatorMessage.text).toContain("Ho avviato la build");
+    expect(result.coordinatorMessage.text).toContain("in background");
+    // The build marker tells the renderer to start polling.
+    expect(result.coordinatorMessage.meta?.build).toMatchObject({
+      projectId: result.result?.project.id,
+      projectSlug: result.result?.project.slug,
+      started: true,
+      alreadyRunning: false,
+    });
+  });
+
+  it("does not fire a build when provider codegen is off, even if the plan asks for one", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    let dispatchBuildCalls = 0;
+    // Default config: codex disabled. The plan still asks dispatch_build: true,
+    // proving the gate (not just the flag) controls firing.
+    const service = new CoordinatorChatService(dir, {
+      config: defaultConfig("freelancer"),
+      providerSelector: async () => ({ provider: buildIntakeProvider(true), model: "fake-model" }),
+      dispatchBuild: async () => {
+        dispatchBuildCalls += 1;
+        return { started: true, alreadyRunning: false };
+      },
+    });
+
+    const result = await service.process({
+      source: "test",
+      message: "creami un sito per il gioco Pokeball",
+    });
+
+    expect(result.mode).toBe("intake");
+    expect(dispatchBuildCalls).toBe(0);
+    expect(result.coordinatorMessage.meta?.build).toBeUndefined();
+    // Falls back to the normal intake summary.
+    expect(result.coordinatorMessage.text).not.toContain("Ho avviato la build");
+  });
+
+  it("does not fire a build for a non-build intake (plan without dispatch_build)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    let dispatchBuildCalls = 0;
+    const service = new CoordinatorChatService(dir, {
+      config: providerCodegenConfig(),
+      providerSelector: async () => ({ provider: buildIntakeProvider(false), model: "fake-model" }),
+      dispatchBuild: async () => {
+        dispatchBuildCalls += 1;
+        return { started: true, alreadyRunning: false };
+      },
+    });
+
+    const result = await service.process({
+      source: "test",
+      message: "Il cliente Acme vuole un sito con prenotazioni e una proposta",
+    });
+
+    expect(result.mode).toBe("intake");
+    expect(dispatchBuildCalls).toBe(0);
+    expect(result.coordinatorMessage.meta?.build).toBeUndefined();
+  });
+
+  it("never fires a build on the deterministic fallback (no provider), even with codegen on", async () => {
+    // No providerSelector -> the tool planner has no provider, so the intake runs
+    // through the deterministic safety fallback with no plan. dispatch_build is
+    // therefore never set, so no build fires even though codegen is enabled.
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    let dispatchBuildCalls = 0;
+    const service = new CoordinatorChatService(dir, {
+      config: providerCodegenConfig(),
+      dispatchBuild: async () => {
+        dispatchBuildCalls += 1;
+        return { started: true, alreadyRunning: false };
+      },
+    });
+
+    const result = await service.process({
+      source: "test",
+      message: "cliente si chiama Pizzeria Amodeo vuole un sito con prenotazioni e una proposta",
+    });
+
+    expect(result.mode).toBe("intake");
+    expect(dispatchBuildCalls).toBe(0);
+    expect(result.coordinatorMessage.meta?.build).toBeUndefined();
+    expect(result.coordinatorMessage.text).not.toContain("Ho avviato la build");
+  });
+
+  it("tells the owner when a build is already running (in-flight guard)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    const service = new CoordinatorChatService(dir, {
+      config: providerCodegenConfig(),
+      providerSelector: async () => ({ provider: buildIntakeProvider(true), model: "fake-model" }),
+      dispatchBuild: async () => ({ started: false, alreadyRunning: true }),
+    });
+
+    const result = await service.process({
+      source: "test",
+      message: "creami un sito per il gioco Pokeball",
+    });
+
+    expect(result.mode).toBe("intake");
+    expect(result.coordinatorMessage.text).toContain("già in corso");
+    expect(result.coordinatorMessage.meta?.build).toMatchObject({
+      started: false,
+      alreadyRunning: true,
+    });
+  });
+
+  it("does not await the heavy build pipeline within the chat turn", async () => {
+    // The dispatcher returns fast (started); a pending pipeline Promise it kicks
+    // off in the background must not be awaited. We model that by resolving the
+    // dispatcher immediately while a never-settling promise is left detached.
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    let pipelineAwaited = false;
+    const service = new CoordinatorChatService(dir, {
+      config: providerCodegenConfig(),
+      providerSelector: async () => ({ provider: buildIntakeProvider(true), model: "fake-model" }),
+      dispatchBuild: async () => {
+        // Detached, never-settling work — if the turn awaited it, this test would hang.
+        void new Promise<never>(() => {}).then(() => {
+          pipelineAwaited = true;
+        });
+        return { started: true, alreadyRunning: false };
+      },
+    });
+
+    const result = await service.process({
+      source: "test",
+      message: "creami un sito per il gioco Pokeball",
+    });
+
+    expect(result.coordinatorMessage.text).toContain("Ho avviato la build");
+    expect(pipelineAwaited).toBe(false);
+  });
+
   // --- model override tests ---
 
   it("honors a resolvable modelOverride via the injected overrideSelector", async () => {

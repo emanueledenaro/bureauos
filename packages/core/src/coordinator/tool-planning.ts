@@ -37,6 +37,17 @@ export interface CoordinatorToolPlan {
    * "deleting data requires approval" policy.
    */
   confirmed?: boolean;
+  /**
+   * Build-intent flag for the async owner-triggered build path. Set `true` ONLY
+   * when the owner wants software BUILT/DEVELOPED now for themselves/internally
+   * (e.g. "creami/costruisci/sviluppa un sito/app/gioco"). It is left unset for
+   * client-scoping intakes ("il cliente X vuole un sito" -> propose/scope first)
+   * and for non-build messages. Like {@link confirmed}, only a literal boolean
+   * `true` (or the string "true") sets it; everything else leaves it unset so the
+   * build path stays off by default (it is also gated on provider codegen mode
+   * before any build is fired).
+   */
+  dispatch_build?: boolean;
   confidence?: number;
 }
 
@@ -231,6 +242,10 @@ export function parseCoordinatorToolPlan(raw: string): CoordinatorToolPlan | und
   // flag, a string, or `false` all leave `confirmed` unset so the runtime
   // refuses to delete without an explicit owner go-ahead.
   const confirmed = parseConfirmedFlag(args);
+  // Build-intent flag. Same fail-closed parsing as `confirmed`: only a literal
+  // boolean `true` (or the string "true") opts the message into the async build
+  // path; anything else leaves it unset so the build never fires by default.
+  const dispatchBuild = parseBooleanFlag(args, ["dispatch_build", "dispatchBuild", "build"]);
   const confidence =
     typeof value["confidence"] === "number" && Number.isFinite(value["confidence"])
       ? Math.max(0, Math.min(1, value["confidence"]))
@@ -243,8 +258,25 @@ export function parseCoordinatorToolPlan(raw: string): CoordinatorToolPlan | und
     ...(industry ? { industry } : {}),
     ...(answer ? { answer } : {}),
     ...(confirmed ? { confirmed } : {}),
+    ...(dispatchBuild ? { dispatch_build: dispatchBuild } : {}),
     ...(confidence !== undefined ? { confidence } : {}),
   };
+}
+
+/**
+ * Parse an optional boolean flag from any of the given keys, failing closed.
+ * Only a literal boolean `true` (or the explicit string "true") counts as set;
+ * everything else — missing, `false`, "yes", 1, etc. — returns `false`. Used by
+ * the build-intent flag so the async build path stays off unless the planner
+ * explicitly opts in.
+ */
+function parseBooleanFlag(source: Record<string, unknown>, keys: readonly string[]): boolean {
+  for (const key of keys) {
+    const value = source[key];
+    if (value === true) return true;
+    if (typeof value === "string" && value.trim().toLowerCase() === "true") return true;
+  }
+  return false;
 }
 
 /**
