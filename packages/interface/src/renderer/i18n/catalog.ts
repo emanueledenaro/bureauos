@@ -4,9 +4,13 @@ import type { AppLang, CatalogNamespace } from "./types";
 // import. Page agents only ever create / edit their own namespace file — they
 // never touch this shared loader, so two agents working on two pages can never
 // produce a merge conflict in the i18n layer.
-const modules = import.meta.glob<{ default?: CatalogNamespace }>("./namespaces/*.ts", {
-  eager: true,
-});
+// Exclude *.test.ts / *.spec.ts files: they import vitest, which crashes the
+// app when loaded outside vitest's test runtime (e.g. under Vite dev server or
+// in Playwright e2e). Vite 6 supports negation patterns in glob arrays.
+const modules = import.meta.glob<{ default?: CatalogNamespace }>(
+  ["./namespaces/*.ts", "!./namespaces/*.test.ts", "!./namespaces/*.spec.ts"],
+  { eager: true },
+);
 
 function isCatalogNamespace(value: unknown): value is CatalogNamespace {
   if (typeof value !== "object" || value === null) return false;

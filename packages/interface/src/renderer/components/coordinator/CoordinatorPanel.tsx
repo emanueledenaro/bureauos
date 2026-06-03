@@ -1,16 +1,22 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback } from "../ui/avatar";
 import { Card } from "../ui/card";
 import { ActionBanner } from "../dashboard/ActionBanner";
 import { StatusPill } from "../dashboard/StatusPill";
 import { MessageBubble } from "./MessageBubble";
+import { ReasoningBlock } from "./ReasoningBlock";
 import { Composer } from "./Composer";
 import { buildTodayActions } from "../../lib/builders";
+import {
+  lastOwnerMessage,
+  truncateBefore,
+  truncateToLastOwnerInclusive,
+} from "../../lib/chat-thread";
 import {
   Api,
   type CoordinatorAttachmentInput,
   type CoordinatorChatResult,
+  type CoordinatorChatStreamEvent,
   type CoordinatorChatStreamHandlers,
   type CoordinatorMessageRecord,
 } from "../../lib/api";
@@ -80,6 +86,10 @@ export function CoordinatorPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [streamingMessageId, setStreamingMessageId] = useState<string | undefined>();
+  const abortRef = useRef<AbortController | undefined>(undefined);
+  const [reasoningStatus, setReasoningStatus] = useState<
+    Extract<CoordinatorChatStreamEvent, { type: "status" }>["status"] | undefined
+  >();
   const attachmentsRef = useRef<ChatAttachment[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastScrollHeightRef = useRef(0);
@@ -157,12 +167,17 @@ export function CoordinatorPanel({
     });
   };
 
-  const submit = async (): Promise<void> => {
-    if (busy || (!draft.trim() && attachments.length === 0)) return;
+  const submit = async (override?: { text?: string; base?: typeof messages }): Promise<void> => {
+    const messageText = (override?.text ?? draft).trim();
+    if (busy || (!messageText && attachments.length === 0)) return;
+    if (override?.base) setMessages(override.base);
     setBusy(true);
     setError(undefined);
+    setReasoningStatus("started");
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     const submittedAt = new Date().toISOString();
-    const messageText = draft.trim();
     const attachmentMeta = attachments.map((item) => ({
       name: item.name,
       size: item.size,
@@ -190,6 +205,8 @@ export function CoordinatorPanel({
             messageText || t("coordinatorPanel.attachedFiles", "Attached files"),
             payload,
             {
+              signal: controller.signal,
+              onStatus: (status) => setReasoningStatus(status),
               onDelta: (text) => {
                 streamedText += text;
                 setStreamingMessageId(assistantStreamId);
@@ -229,11 +246,48 @@ export function CoordinatorPanel({
         return [];
       });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const aborted = e instanceof DOMException && e.name === "AbortError";
+      if (aborted) {
+        // User stopped mid-stream: finalize the partial reply so it becomes a
+        // normal, copyable message (drop the streaming flag), and clear the
+        // submitted draft + attachments, mirroring a completed turn.
+        setMessages((current) =>
+          current.map((message) =>
+            message.id === assistantStreamId ? { ...message, meta: undefined } : message,
+          ),
+        );
+        setDraft("");
+        setAttachments((current) => {
+          current.forEach((item) => {
+            if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+          });
+          return [];
+        });
+      } else {
+        setError(e instanceof Error ? e.message : String(e));
+      }
       setStreamingMessageId(undefined);
     } finally {
       setBusy(false);
+      setReasoningStatus(undefined);
+      abortRef.current = undefined;
     }
+  };
+
+  const stop = (): void => abortRef.current?.abort();
+
+  const regenerate = (): void => {
+    const lastOwner = lastOwnerMessage(messages);
+    if (!lastOwner) return;
+    const base = truncateToLastOwnerInclusive(messages);
+    void submit({ text: lastOwner.text, base: base.slice(0, -1) });
+  };
+
+  const editMessage = (id: string): void => {
+    const target = messages.find((message) => message.id === id);
+    if (!target) return;
+    setDraft(target.text);
+    setMessages(truncateBefore(messages, id));
   };
 
   return (
@@ -306,21 +360,20 @@ export function CoordinatorPanel({
           </div>
         ) : null}
 
-        {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} />
+        {messages.map((message, index) => (
+          <MessageBubble
+            key={message.id}
+            message={message}
+            onRegenerate={
+              message.role === "coordinator" && index === messages.length - 1 && !busy
+                ? regenerate
+                : undefined
+            }
+            onEdit={message.role === "owner" && !busy ? () => editMessage(message.id) : undefined}
+          />
         ))}
 
-        {busy && !streamingMessageId ? (
-          <div className="flex items-start gap-2.5">
-            <Avatar className="h-7 w-7">
-              <AvatarFallback className="text-[10px]">SC</AvatarFallback>
-            </Avatar>
-            <div className="flex items-center gap-2 rounded-lg border-l-2 border-primary/55 bg-transparent px-3 py-2 text-body text-muted-foreground">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              {t("coordinatorPanel.readingContext", "Reading company context...")}
-            </div>
-          </div>
-        ) : null}
+        {busy && !streamingMessageId ? <ReasoningBlock status={reasoningStatus} active /> : null}
 
         {error ? (
           <ActionBanner
@@ -339,7 +392,9 @@ export function CoordinatorPanel({
         onAddFiles={addFiles}
         onRemoveAttachment={removeAttachment}
         onSubmit={() => void submit()}
+        onStop={stop}
         busy={busy}
+        providers={state.providers}
         placeholder={t(
           "coordinatorPanel.composerPlaceholder",
           "Message a decision, client, project, or priority...",
