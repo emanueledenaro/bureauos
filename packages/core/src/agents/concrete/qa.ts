@@ -256,21 +256,6 @@ function checksMarkdown(checks: readonly QaAcceptanceCheck[]): string {
     .join("\n\n");
 }
 
-const TEST_DEPENDENT_CRITERION =
-  /\b(tests?|testing|coverage|covered|verifiable|verify|verified|verification)\b/i;
-
-/**
- * A criterion is test-dependent when its evidence can only come from running an
- * automated test suite (e.g. "Tests cover at least one happy path and one edge
- * case", "Behavior described in the briefing is implemented and verifiable").
- * Used by the opt-in no-test-infra soft-pass to decide which acceptance
- * criteria may pass WITHOUT test evidence when the project genuinely has no
- * tests to run. Criteria with explicit fail evidence are never soft-passed.
- */
-function isTestDependentCriterion(criterion: string): boolean {
-  return TEST_DEPENDENT_CRITERION.test(criterion);
-}
-
 /**
  * Decide whether the opt-in no-test-infra soft-pass applies, and which
  * acceptance criteria it covers.
@@ -279,9 +264,16 @@ function isTestDependentCriterion(criterion: string): boolean {
  * gate actually ran (a code worktree existed), and (c) the runner returned
  * `blocked` — the genuine "no project test command configured or discovered"
  * case, NOT `failed`. When tests EXIST and FAIL, this returns
- * `{ applies:false }` so the run still blocks. The soft-passed criteria are the
- * test-DEPENDENT ones with no evidence (`unknown`); explicitly failed criteria
- * and non-test criteria are left untouched so they still block.
+ * `{ applies:false }` so the run still blocks.
+ *
+ * When it applies, the soft-pass covers EVERY acceptance criterion whose status
+ * is `unknown` (no pass/fail evidence found) — not just test-flavoured ones —
+ * because a static deliverable with no test infrastructure has no automated way
+ * to produce evidence for criteria such as "The change is scoped to a single
+ * concern" or "Behavior … is implemented and verifiable", so those would
+ * otherwise block the run forever. Criteria with explicit `fail` evidence are
+ * NEVER soft-passed; they continue to block (a real failure is not merely
+ * missing evidence).
  */
 function noTestInfraSoftPass(
   allowMissingTests: boolean | undefined,
@@ -292,16 +284,19 @@ function noTestInfraSoftPass(
     return { applies: false, criteria: [] };
   }
   const criteria = analysis.checks
-    .filter((check) => check.status === "unknown" && isTestDependentCriterion(check.criterion))
+    .filter((check) => check.status === "unknown")
     .map((check) => check.criterion);
   return { applies: true, criteria };
 }
 
 /**
  * Acceptance blockers that survive a no-test-infra soft-pass: every blocker
- * except the "missing evidence" lines for the soft-passed test-dependent
- * criteria. Failed criteria and non-test "missing evidence" criteria still
- * block. Mirrors the blocker phrasing produced by {@link analyzeQaVerification}.
+ * except the "missing evidence" lines for the soft-passed criteria. Because the
+ * soft-pass now covers ALL `unknown` criteria, this drops every
+ * "missing evidence for acceptance criterion: …" blocker but keeps every
+ * "failed acceptance criterion: …" blocker (a real failure, never soft-passed)
+ * and any non-acceptance blocker. Mirrors the blocker phrasing produced by
+ * {@link analyzeQaVerification}.
  */
 function acceptanceBlockersAfterSoftPass(
   analysis: QaVerificationAnalysis,
@@ -309,7 +304,8 @@ function acceptanceBlockersAfterSoftPass(
 ): string[] {
   const softPassed = new Set(softPassedCriteria);
   return analysis.blockers.filter(
-    (blocker) => !softPassed.has(blocker.replace(/^missing evidence for acceptance criterion: /, "")),
+    (blocker) =>
+      !softPassed.has(blocker.replace(/^missing evidence for acceptance criterion: /, "")),
   );
 }
 
@@ -325,9 +321,9 @@ function reportBody(
 ## No-Test Soft-Pass
 
 This is a static deliverable with NO automated tests for QA to run
-(\`runtime.codex.allow_missing_tests\` is enabled). The following test-dependent
-acceptance criteria were soft-passed WITHOUT test evidence; manual review is
-recommended before relying on them:
+(\`runtime.codex.allow_missing_tests\` is enabled). The following acceptance
+criteria had no pass/fail evidence and were NOT VERIFIED. They were soft-passed
+so the run could complete; each one needs MANUAL REVIEW before you rely on it:
 
 ${softPassedCriteria.map((criterion) => `- ${criterion}`).join("\n")}
 `
@@ -481,7 +477,9 @@ export class QaAgent implements AgentRuntime {
 
     const decisions = [`qa:${readyForReview ? "ready_for_review" : "blocked"}`];
     if (testGate) {
-      decisions.push(softPass.applies ? "qa:tests_soft_passed_no_tests" : `qa:tests_${testGate.result.status}`);
+      decisions.push(
+        softPass.applies ? "qa:tests_soft_passed_no_tests" : `qa:tests_${testGate.result.status}`,
+      );
     }
 
     const artifactIds = [artifact.id];

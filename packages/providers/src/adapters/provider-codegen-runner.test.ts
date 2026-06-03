@@ -92,6 +92,92 @@ describe("ProviderCodegenRunner", () => {
     expect(await readFile(join(dir, "index.html"), "utf8")).toContain("Built on retry");
   });
 
+  it("runs ONE completeness follow-up to add a runnable index.html when only web assets are emitted", async () => {
+    const calls: string[] = [];
+    const runner = new ProviderCodegenRunner({
+      generate: async ({ prompt }) => {
+        calls.push(prompt);
+        // Call 1: the model emits only JS + CSS, no HTML entry point.
+        if (calls.length === 1) {
+          return [
+            envelope("main.js", "import * as THREE from 'three';\nconst s = new THREE.Scene();"),
+            envelope("styles.css", "body { margin: 0; }"),
+          ].join("\n\n");
+        }
+        // Completeness call: it returns the missing entry point.
+        return envelope(
+          "index.html",
+          '<!doctype html>\n<link rel="stylesheet" href="./styles.css">\n<script type="module" src="./main.js"></script>',
+        );
+      },
+      diff: emptyDiff,
+    });
+
+    const result = await runner.execute(input(dir));
+
+    // Exactly one extra generation (no loops): the build call + the entry-point call.
+    expect(calls.length).toBe(2);
+    // The completeness follow-up asked only for the entry point and listed the
+    // already-generated files so the model wires them up.
+    expect(calls[1]).toContain("NO HTML entry point");
+    expect(calls[1]).toContain("- main.js");
+    expect(calls[1]).toContain("- styles.css");
+
+    expect(result.ok).toBe(true);
+    // The final written set includes the generated assets AND the new entry point.
+    expect(result.changedFiles).toEqual(["main.js", "styles.css", "index.html"]);
+    const html = await readFile(join(dir, "index.html"), "utf8");
+    expect(html).toContain('src="./main.js"');
+    expect(html).toContain('href="./styles.css"');
+  });
+
+  it("does NOT run a completeness follow-up when an index.html entry point is already present", async () => {
+    const calls: string[] = [];
+    const runner = new ProviderCodegenRunner({
+      generate: async ({ prompt }) => {
+        calls.push(prompt);
+        return [
+          envelope("index.html", '<!doctype html>\n<script type="module" src="./app.js"></script>'),
+          envelope("app.js", "console.log('hi');"),
+          envelope("styles.css", "body{}"),
+        ].join("\n\n");
+      },
+      diff: emptyDiff,
+    });
+
+    const result = await runner.execute(input(dir));
+
+    // No completeness call: the build call alone produced a runnable entry point.
+    expect(calls.length).toBe(1);
+    expect(result.ok).toBe(true);
+    expect(result.changedFiles).toEqual(["index.html", "app.js", "styles.css"]);
+  });
+
+  it("proceeds with the generated assets when the completeness follow-up yields no entry point", async () => {
+    const calls: string[] = [];
+    const runner = new ProviderCodegenRunner({
+      generate: async ({ prompt }) => {
+        calls.push(prompt);
+        if (calls.length === 1) {
+          return [
+            envelope("main.js", "console.log('only js');"),
+            envelope("styles.css", "body{}"),
+          ].join("\n\n");
+        }
+        // The follow-up still produces no usable entry point.
+        return "Sorry, I cannot produce an index.html.";
+      },
+      diff: emptyDiff,
+    });
+
+    const result = await runner.execute(input(dir));
+
+    // One follow-up attempt, then it gives up gracefully (no loop, no failure).
+    expect(calls.length).toBe(2);
+    expect(result.ok).toBe(true);
+    expect(result.changedFiles).toEqual(["main.js", "styles.css"]);
+  });
+
   it("falls back to markdown code fences when the model wraps files in ``` blocks", async () => {
     const text = [
       "Sure! Here is the site.",
@@ -117,10 +203,16 @@ describe("ProviderCodegenRunner", () => {
   it("passes the task scope and briefing into the user prompt", async () => {
     let seenPrompt = "";
     let seenSystem = "";
+    let calls = 0;
     const runner = new ProviderCodegenRunner({
       generate: async ({ system, prompt }) => {
-        seenSystem = system;
-        seenPrompt = prompt;
+        calls += 1;
+        // Capture the FIRST (build) prompt only — a single .js asset triggers the
+        // bounded entry-point follow-up, whose prompt we don't assert on here.
+        if (calls === 1) {
+          seenSystem = system;
+          seenPrompt = prompt;
+        }
         return envelope("app.js", "console.log('hi');");
       },
       diff: emptyDiff,

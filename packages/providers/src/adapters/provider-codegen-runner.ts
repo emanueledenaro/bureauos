@@ -72,6 +72,11 @@ const DEFAULT_MAX_OUTPUT_CHARS = 200_000;
 const SECRET_PATH_PATTERN = /secret|credential|\.pem$|id_rsa|private[-_]?key/i;
 const ENV_PATH_PATTERN = /(^|\/)\.env(?:\.|$)/i;
 
+/** An HTML entry point that makes a static site runnable (`index.html`/`.htm`). */
+const HTML_ENTRY_PATTERN = /(^|\/)index\.html?$/i;
+/** Browser assets that need an HTML host to be runnable (`.js`/`.mjs`/`.css`). */
+const WEB_ASSET_PATTERN = /\.(?:m?js|css)$/i;
+
 /**
  * Envelope markers. The model is instructed to emit ONLY files wrapped like:
  *
@@ -140,6 +145,14 @@ export class ProviderCodegenRunner implements CodexRuntimeRunner {
       return runnerError("provider returned no files");
     }
 
+    // Completeness pass: a static web build is only RUNNABLE if it has an HTML
+    // entry point. Some models emit only the JS/CSS (e.g. `app.js` + `styles.css`)
+    // with no `index.html`, leaving nothing to open. When that happens, run ONE
+    // bounded follow-up asking ONLY for the entry point, and merge any new file
+    // it returns. Capped to a single extra generation (no loops); if it still
+    // produces no entry point we proceed with what exists rather than fail.
+    parsed = await this.ensureEntryPoint(parsed, { system });
+
     // Validate + confine every path BEFORE writing anything. Invalid paths are
     // skipped and recorded as a blocker note; they are never written.
     const blockers: string[] = [];
@@ -200,6 +213,56 @@ export class ProviderCodegenRunner implements CodexRuntimeRunner {
       // the adapter's dangerous-command boundary trivially satisfied.
       commands: [],
     };
+  }
+
+  /**
+   * Bounded completeness pass that guarantees a runnable entry point.
+   *
+   * If the parsed files include web assets (`.js`/`.mjs`/`.css`) but NO HTML
+   * entry (`index.html`/`index.htm`), the site has nothing to open. This runs
+   * exactly ONE follow-up `generate` asking only for the entry point, gives the
+   * model the list of already-generated paths, and merges back any file it
+   * returns that is not already present (normally just `index.html`). All later
+   * path confinement and caps still apply to the merged files.
+   *
+   * It is strictly bounded: at most one extra generation, no loops. If the
+   * follow-up fails or still yields no entry point, the original files are
+   * returned unchanged — the run never fails solely because an entry point is
+   * missing.
+   */
+  private async ensureEntryPoint(
+    files: readonly ProviderCodegenFile[],
+    req: { system: string },
+  ): Promise<ProviderCodegenFile[]> {
+    const hasHtmlEntry = files.some((file) => HTML_ENTRY_PATTERN.test(file.path));
+    const hasWebAssets = files.some((file) => WEB_ASSET_PATTERN.test(file.path));
+    if (hasHtmlEntry || !hasWebAssets) {
+      return [...files];
+    }
+
+    let followupText: string;
+    try {
+      followupText = await this.generate({
+        system: req.system,
+        prompt: buildEntryPointPrompt(files.map((file) => file.path)),
+      });
+    } catch {
+      // A failed completeness follow-up is non-fatal: proceed with what exists.
+      return [...files];
+    }
+
+    const present = new Set(files.map((file) => file.path));
+    const merged = [...files];
+    for (const candidate of parseFiles(followupText)) {
+      // Only add genuinely NEW files (normally the entry point) — never
+      // overwrite or duplicate what the model already produced. Downstream
+      // confinement + caps still vet every added path.
+      if (!present.has(candidate.path)) {
+        present.add(candidate.path);
+        merged.push(candidate);
+      }
+    }
+    return merged;
   }
 
   /**
@@ -278,6 +341,31 @@ function buildRetryUserPrompt(task: CodexRuntimeRunnerInput["task"]): string {
     `Build this: ${scope}`,
     "",
     "Start your reply with `<<<FILE` and output nothing else.",
+  ].join("\n");
+}
+
+/**
+ * Completeness follow-up prompt: the first response produced web assets but no
+ * HTML entry point, so ask for ONLY a single `index.html` that loads the
+ * already-generated files and makes the site runnable. The model is given the
+ * exact list of existing paths so it wires them up rather than regenerating them.
+ */
+function buildEntryPointPrompt(existingPaths: readonly string[]): string {
+  return [
+    "Your previous response produced these files but NO HTML entry point, so the",
+    "site cannot be opened:",
+    ...existingPaths.map((path) => `- ${path}`),
+    "",
+    "Output ONLY a single index.html (no other files, no explanation) in this",
+    "exact envelope:",
+    '<<<FILE path="index.html">>>',
+    "...file content...",
+    "<<<END FILE>>>",
+    "",
+    "The index.html must make the site runnable by loading the files above —",
+    'reference each .js file with <script> (use type="module" for ES modules) and',
+    'each .css file with <link rel="stylesheet">. Do NOT recreate those files;',
+    "only write the index.html that wires them together. Start with `<<<FILE`.",
   ].join("\n");
 }
 

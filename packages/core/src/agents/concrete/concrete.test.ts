@@ -817,12 +817,14 @@ describe("concrete agents", () => {
       const out = await agent.execute({
         context: {
           runId: "run_qa_soft_pass",
-          // The two test-DEPENDENT criteria the product agent emits — they can
-          // only be met with tests, so they are exactly what the soft-pass covers.
+          // Both a test-flavoured criterion AND a plain non-test acceptance
+          // criterion with no evidence. With no test infrastructure neither can
+          // be verified, so the broadened soft-pass covers EVERY unknown one and
+          // the run completes.
           scope: [
             "Acceptance criteria:",
             "- Behavior described in the briefing is implemented and verifiable.",
-            "- Tests cover at least one happy path and one edge case.",
+            "- The change is scoped to a single concern.",
           ].join("\n"),
           codeWorkspaceRoot,
         },
@@ -830,7 +832,7 @@ describe("concrete agents", () => {
       });
 
       // The run completes: no hard block on the missing-test gate nor on the
-      // test-dependent acceptance criteria.
+      // unverified acceptance criteria.
       expect(out.ok).toBe(true);
       expect(out.blockers).toEqual([]);
       expect(out.decisions).toContain("qa:ready_for_review");
@@ -838,21 +840,37 @@ describe("concrete agents", () => {
       expect(out.notes).toContain("soft-passed");
       // The fake command runner is never invoked when there is no test command.
       expect(commandRunner.commands).toHaveLength(0);
-      // Traceability: a dedicated soft-pass audit line + a note in the QA report.
+      // Traceability: a dedicated soft-pass audit line + a note in the QA report
+      // listing ALL soft-passed criteria (including the non-test one) as
+      // unverified and needing manual review.
       const log = await readFile(workspacePaths(dir).auditLog, "utf8");
       expect(log).toContain("agent.qa.soft_passed_no_tests");
       const report = await artifacts.read(out.artifactIds[0]!);
       expect(report?.record.no_test_soft_pass).toBe(true);
+      expect(report?.record.no_test_soft_passed_criteria).toEqual([
+        "Behavior described in the briefing is implemented and verifiable.",
+        "The change is scoped to a single concern.",
+      ]);
       expect(report?.body).toContain("No-Test Soft-Pass");
+      expect(report?.body).toContain("NOT VERIFIED");
+      expect(report?.body).toContain("The change is scoped to a single concern.");
     } finally {
       await rm(codeWorkspaceRoot, { recursive: true, force: true });
     }
   });
 
-  it("still blocks on a NON-test acceptance criterion even with allow_missing_tests on", async () => {
+  it("still blocks a FAILED acceptance criterion even with allow_missing_tests on", async () => {
     const audit = new AuditLog(workspacePaths(dir).auditLog);
     const artifacts = new ArtifactStore(dir);
     const policy = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
+    // Explicit FAIL evidence for the criterion: a real failure, not merely
+    // missing evidence, so the soft-pass must NOT cover it.
+    await artifacts.write({
+      type: "test-evidence-report",
+      createdBy: "development",
+      runId: "run_qa_soft_pass_failed",
+      body: ["# Test Evidence", "", "FAIL: The change is scoped to a single concern."].join("\n"),
+    });
 
     const codeWorkspaceRoot = await mkdtemp(join(tmpdir(), "bureauos-qa-worktree-"));
     const commandRunner = new FakeProjectCommandRunner(PASSING_EXECUTION);
@@ -868,22 +886,24 @@ describe("concrete agents", () => {
     try {
       const out = await agent.execute({
         context: {
-          runId: "run_qa_soft_pass_nontest",
-          // A non-test criterion with no evidence: must still block; the soft-pass
-          // only relaxes the test-dependent ones.
-          scope: ["Acceptance criteria:", "- The change is scoped to a single concern."].join(
-            "\n",
-          ),
+          runId: "run_qa_soft_pass_failed",
+          scope: ["Acceptance criteria:", "- The change is scoped to a single concern."].join("\n"),
           codeWorkspaceRoot,
         },
         capabilities: new Map(),
       });
 
+      // A FAILED criterion blocks even though the no-test soft-pass is active.
       expect(out.ok).toBe(false);
       expect(out.blockers).toContain(
-        "missing evidence for acceptance criterion: The change is scoped to a single concern.",
+        "failed acceptance criterion: The change is scoped to a single concern.",
       );
       expect(out.decisions).toContain("qa:blocked");
+      const report = await artifacts.read(out.artifactIds[0]!);
+      // The failed criterion is never listed as soft-passed.
+      expect(report?.record.no_test_soft_passed_criteria ?? []).not.toContain(
+        "The change is scoped to a single concern.",
+      );
     } finally {
       await rm(codeWorkspaceRoot, { recursive: true, force: true });
     }
