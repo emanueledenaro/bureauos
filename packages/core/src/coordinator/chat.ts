@@ -5,6 +5,7 @@ import {
   type ProviderAdapter,
 } from "@bureauos/providers";
 import { configureAgentProviderRouting, selectAgentModel } from "../agents/provider-routing.js";
+import type { ModelOverride } from "./model-override.js";
 import { ArtifactStore, type ArtifactRecord } from "../artifacts/store.js";
 import { AuditLog } from "../audit/log.js";
 import type { BureauConfig } from "../config/schema.js";
@@ -44,6 +45,7 @@ export interface CoordinatorChatInput {
   message: string;
   source?: string;
   attachments?: CoordinatorAttachmentInput[];
+  modelOverride?: ModelOverride;
 }
 
 export interface CoordinatorChatProviderMeta {
@@ -716,6 +718,32 @@ async function selectCoordinatorProvider(
   };
 }
 
+/**
+ * Resolve a provider adapter for an explicit per-message model override.
+ *
+ * The router registers adapters with IDs following the pattern `{providerType}-default`
+ * (see `providerId()` in provider-routing.ts). We look up the adapter using
+ * `router.get("{override.provider}-default")`, validate its credentials, and return
+ * the selection. Returns `undefined` if the provider is not registered or fails
+ * credential validation — the caller (`resolveSelection`) falls back to the default.
+ */
+async function selectCoordinatorProviderOverride(
+  workspaceRoot: string,
+  config: BureauConfig,
+  env: NodeJS.ProcessEnv,
+  override: ModelOverride,
+): Promise<CoordinatorProviderSelection | undefined> {
+  const { router } = await buildConfiguredProviderRouter(workspaceRoot, env, config);
+  // Adapter IDs are formatted as `{providerType}-default` by the configured router.
+  // The override.provider field is expected to match a ProviderType (e.g. "anthropic").
+  const adapterId = `${override.provider}-default`;
+  const adapter = router.get(adapterId);
+  if (!adapter) return undefined;
+  const validation = await adapter.validateCredentials();
+  if (!validation.ok) return undefined;
+  return { provider: adapter, model: override.model };
+}
+
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
   if (timeoutMs <= 0) return promise;
   let timeout: NodeJS.Timeout | undefined;
@@ -858,6 +886,34 @@ export class CoordinatorChatService {
       Math.min(this.providerTimeoutMs, DEFAULT_TOOL_PLANNING_TIMEOUT_MS);
     this.toolPlanningDegradedTtlMs =
       deps.toolPlanningDegradedTtlMs ?? DEFAULT_TOOL_PLANNING_DEGRADED_TTL_MS;
+  }
+
+  /**
+   * Resolve the provider selection for a chat turn, honoring an optional
+   * per-message model override with a safe fallback to the default selection.
+   *
+   * If `input.modelOverride` is set but cannot be resolved for any reason
+   * (provider not registered, credentials invalid, resolver throws), the method
+   * falls back to the default selection so chat never breaks.
+   */
+  private async resolveSelection(
+    input: CoordinatorChatInput,
+  ): Promise<CoordinatorProviderSelection | undefined> {
+    const base = await this.providerSelector(this.workspaceRoot, this.config, this.env);
+    if (!input.modelOverride) return base;
+    try {
+      const overridden = await selectCoordinatorProviderOverride(
+        this.workspaceRoot,
+        this.config,
+        this.env,
+        input.modelOverride,
+      );
+      // Fall back to the default selection if the override could not be resolved
+      // (provider not connected, unknown model, router error) — never break chat.
+      return overridden ?? base;
+    } catch {
+      return base;
+    }
   }
 
   private async planToolAction(
@@ -1229,7 +1285,7 @@ export class CoordinatorChatService {
 
     let answer = "";
     let provider = providerMeta("unavailable", undefined, undefined, "no_valid_provider_route");
-    const selection = await this.providerSelector(this.workspaceRoot, this.config, this.env);
+    const selection = await this.resolveSelection(input);
     if (selection) {
       try {
         yield { type: "status", status: "provider_streaming" };
@@ -1656,7 +1712,7 @@ export class CoordinatorChatService {
       };
     }
 
-    const selection = await this.providerSelector(this.workspaceRoot, this.config, this.env);
+    const selection = await this.resolveSelection(input);
     if (selection) {
       try {
         const generated = await withTimeout(

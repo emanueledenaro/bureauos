@@ -1066,4 +1066,71 @@ describe("CoordinatorChatService", () => {
       }
     }
   });
+
+  // --- model override tests ---
+
+  it("falls back to default selection when modelOverride names an unknown provider", async () => {
+    // An unresolvable override (unknown provider) must never break chat.
+    // The test has no real providers configured, so both the override and the
+    // default selection resolve to undefined — the turn still completes with a
+    // `final` event (deterministic fallback answer) and does not throw.
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    const service = new CoordinatorChatService(dir, { config: defaultConfig("freelancer") });
+
+    const events: CoordinatorChatStreamEvent[] = [];
+    await expect(
+      (async () => {
+        for await (const event of service.stream({
+          message: "Cosa fai?",
+          modelOverride: { provider: "totally-unknown-provider", model: "nonexistent-model" },
+        })) {
+          events.push(event);
+        }
+      })(),
+    ).resolves.not.toThrow();
+
+    const finalEvent = events.find((e) => e.type === "final");
+    expect(finalEvent).toBeDefined();
+    expect(finalEvent?.type).toBe("final");
+  });
+
+  it("uses the override provider when it can be resolved (fake provider)", async () => {
+    // When the override provider IS resolvable (injected via a custom providerSelector
+    // that honors the override), the result's provider meta reflects the overridden model.
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    const overrideModel = "override-model-x1";
+    const fakeOverrideProvider: ProviderAdapter = {
+      id: "fake-override-provider",
+      type: "custom",
+      name: "Fake Override Provider",
+      async listModels() {
+        return [overrideModel];
+      },
+      async validateCredentials() {
+        return { ok: true };
+      },
+      async generateText() {
+        return { model: overrideModel, text: "Risposta dal provider di override." };
+      },
+      async *stream() {
+        yield "Risposta dal provider di override.";
+      },
+    };
+
+    // Inject a providerSelector that returns the override provider when the
+    // override matches its ID, simulating successful override resolution.
+    const service = new CoordinatorChatService(dir, {
+      config: defaultConfig("freelancer"),
+      providerSelector: async () => ({ provider: fakeOverrideProvider, model: overrideModel }),
+    });
+
+    const result = await service.process({
+      message: "Dimmi qualcosa.",
+      modelOverride: { provider: "custom", model: overrideModel },
+    });
+
+    expect(result.provider.status).toBe("used");
+    expect(result.provider.model).toBe(overrideModel);
+    expect(result.provider.provider).toBe("fake-override-provider");
+  });
 });
