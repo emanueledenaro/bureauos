@@ -41,8 +41,8 @@ test.describe("Coordinator chat experience", () => {
     //      regardless of whether a modelOverride was requested.
     //
     // Full override-selection coverage (choosing an option from the list) is
-    // exercised by the interface unit tests (ModelPicker.test.tsx) and by the
-    // core tests (chat.test.ts override + fallback paths). The e2e seeded path
+    // exercised by the interface unit tests (lib/model-options.test.ts) and by
+    // the core tests (chat.test.ts override + fallback paths). The e2e seeded path
     // intentionally has no providers so that CI needs no external API keys.
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`/?apiBase=${encodeURIComponent(workspace.url)}`);
