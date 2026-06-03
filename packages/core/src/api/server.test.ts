@@ -1236,6 +1236,28 @@ describe("API server", () => {
     expect(messages.map((message) => message.role)).toEqual(["owner", "coordinator"]);
   });
 
+  it("accepts a modelOverride body on the stream route without 400 or throw (falls back to deterministic answer)", async () => {
+    // An unknown-provider override must not cause a 400 or throw — it falls back
+    // to the deterministic answer path and still emits a `final` event.
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const response = await fetch(`${server.url}/coordinator/messages/stream`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        message: "Che clienti abbiamo attivi oggi?",
+        modelOverride: { provider: "totally-unknown-provider", model: "nonexistent-model" },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+    const events = parseSseEvents(await response.text());
+    const finalEvent = events.find((e) => e.event === "final");
+    expect(finalEvent).toBeDefined();
+    expect(finalEvent?.event).toBe("final");
+  });
+
   it("does not answer low-context coordinator chat from historical client context", async () => {
     server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
 

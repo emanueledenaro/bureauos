@@ -28,6 +28,7 @@ import { RunEngine } from "../runs/engine.js";
 import { AGENT_ROLES } from "../agents/roles.js";
 import type { CoordinatorAttachmentInput } from "../coordinator/intake.js";
 import { CoordinatorChatService } from "../coordinator/chat.js";
+import { parseModelOverride } from "../coordinator/model-override.js";
 import { CoordinatorMessageStore } from "../coordinator/messages.js";
 import { CoordinatorToolRuntime } from "../coordinator/tool-runtime.js";
 import { MemoryBrowserService } from "../memory/browser.js";
@@ -1129,6 +1130,7 @@ const ROUTES: Record<string, RouteHandler> = {
       message?: string;
       source?: string;
       attachments?: unknown;
+      modelOverride?: unknown;
     };
     if (!body.message || !body.message.trim()) {
       ok(res, { error: "message required" }, 400);
@@ -1143,6 +1145,7 @@ const ROUTES: Record<string, RouteHandler> = {
         message: body.message,
         source: body.source ?? "electron",
         attachments: parseAttachments(body.attachments),
+        modelOverride: parseModelOverride(body.modelOverride),
       }),
       201,
     );
@@ -1153,6 +1156,7 @@ const ROUTES: Record<string, RouteHandler> = {
       message?: string;
       source?: string;
       attachments?: unknown;
+      modelOverride?: unknown;
     };
     if (!body.message || !body.message.trim()) {
       ok(res, { error: "message required" }, 400);
@@ -1167,6 +1171,7 @@ const ROUTES: Record<string, RouteHandler> = {
         message: body.message,
         source: body.source ?? "electron",
         attachments: parseAttachments(body.attachments),
+        modelOverride: parseModelOverride(body.modelOverride),
       })) {
         writeSse(res, event.type, event);
       }
