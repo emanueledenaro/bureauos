@@ -1017,7 +1017,9 @@ describe("CoordinatorChatService", () => {
 
     expect(result.provider.status).toBe("failed");
     expect(result.provider.reason).toContain("timed out");
-    expect(result.coordinatorMessage.text).toContain("memoria locale");
+    // Quiet fallback: a short honest line, no "unconfirmed related memory" dump.
+    expect(result.coordinatorMessage.text).toContain("Non sono riuscito a raggiungere il modello");
+    expect(result.coordinatorMessage.text).not.toContain("Memoria correlata");
     expect(result.coordinatorMessage.text.toLowerCase()).not.toContain("coordinator working");
   });
 

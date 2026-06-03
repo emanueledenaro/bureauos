@@ -674,29 +674,17 @@ function sanitizeCoordinatorAnswer(answer: string): string {
   return sanitizeCoordinatorVisibleText(answer);
 }
 
-function deterministicAnswer(
-  message: string,
-  packet: ContextPacket,
-  provider: CoordinatorChatProviderMeta,
-): string {
-  const hits = packet.topHits.slice(0, 3);
-  const evidence = hits.length
-    ? hits.map((hit) => `- ${hit.snippet}`).join("\n")
-    : "- Non ho trovato memoria specifica oltre al ROOT e agli indici locali.";
-  const providerLine =
-    provider.status === "failed"
-      ? `Il provider ${provider.provider ?? "configurato"} non ha risposto, quindi uso memoria locale verificabile.`
-      : "Nessun provider modello e collegato per il Supreme Coordinator, quindi uso memoria locale verificabile.";
-  return [
-    providerLine,
-    "",
-    `Richiesta: ${message}`,
-    "",
-    "Memoria correlata, non confermata come richiesta corrente:",
-    evidence,
-    "",
-    "Prossimo passo interno: lavoro solo sul tema indicato nel messaggio corrente. Se vuoi creare una nuova opportunita cliente, indicami cliente, obiettivo, budget indicativo, deadline e asset disponibili.",
-  ].join("\n");
+/**
+ * Quiet, honest fallback used when no model answer is available (provider failed
+ * or none connected). Intentionally short: no echo of the request, no dump of
+ * "unconfirmed related memory", no verbose internal next-step — when the
+ * coordinator can't really answer, it says so briefly and nothing more.
+ */
+function deterministicAnswer(provider: CoordinatorChatProviderMeta): string {
+  if (provider.status === "failed") {
+    return `Non sono riuscito a raggiungere il modello (${provider.provider ?? "provider configurato"}). Controlla il provider collegato e riprova.`;
+  }
+  return "Nessun modello è collegato al Supreme Coordinator. Collega un provider nelle Impostazioni per ricevere risposte complete.";
 }
 
 function clientRegistryAnswer(clients: readonly ClientRecord[]): string {
@@ -1330,7 +1318,7 @@ export class CoordinatorChatService {
         );
       }
     }
-    if (!answer) answer = deterministicAnswer(message, packet, provider);
+    if (!answer) answer = deterministicAnswer(provider);
 
     yield { type: "status", status: "persisting" };
     const { ownerMessage, coordinatorMessage } = requireMessagePair(
@@ -1752,7 +1740,7 @@ export class CoordinatorChatService {
         );
       }
     }
-    if (!answer) answer = deterministicAnswer(message, packet, provider);
+    if (!answer) answer = deterministicAnswer(provider);
 
     const { ownerMessage, coordinatorMessage } = requireMessagePair(
       await this.messages.appendMany([
