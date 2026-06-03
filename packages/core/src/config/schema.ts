@@ -345,6 +345,14 @@ const RuntimeConfig = z
         max_changed_files: z.number().int().positive().default(25),
         timeout_ms: z.number().int().positive().default(120_000),
         max_output_chars: z.number().int().positive().default(12_000),
+        // Provider codegen (codegen_mode="provider") sizing — deliberately
+        // separate from `max_output_chars` (which bounds host-command stdout
+        // capture). `codegen_max_tokens` is the LLM output-token ceiling for one
+        // generation turn; `codegen_max_chars` is the total generated-file byte
+        // budget. A single real source file already exceeds the 12k stdout cap,
+        // so these default much higher.
+        codegen_max_tokens: z.number().int().positive().default(16_000),
+        codegen_max_chars: z.number().int().positive().default(120_000),
       })
       .default({}),
   })

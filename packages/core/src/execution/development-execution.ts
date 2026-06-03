@@ -29,9 +29,12 @@ export interface DevelopmentExecution {
   capabilityUse?: CapabilityUseService;
 }
 
-// Generous output ceiling for a single provider codegen turn (a small site is
-// well under this). The runner also caps total bytes via maxOutputChars.
-const PROVIDER_CODEGEN_MAX_TOKENS = 8000;
+// Fallback output ceiling for a single provider codegen turn, used only if
+// config lacks `runtime.codex.codegen_max_tokens`. A multi-file site needs more
+// than a few thousand tokens or the response truncates before the last file
+// (e.g. the entry-point index.html), so this is generous. The runner also caps
+// total bytes via maxOutputChars (config: codegen_max_chars).
+const PROVIDER_CODEGEN_MAX_TOKENS = 16000;
 const PROVIDER_CODEGEN_TEMPERATURE = 0.2;
 
 /**
@@ -103,7 +106,7 @@ async function buildProviderGenerate(
         system,
         prompt,
         temperature: PROVIDER_CODEGEN_TEMPERATURE,
-        maxTokens: PROVIDER_CODEGEN_MAX_TOKENS,
+        maxTokens: config.runtime?.codex?.codegen_max_tokens ?? PROVIDER_CODEGEN_MAX_TOKENS,
       });
       return result.text;
     };

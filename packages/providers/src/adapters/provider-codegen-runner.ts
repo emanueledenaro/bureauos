@@ -234,6 +234,8 @@ function buildSystemPrompt(): string {
     "- Use relative paths only. Never start a path with a leading slash.",
     '- Never use ".." in a path.',
     "- Write a self-contained, runnable implementation (include every file it needs).",
+    "- Emit the entry-point file FIRST (e.g. index.html), then the modules it loads, then any docs. A runnable entry point must exist even if you cannot emit everything.",
+    "- Prefer fewer complete files over many partial ones; never leave a file half-written.",
     "- Do not write any prose, explanation, or markdown outside the file envelopes.",
     "- Do not write secrets, credentials, .env files, or private keys.",
   ].join("\n");

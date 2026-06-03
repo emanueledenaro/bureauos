@@ -112,6 +112,39 @@ describe("buildCodexRuntimeFromConfig", () => {
     expect(await readFile(join(dir, "index.html"), "utf8")).toContain("<title>ok</title>");
   });
 
+  it("provider codegen sizes on codegen_max_chars, not max_output_chars (real-size files are not rejected)", async () => {
+    const config = defaultConfig("freelancer");
+    config.runtime.codex.enabled = true;
+    config.runtime.codex.codegen_mode = "provider";
+    // max_output_chars bounds host stdout capture (small); a single real source
+    // file already exceeds it, while codegen_max_chars is the file-byte budget.
+    expect(config.runtime.codex.max_output_chars).toBeLessThan(20_000);
+    expect(config.runtime.codex.codegen_max_chars).toBeGreaterThan(20_000);
+
+    // > max_output_chars (12k) but < codegen_max_chars (120k): a regression guard
+    // for the truncation/rejection bug found while building the Pokeball proof.
+    const big = "x".repeat(15_000);
+    const providerGenerate = async (): Promise<string> =>
+      `<<<FILE path="big.js">>>\n// ${big}\n<<<END FILE>>>`;
+    const diff = {
+      async changedFiles(): Promise<readonly string[]> {
+        return [];
+      },
+    };
+
+    const runtime = buildCodexRuntimeFromConfig(config, { providerGenerate, diff });
+    await runtime?.prepare({ workspaceRoot: dir, runId: "run_big" });
+    const result = await runtime?.execute({
+      capability: "edit_code",
+      intent: "implement scoped change",
+      scope: "Build a real-size module",
+    });
+
+    expect(result?.ok).toBe(true);
+    expect(result?.changedFiles).toEqual(["big.js"]);
+    expect((await readFile(join(dir, "big.js"), "utf8")).length).toBeGreaterThan(15_000);
+  });
+
   it("falls back to the host (command) path when codegen_mode='provider' but no closure is supplied", async () => {
     const config = defaultConfig("freelancer");
     config.runtime.codex.enabled = true;

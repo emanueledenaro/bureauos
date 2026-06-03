@@ -55,7 +55,9 @@ export function buildCodexRuntimeFromConfig(
     const providerRunner = new ProviderCodegenRunner({
       generate: options.providerGenerate,
       maxFiles: codex.max_changed_files,
-      maxOutputChars: codex.max_output_chars,
+      // Use the provider-codegen byte budget, NOT max_output_chars (which bounds
+      // host-command stdout capture and is far too small for source files).
+      maxOutputChars: codex.codegen_max_chars,
       ...(options.diff ? { diff: options.diff } : {}),
     });
     return new CodexRuntimeAdapter(id, {
