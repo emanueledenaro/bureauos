@@ -267,6 +267,9 @@ describe("ProjectDispatchService end-to-end orchestration proof (SER-242)", () =
         expect.arrayContaining(["technical-plan", "test-plan", "security-review", "pr-review"]),
       );
 
+      // The run's final status reflects the completed pipeline (all specialists
+      // ok), not the dispatcher-less stub — what the owner build card reads as done.
+      expect(result.run.status).toBe("completed");
       // Gated delivery DELIVERED: branch pushed to the (local bare) remote and a
       // draft PR opened via the fake client — never a real GitHub account.
       expect(result.delivery?.status).toBe("delivered");

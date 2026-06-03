@@ -346,6 +346,12 @@ export class ProjectDispatchService {
       ...(client ? { clientId: client.id } : {}),
       projectId: project.id,
     });
+    // This service's RunEngine has no dispatcher, so `start()` stub-completes the
+    // run immediately. The real pipeline runs below (dispatchRun) for a long time
+    // — reflect that lifecycle so progress consumers (the owner build card polling
+    // GET /runs) see it running, not instantly "completed". Final status is set
+    // after the pipeline finishes.
+    await this.runs.patch(run.id, { status: "in_progress" });
 
     const sourceArtifacts = await this.artifacts.list({ project_id: project.id });
     const pendingApprovals = pendingProjectApprovals(await this.approvals.listPending(), project);
@@ -508,7 +514,7 @@ export class ProjectDispatchService {
       }
     }
     const producedArtifactIds = dispatch.steps.flatMap((step) => step.artifactIds);
-    const updatedRun = await this.runs.attachArtifacts(run.id, [
+    await this.runs.attachArtifacts(run.id, [
       packet.id,
       ...handoffs.map((handoff) => handoff.artifact.id),
       dispatch.briefingArtifactId,
@@ -526,6 +532,13 @@ export class ProjectDispatchService {
         : [`${step.role}: ${step.notes}`],
     );
     const dispatchResult: "ok" | "error" = blockedSteps.length > 0 ? "error" : "ok";
+
+    // Set the run's real terminal status now that the pipeline finished (it was
+    // moved to in_progress at dispatch start). A blocking specialist => blocked,
+    // otherwise completed. This is what the owner build card reads as "done".
+    const finalRun = await this.runs.patch(run.id, {
+      status: blockedSteps.length > 0 ? "blocked" : "completed",
+    });
 
     await appendFile(
       join(paths.projectsDir, project.slug, "RUNS.md"),
@@ -579,7 +592,7 @@ export class ProjectDispatchService {
       project,
       ownership,
       ...(client ? { client } : {}),
-      run: updatedRun,
+      run: finalRun,
       pipeline,
       packet,
       handoffs,

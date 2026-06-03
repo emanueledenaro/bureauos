@@ -254,6 +254,9 @@ describe("ProjectDispatchService", () => {
     // blocked rather than a clean completion (SER-185).
     const blockedSteps = result.dispatch.steps.filter((step) => !step.ok);
     expect(blockedSteps.length).toBeGreaterThan(0);
+    // The run's final status reflects the real pipeline outcome, not the
+    // dispatcher-less stub completion (so the owner build card shows "blocked").
+    expect(result.run.status).toBe("blocked");
 
     expect(result.project.id).toBe(intake.project.id);
     expect(result.client?.id).toBe(intake.client.id);
