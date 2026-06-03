@@ -1041,7 +1041,18 @@ const ROUTES: Record<string, RouteHandler> = {
         artifacts: d.artifacts,
         audit: d.audit,
         policy: d.policy,
+        config: options.config,
       },
+      // Code-run retries (feature/bug) re-run through the full provider-codegen
+      // + worktree pipeline instead of degrading to a template-only stub. Passing
+      // config (+ default process.env) lets the retry build a ProjectDispatchService
+      // with the same wiring the owner-build path uses, preserving ownerBuild for
+      // owner-build parents.
+      config: options.config,
+      providerEnv: process.env,
+      ...(options.githubClient?.createPullRequest
+        ? { githubPrPublishClient: options.githubClient as GitHubPullRequestPublishClient }
+        : {}),
     }).scan({
       maxAttempts:
         typeof body.maxAttempts === "number"

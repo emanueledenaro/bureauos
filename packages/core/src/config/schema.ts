@@ -353,6 +353,15 @@ const RuntimeConfig = z
         // so these default much higher.
         codegen_max_tokens: z.number().int().positive().default(16_000),
         codegen_max_chars: z.number().int().positive().default(120_000),
+        // Opt-in QA soft-pass for a test-less static deliverable. Default false
+        // keeps today's hard gate: a code run with NO project test command
+        // discovered is BLOCKED. When true, and ONLY when the project genuinely
+        // has no test infrastructure to run (the test runner is `blocked`, not
+        // `failed`), QA records a traceable soft-pass and does not block the run
+        // on (a) the missing-test-command gate or (b) the test-DEPENDENT
+        // acceptance criteria. Tests that EXIST and FAIL still block regardless
+        // of this flag, and non-test blockers always block.
+        allow_missing_tests: z.boolean().default(false),
       })
       .default({}),
   })

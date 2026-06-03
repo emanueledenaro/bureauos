@@ -256,8 +256,82 @@ function checksMarkdown(checks: readonly QaAcceptanceCheck[]): string {
     .join("\n\n");
 }
 
-function reportBody(input: AgentRunInput, analysis: QaVerificationAnalysis): string {
+const TEST_DEPENDENT_CRITERION =
+  /\b(tests?|testing|coverage|covered|verifiable|verify|verified|verification)\b/i;
+
+/**
+ * A criterion is test-dependent when its evidence can only come from running an
+ * automated test suite (e.g. "Tests cover at least one happy path and one edge
+ * case", "Behavior described in the briefing is implemented and verifiable").
+ * Used by the opt-in no-test-infra soft-pass to decide which acceptance
+ * criteria may pass WITHOUT test evidence when the project genuinely has no
+ * tests to run. Criteria with explicit fail evidence are never soft-passed.
+ */
+function isTestDependentCriterion(criterion: string): boolean {
+  return TEST_DEPENDENT_CRITERION.test(criterion);
+}
+
+/**
+ * Decide whether the opt-in no-test-infra soft-pass applies, and which
+ * acceptance criteria it covers.
+ *
+ * It applies ONLY when (a) the owner enabled `allow_missing_tests`, (b) a test
+ * gate actually ran (a code worktree existed), and (c) the runner returned
+ * `blocked` — the genuine "no project test command configured or discovered"
+ * case, NOT `failed`. When tests EXIST and FAIL, this returns
+ * `{ applies:false }` so the run still blocks. The soft-passed criteria are the
+ * test-DEPENDENT ones with no evidence (`unknown`); explicitly failed criteria
+ * and non-test criteria are left untouched so they still block.
+ */
+function noTestInfraSoftPass(
+  allowMissingTests: boolean | undefined,
+  analysis: QaVerificationAnalysis,
+  testGate: TestGate | undefined,
+): { applies: boolean; criteria: readonly string[] } {
+  if (!allowMissingTests || !testGate || testGate.result.status !== "blocked") {
+    return { applies: false, criteria: [] };
+  }
+  const criteria = analysis.checks
+    .filter((check) => check.status === "unknown" && isTestDependentCriterion(check.criterion))
+    .map((check) => check.criterion);
+  return { applies: true, criteria };
+}
+
+/**
+ * Acceptance blockers that survive a no-test-infra soft-pass: every blocker
+ * except the "missing evidence" lines for the soft-passed test-dependent
+ * criteria. Failed criteria and non-test "missing evidence" criteria still
+ * block. Mirrors the blocker phrasing produced by {@link analyzeQaVerification}.
+ */
+function acceptanceBlockersAfterSoftPass(
+  analysis: QaVerificationAnalysis,
+  softPassedCriteria: readonly string[],
+): string[] {
+  const softPassed = new Set(softPassedCriteria);
+  return analysis.blockers.filter(
+    (blocker) => !softPassed.has(blocker.replace(/^missing evidence for acceptance criterion: /, "")),
+  );
+}
+
+function reportBody(
+  input: AgentRunInput,
+  analysis: QaVerificationAnalysis,
+  softPassedCriteria: readonly string[] = [],
+): string {
   const summary = statusSummary(analysis.checks);
+  const softPassNote =
+    softPassedCriteria.length > 0
+      ? `
+## No-Test Soft-Pass
+
+This is a static deliverable with NO automated tests for QA to run
+(\`runtime.codex.allow_missing_tests\` is enabled). The following test-dependent
+acceptance criteria were soft-passed WITHOUT test evidence; manual review is
+recommended before relying on them:
+
+${softPassedCriteria.map((criterion) => `- ${criterion}`).join("\n")}
+`
+      : "";
   return `# QA Verification Report
 
 ## Scope
@@ -271,7 +345,7 @@ ${sourceArtifactMarkdown(analysis.sourceArtifacts)}
 ## Acceptance Criteria Verification
 
 ${checksMarkdown(analysis.checks)}
-
+${softPassNote}
 ## Summary
 
 - Pass: ${summary.pass}
@@ -312,6 +386,28 @@ export class QaAgent implements AgentRuntime {
     );
     const analysis = analyzeQaVerification(input, sourceArtifacts);
     const summary = statusSummary(analysis.checks);
+
+    // When the dispatch provisioned a code worktree (SER-243), QA runs the
+    // project's REAL test suite against the code the development agent wrote and
+    // gates the handoff on the result (SER-240). With no worktree (non-code
+    // runs) the deterministic acceptance path below is unchanged. Run it BEFORE
+    // writing the artifact so the no-test soft-pass decision (below) can be
+    // recorded in the report body.
+    const testGate = await this.runProjectTests(input);
+
+    // Opt-in soft-pass for a test-less static deliverable. Applies ONLY when the
+    // owner enabled the flag AND the runner returned `blocked` (no test command
+    // discovered) — NOT when tests exist and fail. It drops the missing-test
+    // gate and the test-dependent "missing evidence" acceptance blockers so the
+    // run can complete; everything else still blocks (SER bugfix).
+    const softPass = noTestInfraSoftPass(this.deps.allowMissingTests, analysis, testGate);
+    const acceptanceBlockers = softPass.applies
+      ? acceptanceBlockersAfterSoftPass(analysis, softPass.criteria)
+      : analysis.blockers;
+    // The test gate is a blocker only when tests ran and were not satisfied AND
+    // the soft-pass does not cover this no-test-infra case.
+    const testBlockers = softPass.applies ? [] : (testGate?.blockers ?? []);
+
     // The deterministic acceptance verification drives readiness, blockers, and
     // metadata. The provider, when configured, only enriches the narrative; with
     // no provider the body is the deterministic report, unchanged.
@@ -321,8 +417,9 @@ export class QaAgent implements AgentRuntime {
       artifactTitle: "QA Verification Report",
       outputInstructions:
         "Explain the acceptance-criteria verification, the supporting evidence, and the ready-for-review gate. Do not mark work ready unless the evidence supports it.",
-      templateBody: reportBody(input, analysis),
+      templateBody: reportBody(input, analysis, softPass.criteria),
     });
+    const readyForReview = acceptanceBlockers.length === 0 && testBlockers.length === 0;
     const artifact = await this.deps.artifacts.write({
       type: "test-plan",
       createdBy: this.definition.id,
@@ -330,12 +427,18 @@ export class QaAgent implements AgentRuntime {
       ...(input.context.clientId !== undefined ? { clientId: input.context.clientId } : {}),
       ...(input.context.projectId !== undefined ? { projectId: input.context.projectId } : {}),
       metadata: {
-        qa_readiness: analysis.readiness,
+        qa_readiness: readyForReview ? "ready_for_review" : "blocked",
         acceptance_criteria_total: analysis.checks.length,
         acceptance_pass_count: summary.pass,
         acceptance_fail_count: summary.fail,
         acceptance_unknown_count: summary.unknown,
         source_artifact_ids: analysis.sourceArtifacts.map((artifact) => artifact.record.id),
+        ...(softPass.applies
+          ? {
+              no_test_soft_pass: true,
+              no_test_soft_passed_criteria: [...softPass.criteria],
+            }
+          : {}),
       },
       body: draft.body,
     });
@@ -346,30 +449,53 @@ export class QaAgent implements AgentRuntime {
       artifact_id: artifact.id,
       ...(draft.capability ? { capability: draft.capability } : {}),
       ...(draft.error ? { error: draft.error } : {}),
-      result: analysis.readiness === "ready_for_review" ? "ok" : "error",
+      result: readyForReview ? "ok" : "error",
     });
 
-    // When the dispatch provisioned a code worktree (SER-243), QA runs the
-    // project's REAL test suite against the code the development agent wrote and
-    // gates the handoff on the result (SER-240). With no worktree (non-code
-    // runs) the deterministic acceptance path below is unchanged.
-    const testGate = await this.runProjectTests(input);
+    // Record the soft-pass as its own traceable audit line so the relaxed gate
+    // is always inspectable: which run, which test-dependent criteria passed
+    // without test evidence, and that it was driven by the opt-in flag.
+    if (softPass.applies) {
+      await this.deps.audit.append({
+        actor: this.definition.id,
+        action: "agent.qa.soft_passed_no_tests",
+        target: input.context.runId,
+        artifact_id: artifact.id,
+        ...(testGate?.result.reason ? { error: testGate.result.reason } : {}),
+        result: "ok",
+      });
+    }
 
-    const decisions = [`qa:${analysis.readiness}`];
-    if (testGate) decisions.push(`qa:tests_${testGate.result.status}`);
+    // Gate-decision audit: a non-passing test result blocks UNLESS the soft-pass
+    // covered a no-test-infra case. `passed` -> ok; soft-passed -> ok; otherwise
+    // (real failure, or no flag) -> error.
+    if (testGate) {
+      await this.deps.audit.append({
+        actor: this.definition.id,
+        action: "agent.qa.tests_gated",
+        target: input.context.runId,
+        artifact_id: testGate.result.artifact.id,
+        result: testGate.passed || softPass.applies ? "ok" : "error",
+      });
+    }
+
+    const decisions = [`qa:${readyForReview ? "ready_for_review" : "blocked"}`];
+    if (testGate) {
+      decisions.push(softPass.applies ? "qa:tests_soft_passed_no_tests" : `qa:tests_${testGate.result.status}`);
+    }
 
     const artifactIds = [artifact.id];
     if (testGate) artifactIds.push(testGate.result.artifact.id);
 
-    const blockers = [...analysis.blockers, ...(testGate?.blockers ?? [])];
-    const ok = analysis.readiness === "ready_for_review" && (testGate?.passed ?? true);
+    const blockers = [...acceptanceBlockers, ...testBlockers];
+    const ok = readyForReview;
 
     return {
       ok,
       artifactIds,
       decisions,
       blockers,
-      notes: qaNotes(analysis, testGate),
+      notes: qaNotes(analysis, testGate, softPass.applies),
     };
   }
 
@@ -396,13 +522,10 @@ export class QaAgent implements AgentRuntime {
 
     const passed = result.status === "passed";
     const blockers = passed ? [] : [testGateBlocker(result)];
-    await this.deps.audit.append({
-      actor: this.definition.id,
-      action: "agent.qa.tests_gated",
-      target: input.context.runId,
-      artifact_id: result.artifact.id,
-      result: passed ? "ok" : "error",
-    });
+    // The gate-decision audit (`agent.qa.tests_gated`) is appended by the caller
+    // (`execute`) instead of here, because whether a non-passing result actually
+    // BLOCKS depends on the no-test soft-pass decision, which `execute` owns. The
+    // test runner has already appended its own `execution.tests.*` evidence line.
     return { result, passed, blockers };
   }
 }
@@ -420,12 +543,19 @@ function testGateBlocker(result: ProjectTestRunnerResult): string {
   return "project tests failed";
 }
 
-function qaNotes(analysis: QaVerificationAnalysis, testGate: TestGate | undefined): string {
+function qaNotes(
+  analysis: QaVerificationAnalysis,
+  testGate: TestGate | undefined,
+  softPassed: boolean,
+): string {
   const acceptanceNote =
     analysis.readiness === "ready_for_review"
       ? "qa verification passed all acceptance criteria"
       : `qa verification blocked ready-for-review with ${analysis.blockers.length} blocker(s)`;
   if (!testGate) return acceptanceNote;
+  if (softPassed) {
+    return `${acceptanceNote}; no automated tests for this static deliverable — soft-passed, manual review recommended`;
+  }
   const testNote = testGate.passed
     ? "project tests passed"
     : `project tests gate blocked ready-for-review (${testGate.result.status})`;

@@ -1,9 +1,22 @@
+import type { ProviderEnv } from "@bureauos/providers";
 import { ArtifactStore, type ArtifactRecord } from "../artifacts/store.js";
 import { AuditLog } from "../audit/log.js";
+import type { BureauConfig } from "../config/schema.js";
+import type { ProjectTestRunnerFactory } from "../agents/runtime.js";
+import {
+  ProjectDispatchService,
+  type ProjectDispatchResult,
+  type ProjectDispatchDeps,
+} from "../dispatch/project-dispatch.js";
+import type { GitHubPullRequestPublishClient } from "../github/pr-publisher.js";
+import type { GitHubRepositoryProvisionClient } from "../github/repository-provisioner.js";
+import type { DispatchBranchPusher } from "../dispatch/delivery.js";
 import type { PolicyDecision, PolicyEngine } from "../policy/engine.js";
 import { ApprovalRegistry, type ApprovalRecord } from "../registries/approval.js";
-import { dispatchRun, type CoordinatorDeps } from "../runs/coordinator.js";
+import { ProjectRegistry } from "../registries/project.js";
+import { dispatchRun, pipelineForRunType, type CoordinatorDeps } from "../runs/coordinator.js";
 import { RunEngine, type RunRecord } from "../runs/engine.js";
+import { OWNER_BUILD_WORK_ITEM_TYPE } from "../work-items/source.js";
 
 export type AutonomousRetryStatus = "blocked" | "failed";
 export type AutonomousRetryEscalationReason = "max_attempts_reached" | "non_retryable_failure";
@@ -55,6 +68,25 @@ export interface AutonomousRetryResult {
   report?: ArtifactRecord;
 }
 
+/**
+ * Narrow dispatch surface the retry service uses to RE-RUN a code run through
+ * the full provider-codegen + worktree pipeline (the same path the owner build
+ * uses), instead of the bare `dispatchRun` coordinator path which yields a
+ * template-only result for code runs. Implemented by {@link ProjectDispatchService};
+ * tests inject a spy to assert the routing without running the heavy pipeline.
+ */
+export interface RetryProjectDispatcher {
+  dispatch(input: {
+    projectSlug: string;
+    runType: RunRecord["type"];
+    scope: string;
+    briefing?: string;
+    /** Trigger source for the dispatched run; the retry passes its `bureauos.retry:` source. */
+    source?: string;
+    ownerBuild?: boolean;
+  }): Promise<Pick<ProjectDispatchResult, "run" | "dispatch" | "artifacts">>;
+}
+
 export interface AutonomousRetryDeps {
   runs: RunEngine;
   audit: AuditLog;
@@ -62,6 +94,30 @@ export interface AutonomousRetryDeps {
   artifacts?: ArtifactStore;
   approvals?: ApprovalRegistry;
   coordinator?: CoordinatorDeps;
+  /**
+   * Enables routing a retried CODE run (a run whose pipeline includes the
+   * development role — `feature`/`bug`) through the full provider-codegen +
+   * worktree pipeline so the retry produces real code, not a template-only stub
+   * (the bug this fixes). All optional; when absent the retry falls back to the
+   * existing `coordinator`/`dispatchRun` path so existing callers are unchanged.
+   */
+  config?: BureauConfig;
+  providerEnv?: ProviderEnv;
+  projects?: ProjectRegistry;
+  /**
+   * Injection seam (primarily for tests): a {@link RetryProjectDispatcher} used
+   * instead of constructing a real {@link ProjectDispatchService}. Production
+   * leaves this unset and the service is built from `config`/`providerEnv` plus
+   * the GitHub/test-runner/pusher seams below.
+   */
+  projectDispatch?: RetryProjectDispatcher;
+  /** Pass-through delivery/test seams for the built ProjectDispatchService (never used in tests). */
+  githubPrPublishClient?: GitHubPullRequestPublishClient;
+  githubRepoProvisionClient?: GitHubRepositoryProvisionClient;
+  githubToken?: string;
+  githubOwner?: string;
+  projectTestRunnerFactory?: ProjectTestRunnerFactory;
+  dispatchBranchPusher?: DispatchBranchPusher;
 }
 
 interface Candidate {
@@ -119,6 +175,26 @@ function booleanValue(value: unknown): boolean | undefined {
 
 function isRetryChild(run: RunRecord): boolean {
   return run.trigger_source.startsWith("bureauos.retry:");
+}
+
+/**
+ * A CODE run is one whose pipeline includes the development role
+ * (`feature`/`bug`). Such runs must be retried through the full provider-codegen
+ * + worktree pipeline (not the bare coordinator path, which yields template-only
+ * output for code), or the retry degrades and re-blocks.
+ */
+function isCodeRun(run: RunRecord): boolean {
+  return pipelineForRunType(run.type).includes("development");
+}
+
+/**
+ * Whether the run was authorized by an explicit OWNER build. Only an owner-build
+ * parent may carry `ownerBuild` into its retry, so the relaxed `linked_issue`
+ * gate stays scoped to owner-authorized work — autonomous/scheduler code runs
+ * never get it.
+ */
+function isOwnerBuildRun(run: RunRecord): boolean {
+  return run.source_work_item_type === OWNER_BUILD_WORK_ITEM_TYPE;
 }
 
 function alreadyEscalated(run: RunRecord): boolean {
@@ -258,6 +334,7 @@ ${candidates
 export class AutonomousRetryService {
   private readonly artifacts: ArtifactStore;
   private readonly approvals: ApprovalRegistry;
+  private readonly projects: ProjectRegistry;
 
   constructor(
     private readonly workspaceRoot: string,
@@ -265,6 +342,51 @@ export class AutonomousRetryService {
   ) {
     this.artifacts = deps.artifacts ?? new ArtifactStore(workspaceRoot);
     this.approvals = deps.approvals ?? new ApprovalRegistry(workspaceRoot);
+    this.projects = deps.projects ?? new ProjectRegistry(workspaceRoot);
+  }
+
+  /**
+   * The {@link RetryProjectDispatcher} used to re-run a code run through the full
+   * provider-codegen + worktree pipeline. Returns the injected spy when present
+   * (tests), otherwise builds a real {@link ProjectDispatchService} from config +
+   * the pass-through delivery/test seams. Returns `undefined` when no `config`
+   * was supplied, so the retry falls back to the existing `dispatchRun` path and
+   * nothing breaks for callers that did not opt in.
+   */
+  private resolveProjectDispatcher(): RetryProjectDispatcher | undefined {
+    if (this.deps.projectDispatch) return this.deps.projectDispatch;
+    if (!this.deps.config) return undefined;
+    const dispatchDeps: ProjectDispatchDeps = {
+      config: this.deps.config,
+      artifacts: this.artifacts,
+      audit: this.deps.audit,
+      policy: this.deps.policy,
+      approvals: this.approvals,
+      projects: this.projects,
+      runs: this.deps.runs,
+      ...(this.deps.providerEnv ? { providerEnv: this.deps.providerEnv } : {}),
+      ...(this.deps.githubPrPublishClient
+        ? { githubPrPublishClient: this.deps.githubPrPublishClient }
+        : {}),
+      ...(this.deps.githubRepoProvisionClient
+        ? { githubRepoProvisionClient: this.deps.githubRepoProvisionClient }
+        : {}),
+      ...(this.deps.githubToken ? { githubToken: this.deps.githubToken } : {}),
+      ...(this.deps.githubOwner ? { githubOwner: this.deps.githubOwner } : {}),
+      ...(this.deps.projectTestRunnerFactory
+        ? { projectTestRunnerFactory: this.deps.projectTestRunnerFactory }
+        : {}),
+      ...(this.deps.dispatchBranchPusher
+        ? { dispatchBranchPusher: this.deps.dispatchBranchPusher }
+        : {}),
+    };
+    return new ProjectDispatchService(this.workspaceRoot, dispatchDeps);
+  }
+
+  /** Resolve a project's slug from its id (ProjectDispatchService keys on slug). */
+  private async projectSlugFor(projectId: string): Promise<string | undefined> {
+    const projects = await this.projects.list();
+    return projects.find((project) => project.id === projectId)?.slug;
   }
 
   async scan(input: AutonomousRetryInput = {}): Promise<AutonomousRetryResult> {
@@ -417,28 +539,42 @@ Owner intervention is required before BureauOS should retry this run again.
         continue;
       }
 
-      const retryRun = await this.deps.runs.start({
-        type: candidate.run.type,
-        triggerType: "threshold",
-        triggerSource: candidate.triggerSource,
-        scope: `Retry ${candidate.nextAttempt}/${maxAttempts}: ${candidate.run.scope}`,
-        ...(candidate.run.project_id ? { projectId: candidate.run.project_id } : {}),
-        ...(candidate.run.client_id ? { clientId: candidate.run.client_id } : {}),
-      });
-      if (report) await this.deps.runs.attachArtifacts(retryRun.id, [report.id]);
+      // A CODE run (feature/bug) must be re-run through the full provider-codegen
+      // + worktree pipeline, or the retry degrades to a template-only stub and
+      // re-blocks (the bug this fixes). Route it through ProjectDispatchService
+      // when that path is wired (config/seams present) AND the project resolves;
+      // otherwise fall back to the bare coordinator/dispatchRun path below so
+      // existing callers are unchanged.
+      const projectDispatcher = this.resolveProjectDispatcher();
+      const projectSlug =
+        projectDispatcher && isCodeRun(candidate.run) && candidate.run.project_id
+          ? await this.projectSlugFor(candidate.run.project_id)
+          : undefined;
+      const routeViaProjectDispatch = Boolean(projectDispatcher && projectSlug);
 
-      // Track the retry's TRUE terminal outcome. The retry run starts through
-      // the stub path (which always completes), so `retryRun.status` alone lies
-      // when the coordinator dispatch actually blocks. We apply the dispatch
-      // result to the retry run and only treat it as recovered when the real
-      // pipeline completed with no blockers.
-      let retryRecovered = retryRun.status === "completed";
+      let retryRun: RunRecord;
+      let retryRecovered: boolean;
       let retryBlockers: string[] = [];
-      if (this.deps.coordinator && retryRun.status !== "needs_human") {
-        const dispatch = await dispatchRun(this.deps.coordinator, {
-          workspaceRoot: this.workspaceRoot,
-          run: retryRun,
-          scope: retryRun.scope,
+
+      if (routeViaProjectDispatch && projectDispatcher && projectSlug) {
+        // Preserve the owner-build authorization ONLY from an owner-build parent,
+        // so the relaxed `linked_issue` gate never leaks to autonomous code runs.
+        const ownerBuild = isOwnerBuildRun(candidate.run);
+        await this.deps.audit.append({
+          actor: "supreme_coordinator",
+          action: "autonomy.retry.code_dispatch",
+          target: candidate.triggerSource,
+          capability: "bureauos.retry",
+          ...(ownerBuild ? { error: "owner_build" } : {}),
+          result: "ok",
+        });
+        // `source: candidate.triggerSource` makes the dispatched run the retry
+        // CHILD (its trigger source is `bureauos.retry:...`), so it is deduped and
+        // never recursively retried — the same boundary the coordinator path has.
+        const dispatched = await projectDispatcher.dispatch({
+          projectSlug,
+          runType: candidate.run.type,
+          scope: `Retry ${candidate.nextAttempt}/${maxAttempts}: ${candidate.run.scope}`,
           briefing: [
             `Retrying original run: ${candidate.run.id}`,
             `Original status: ${candidate.run.status}`,
@@ -447,14 +583,13 @@ Owner intervention is required before BureauOS should retry this run again.
             "",
             "Goal: recover the work with bounded autonomy. If this attempt cannot move safely, leave explicit blockers and evidence.",
           ].join("\n"),
-          ...(report ? { contextArtifactIds: [report.id] } : {}),
+          source: candidate.triggerSource,
+          ...(ownerBuild ? { ownerBuild: true } : {}),
         });
-        await this.deps.runs.attachArtifacts(retryRun.id, [
-          dispatch.briefingArtifactId,
-          ...dispatch.steps.flatMap((step) => step.artifactIds),
-        ]);
+        retryRun = dispatched.run;
+        if (report) await this.deps.runs.attachArtifacts(retryRun.id, [report.id]);
 
-        const blockedSteps = dispatch.steps.filter((step) => !step.ok);
+        const blockedSteps = dispatched.dispatch.steps.filter((step) => !step.ok);
         retryBlockers = blockedSteps.flatMap((step) =>
           step.blockers.length > 0
             ? step.blockers.map((blocker) => `${step.role}: ${blocker}`)
@@ -462,14 +597,67 @@ Owner intervention is required before BureauOS should retry this run again.
         );
         retryRecovered = blockedSteps.length === 0;
         if (blockedSteps.length > 0) {
-          // Persist the truthful blocked outcome on the retry run so a later
-          // scan classifies and retries/escalates it rather than treating the
-          // stub completion as success.
+          // ProjectDispatchService already set status:"blocked"; also persist the
+          // blockers so a later scan can classify the blocked retry child.
           await this.deps.runs.patch(retryRun.id, {
-            status: "blocked",
             dispatch_status: "blocked",
             dispatch_blockers: retryBlockers,
           });
+        }
+      } else {
+        retryRun = await this.deps.runs.start({
+          type: candidate.run.type,
+          triggerType: "threshold",
+          triggerSource: candidate.triggerSource,
+          scope: `Retry ${candidate.nextAttempt}/${maxAttempts}: ${candidate.run.scope}`,
+          ...(candidate.run.project_id ? { projectId: candidate.run.project_id } : {}),
+          ...(candidate.run.client_id ? { clientId: candidate.run.client_id } : {}),
+        });
+        if (report) await this.deps.runs.attachArtifacts(retryRun.id, [report.id]);
+
+        // Track the retry's TRUE terminal outcome. The retry run starts through
+        // the stub path (which always completes), so `retryRun.status` alone lies
+        // when the coordinator dispatch actually blocks. We apply the dispatch
+        // result to the retry run and only treat it as recovered when the real
+        // pipeline completed with no blockers.
+        retryRecovered = retryRun.status === "completed";
+        if (this.deps.coordinator && retryRun.status !== "needs_human") {
+          const dispatch = await dispatchRun(this.deps.coordinator, {
+            workspaceRoot: this.workspaceRoot,
+            run: retryRun,
+            scope: retryRun.scope,
+            briefing: [
+              `Retrying original run: ${candidate.run.id}`,
+              `Original status: ${candidate.run.status}`,
+              `Original scope: ${candidate.run.scope}`,
+              `Attempt: ${candidate.nextAttempt}/${maxAttempts}`,
+              "",
+              "Goal: recover the work with bounded autonomy. If this attempt cannot move safely, leave explicit blockers and evidence.",
+            ].join("\n"),
+            ...(report ? { contextArtifactIds: [report.id] } : {}),
+          });
+          await this.deps.runs.attachArtifacts(retryRun.id, [
+            dispatch.briefingArtifactId,
+            ...dispatch.steps.flatMap((step) => step.artifactIds),
+          ]);
+
+          const blockedSteps = dispatch.steps.filter((step) => !step.ok);
+          retryBlockers = blockedSteps.flatMap((step) =>
+            step.blockers.length > 0
+              ? step.blockers.map((blocker) => `${step.role}: ${blocker}`)
+              : [`${step.role}: ${step.notes}`],
+          );
+          retryRecovered = blockedSteps.length === 0;
+          if (blockedSteps.length > 0) {
+            // Persist the truthful blocked outcome on the retry run so a later
+            // scan classifies and retries/escalates it rather than treating the
+            // stub completion as success.
+            await this.deps.runs.patch(retryRun.id, {
+              status: "blocked",
+              dispatch_status: "blocked",
+              dispatch_blockers: retryBlockers,
+            });
+          }
         }
       }
 

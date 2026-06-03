@@ -796,6 +796,149 @@ describe("concrete agents", () => {
     }
   });
 
+  it("soft-passes a test-less static deliverable when allow_missing_tests is on (no-test-infra)", async () => {
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const artifacts = new ArtifactStore(dir);
+    const policy = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
+
+    // Worktree has no package.json test script: the runner reports "blocked".
+    const codeWorkspaceRoot = await mkdtemp(join(tmpdir(), "bureauos-qa-worktree-"));
+    const commandRunner = new FakeProjectCommandRunner(PASSING_EXECUTION);
+    const agent = new QaAgent({
+      artifacts,
+      audit,
+      policy,
+      allowMissingTests: true,
+      projectTestRunnerFactory: (workspaceRoot, deps) =>
+        new ProjectTestRunnerService(workspaceRoot, { ...deps, commandRunner }),
+    });
+
+    try {
+      const out = await agent.execute({
+        context: {
+          runId: "run_qa_soft_pass",
+          // The two test-DEPENDENT criteria the product agent emits — they can
+          // only be met with tests, so they are exactly what the soft-pass covers.
+          scope: [
+            "Acceptance criteria:",
+            "- Behavior described in the briefing is implemented and verifiable.",
+            "- Tests cover at least one happy path and one edge case.",
+          ].join("\n"),
+          codeWorkspaceRoot,
+        },
+        capabilities: new Map(),
+      });
+
+      // The run completes: no hard block on the missing-test gate nor on the
+      // test-dependent acceptance criteria.
+      expect(out.ok).toBe(true);
+      expect(out.blockers).toEqual([]);
+      expect(out.decisions).toContain("qa:ready_for_review");
+      expect(out.decisions).toContain("qa:tests_soft_passed_no_tests");
+      expect(out.notes).toContain("soft-passed");
+      // The fake command runner is never invoked when there is no test command.
+      expect(commandRunner.commands).toHaveLength(0);
+      // Traceability: a dedicated soft-pass audit line + a note in the QA report.
+      const log = await readFile(workspacePaths(dir).auditLog, "utf8");
+      expect(log).toContain("agent.qa.soft_passed_no_tests");
+      const report = await artifacts.read(out.artifactIds[0]!);
+      expect(report?.record.no_test_soft_pass).toBe(true);
+      expect(report?.body).toContain("No-Test Soft-Pass");
+    } finally {
+      await rm(codeWorkspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("still blocks on a NON-test acceptance criterion even with allow_missing_tests on", async () => {
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const artifacts = new ArtifactStore(dir);
+    const policy = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
+
+    const codeWorkspaceRoot = await mkdtemp(join(tmpdir(), "bureauos-qa-worktree-"));
+    const commandRunner = new FakeProjectCommandRunner(PASSING_EXECUTION);
+    const agent = new QaAgent({
+      artifacts,
+      audit,
+      policy,
+      allowMissingTests: true,
+      projectTestRunnerFactory: (workspaceRoot, deps) =>
+        new ProjectTestRunnerService(workspaceRoot, { ...deps, commandRunner }),
+    });
+
+    try {
+      const out = await agent.execute({
+        context: {
+          runId: "run_qa_soft_pass_nontest",
+          // A non-test criterion with no evidence: must still block; the soft-pass
+          // only relaxes the test-dependent ones.
+          scope: ["Acceptance criteria:", "- The change is scoped to a single concern."].join(
+            "\n",
+          ),
+          codeWorkspaceRoot,
+        },
+        capabilities: new Map(),
+      });
+
+      expect(out.ok).toBe(false);
+      expect(out.blockers).toContain(
+        "missing evidence for acceptance criterion: The change is scoped to a single concern.",
+      );
+      expect(out.decisions).toContain("qa:blocked");
+    } finally {
+      await rm(codeWorkspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("still blocks when tests EXIST and FAIL regardless of allow_missing_tests", async () => {
+    const audit = new AuditLog(workspacePaths(dir).auditLog);
+    const artifacts = new ArtifactStore(dir);
+    const policy = new PolicyEngine(defaultConfig("freelancer"), new ApprovalRegistry(dir));
+    await artifacts.write({
+      type: "test-evidence-report",
+      createdBy: "development",
+      runId: "run_qa_flag_on_tests_fail",
+      body: ["# Test Evidence", "", "PASS: feature works end to end."].join("\n"),
+    });
+
+    // The worktree HAS a test script, so the runner runs it and it FAILS — this
+    // is never the no-test-infra case, so the soft-pass must not apply.
+    const codeWorkspaceRoot = await mkdtemp(join(tmpdir(), "bureauos-qa-worktree-"));
+    await writeFile(
+      join(codeWorkspaceRoot, "package.json"),
+      JSON.stringify({ packageManager: "pnpm@9.12.0", scripts: { test: "pnpm -r run test" } }),
+      "utf8",
+    );
+    const commandRunner = new FakeProjectCommandRunner(FAILING_EXECUTION);
+    const agent = new QaAgent({
+      artifacts,
+      audit,
+      policy,
+      allowMissingTests: true,
+      projectTestRunnerFactory: (workspaceRoot, deps) =>
+        new ProjectTestRunnerService(workspaceRoot, { ...deps, commandRunner }),
+    });
+
+    try {
+      const out = await agent.execute({
+        context: {
+          runId: "run_qa_flag_on_tests_fail",
+          scope: ["Acceptance criteria:", "- feature works end to end."].join("\n"),
+          codeWorkspaceRoot,
+        },
+        capabilities: new Map(),
+      });
+
+      expect(out.ok).toBe(false);
+      expect(out.decisions).toContain("qa:tests_failed");
+      expect(out.decisions).not.toContain("qa:tests_soft_passed_no_tests");
+      expect(out.blockers).toContain("project tests failed");
+      const log = await readFile(workspacePaths(dir).auditLog, "utf8");
+      expect(log).not.toContain("agent.qa.soft_passed_no_tests");
+    } finally {
+      await rm(codeWorkspaceRoot, { recursive: true, force: true });
+    }
+  });
+
   it("flags auth payment and secrets paths in security review", async () => {
     const audit = new AuditLog(workspacePaths(dir).auditLog);
     const artifacts = new ArtifactStore(dir);

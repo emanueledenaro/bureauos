@@ -538,6 +538,11 @@ export class Scheduler {
       artifacts: this.options.coordinator.artifacts,
       policy: this.options.coordinator.policy,
       coordinator: this.options.coordinator,
+      // Code-run retries re-run through the full provider-codegen + worktree
+      // pipeline (not a template-only stub). config (+ default env) lets the
+      // retry build a ProjectDispatchService mirroring the owner-build wiring.
+      config: this.options.config,
+      providerEnv: process.env,
     }).scan({
       maxAttempts: this.options.config.limits.max_retries_per_task,
     });

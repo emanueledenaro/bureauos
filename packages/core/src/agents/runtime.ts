@@ -118,6 +118,15 @@ export interface AgentDeps {
    * deterministic fake. Defaults to {@link defaultProjectTestRunnerFactory}.
    */
   projectTestRunnerFactory?: ProjectTestRunnerFactory;
+  /**
+   * Opt-in QA soft-pass for a test-less static deliverable
+   * (`runtime.codex.allow_missing_tests`). When true and the project genuinely
+   * has NO test infrastructure (the runner returns `blocked`), QA records a
+   * traceable soft-pass instead of hard-blocking on the missing-test gate and
+   * the test-dependent acceptance criteria. Tests that EXIST and FAIL still
+   * block. Defaults to false (today's behavior).
+   */
+  allowMissingTests?: boolean;
 }
 
 /**

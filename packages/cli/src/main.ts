@@ -1401,7 +1401,12 @@ const handleAutonomyRetryScan: Handler = async (args) => {
     audit,
     artifacts,
     policy,
-    coordinator: { audit, artifacts, policy },
+    coordinator: { audit, artifacts, policy, config },
+    // Code-run retries re-run through the full provider-codegen + worktree
+    // pipeline (not a template-only stub). config (+ default env) lets the retry
+    // build a ProjectDispatchService mirroring the owner-build wiring.
+    config,
+    providerEnv: process.env,
   }).scan({
     maxAttempts:
       typeof flags["max-attempts"] === "number"
