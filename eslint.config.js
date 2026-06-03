@@ -15,6 +15,10 @@ export default [
       "**/out-renderer/**",
       "**/.bureauos/**",
       "**/coverage/**",
+      // Nested git worktrees created by local tooling live under .claire/ and
+      // carry other branches' sources. Never descend into them from the repo
+      // root, or `eslint .` reports unrelated lint errors and can fail CI.
+      "**/.claire/**",
     ],
   },
   ...tseslint.configs.recommended,
