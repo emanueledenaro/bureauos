@@ -103,6 +103,7 @@ export interface CoordinatorChatDeps {
   tools?: CoordinatorToolRuntime;
   env?: NodeJS.ProcessEnv;
   providerSelector?: CoordinatorProviderSelector;
+  overrideSelector?: CoordinatorProviderOverrideSelector;
   providerTimeoutMs?: number;
   toolPlanningTimeoutMs?: number;
   toolPlanningDegradedTtlMs?: number;
@@ -117,6 +118,13 @@ export type CoordinatorProviderSelector = (
   workspaceRoot: string,
   config: BureauConfig,
   env: NodeJS.ProcessEnv,
+) => Promise<CoordinatorProviderSelection | undefined>;
+
+export type CoordinatorProviderOverrideSelector = (
+  workspaceRoot: string,
+  config: BureauConfig,
+  env: NodeJS.ProcessEnv,
+  override: ModelOverride,
 ) => Promise<CoordinatorProviderSelection | undefined>;
 
 interface CoordinatorToolPlanningResult {
@@ -735,7 +743,8 @@ async function selectCoordinatorProviderOverride(
 ): Promise<CoordinatorProviderSelection | undefined> {
   const { router } = await buildConfiguredProviderRouter(workspaceRoot, env, config);
   // Adapter IDs are formatted as `{providerType}-default` by the configured router.
-  // The override.provider field is expected to match a ProviderType (e.g. "anthropic").
+  // The override.provider field must be a ProviderType (e.g. "anthropic"); any
+  // mismatch yields no adapter and degrades silently to the default selection.
   const adapterId = `${override.provider}-default`;
   const adapter = router.get(adapterId);
   if (!adapter) return undefined;
@@ -844,6 +853,7 @@ export class CoordinatorChatService {
   private readonly tools: CoordinatorToolRuntime;
   private readonly env: NodeJS.ProcessEnv;
   private readonly providerSelector: CoordinatorProviderSelector;
+  private readonly overrideSelector: CoordinatorProviderOverrideSelector;
   private readonly providerTimeoutMs: number;
   private readonly toolPlanningTimeoutMs: number;
   private readonly toolPlanningDegradedTtlMs: number;
@@ -880,6 +890,7 @@ export class CoordinatorChatService {
       });
     this.env = deps.env ?? process.env;
     this.providerSelector = deps.providerSelector ?? selectCoordinatorProvider;
+    this.overrideSelector = deps.overrideSelector ?? selectCoordinatorProviderOverride;
     this.providerTimeoutMs = deps.providerTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
     this.toolPlanningTimeoutMs =
       deps.toolPlanningTimeoutMs ??
@@ -894,26 +905,27 @@ export class CoordinatorChatService {
    *
    * If `input.modelOverride` is set but cannot be resolved for any reason
    * (provider not registered, credentials invalid, resolver throws), the method
-   * falls back to the default selection so chat never breaks.
+   * falls back to the default selection so chat never breaks. The default
+   * selection is computed LAZILY — only when there is no override or the override
+   * fails — so the router is built once per turn, not twice.
    */
   private async resolveSelection(
     input: CoordinatorChatInput,
   ): Promise<CoordinatorProviderSelection | undefined> {
-    const base = await this.providerSelector(this.workspaceRoot, this.config, this.env);
-    if (!input.modelOverride) return base;
-    try {
-      const overridden = await selectCoordinatorProviderOverride(
-        this.workspaceRoot,
-        this.config,
-        this.env,
-        input.modelOverride,
-      );
-      // Fall back to the default selection if the override could not be resolved
-      // (provider not connected, unknown model, router error) — never break chat.
-      return overridden ?? base;
-    } catch {
-      return base;
+    if (input.modelOverride) {
+      try {
+        const overridden = await this.overrideSelector(
+          this.workspaceRoot,
+          this.config,
+          this.env,
+          input.modelOverride,
+        );
+        if (overridden) return overridden;
+      } catch {
+        // fall through to the default selection — a bad override never breaks chat
+      }
     }
+    return this.providerSelector(this.workspaceRoot, this.config, this.env);
   }
 
   private async planToolAction(
@@ -921,6 +933,9 @@ export class CoordinatorChatService {
     packet: ContextPacket,
     recent: readonly CoordinatorMessageRecord[],
   ): Promise<CoordinatorToolPlanningResult> {
+    // The per-message model override applies to answer generation only. Tool-intent
+    // classification intentionally uses the default model (answer-only scope), so this
+    // uses providerSelector directly rather than resolveSelection.
     const selection = await this.providerSelector(this.workspaceRoot, this.config, this.env);
     if (!selection) {
       return {

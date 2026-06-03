@@ -1,4 +1,9 @@
 export interface ModelOverride {
+  /**
+   * A provider id matching a `ProviderType` (e.g. "anthropic", "openai", "google").
+   * The override resolver looks up the adapter by `${provider}-default`, so any value
+   * that is not a registered ProviderType degrades silently to the default selection.
+   */
   provider: string;
   model: string;
 }
