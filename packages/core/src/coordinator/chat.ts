@@ -387,7 +387,7 @@ function hasCurrentWorkReference(
 
 function hasStatusIntent(message: string): boolean {
   const lower = message.toLowerCase();
-  return [
+  const phraseSignals = [
     "come siamo messi",
     "dove siamo",
     "stato",
@@ -400,7 +400,19 @@ function hasStatusIntent(message: string): boolean {
     "novita",
     "novità",
     "aggiornament",
-  ].some((signal) => lower.includes(signal));
+  ];
+  if (phraseSignals.some((signal) => lower.includes(signal))) return true;
+  // Read questions about existing PROJECTS / opportunities / work must be answered
+  // (list what exists), never routed to a new intake — even when they mention an
+  // entity-type word like "pizzeria" that is otherwise an intake signal. Clients are
+  // intentionally excluded here: "che/quanti clienti abbiamo?" is already handled by
+  // the list_clients tool, and intake phrasings ("abbiamo un cliente ... salvalo")
+  // must stay untouched.
+  return (
+    /\bche\s+\w*(?:progett|opportunit|lavor)\w*\s+(?:abbiamo|ho|ci\s+sono|seguiamo|gestiamo|esiston)/.test(
+      lower,
+    ) || /\b(?:quali|quant[eio])\s+\w*progett/.test(lower)
+  );
 }
 
 function isCompanyStatusQuestion(

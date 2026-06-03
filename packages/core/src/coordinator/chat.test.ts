@@ -64,6 +64,24 @@ describe("CoordinatorChatService", () => {
     await expect(new ArtifactStore(dir).list()).resolves.toEqual([]);
   });
 
+  it("treats 'che progetti abbiamo di <client>?' as a read, not a new intake", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    const service = new CoordinatorChatService(dir, { config: defaultConfig("freelancer") });
+
+    // A read question that mentions an entity-type word ("pizzeria") must list what
+    // exists, not create a client/project/opportunity/run (SER: status-vs-intake).
+    const result = await service.process({
+      source: "test",
+      message: "che progetti abbiamo di Pizzeria Amodeo?",
+    });
+
+    expect(result.mode).toBe("answer");
+    expect(result.result).toBeUndefined();
+    await expect(new ClientRegistry(dir).list()).resolves.toEqual([]);
+    await expect(new ProjectRegistry(dir).list()).resolves.toEqual([]);
+    await expect(new OpportunityRegistry(dir).list()).resolves.toEqual([]);
+  });
+
   it("lets the provider choose the save_client tool before executing it", async () => {
     const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
     let providerWasAsked = false;
