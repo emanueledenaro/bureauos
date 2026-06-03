@@ -6,6 +6,7 @@ import { StatusPill } from "../dashboard/StatusPill";
 import { MessageBubble } from "./MessageBubble";
 import { ReasoningBlock } from "./ReasoningBlock";
 import { LiveDelegationCard } from "./LiveDelegationCard";
+import { BuildProgressCard } from "./BuildProgressCard";
 import { Composer } from "./Composer";
 import {
   EMPTY_DELEGATION,
@@ -20,6 +21,7 @@ import {
 } from "../../lib/chat-thread";
 import {
   Api,
+  buildMarkerOf,
   type CoordinatorAttachmentInput,
   type CoordinatorChatResult,
   type CoordinatorChatStreamEvent,
@@ -380,18 +382,34 @@ export function CoordinatorPanel({
           </div>
         ) : null}
 
-        {messages.map((message, index) => (
-          <MessageBubble
-            key={message.id}
-            message={message}
-            onRegenerate={
-              message.role === "coordinator" && index === messages.length - 1 && !busy
-                ? regenerate
-                : undefined
-            }
-            onEdit={message.role === "owner" && !busy ? () => editMessage(message.id) : undefined}
-          />
-        ))}
+        {messages.map((message, index) => {
+          // A coordinator message that started an async build carries a typed
+          // `meta.build` marker (Unit 3A). Render a persistent progress card
+          // beneath it: it polls the project's feature run and stays mounted
+          // across later turns until the build is terminal (Unit 3B).
+          const build = message.role === "coordinator" ? buildMarkerOf(message) : undefined;
+          return (
+            <div key={message.id} className="flex flex-col gap-2">
+              <MessageBubble
+                message={message}
+                onRegenerate={
+                  message.role === "coordinator" && index === messages.length - 1 && !busy
+                    ? regenerate
+                    : undefined
+                }
+                onEdit={
+                  message.role === "owner" && !busy ? () => editMessage(message.id) : undefined
+                }
+              />
+              {build ? (
+                // Indent to align under the coordinator bubble (avatar w-7 + gap).
+                <div className="pl-[38px]">
+                  <BuildProgressCard projectId={build.projectId} projectSlug={build.projectSlug} />
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
 
         {busy ? (
           <div className="flex flex-col gap-2">

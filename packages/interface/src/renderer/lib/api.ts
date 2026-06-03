@@ -473,6 +473,19 @@ export interface CoordinatorIntakeResult {
   artifacts: ArtifactRecord[];
   approvals: ApprovalRecord[];
 }
+/**
+ * Marker the backend writes to a coordinator message's `meta.build` after an
+ * async owner-triggered build is fired from chat (Unit 3A). Its presence tells
+ * the renderer (Unit 3B) to mount a BuildProgressCard that polls the project's
+ * feature run. `started` / `alreadyRunning` reflect the in-flight guard so the
+ * card can pick the right copy without re-deriving it from the message text.
+ */
+export interface CoordinatorBuildMarker {
+  projectId: string;
+  projectSlug: string;
+  started: boolean;
+  alreadyRunning: boolean;
+}
 export interface CoordinatorMessageRecord {
   id: string;
   role: "owner" | "coordinator";
@@ -480,7 +493,31 @@ export interface CoordinatorMessageRecord {
   created: string;
   attachments?: Array<{ name: string; size: number; type: string }>;
   result?: CoordinatorIntakeResult;
-  meta?: Record<string, unknown>;
+  // `meta` stays an open bag (streaming flag, etc.); `build` is the one typed
+  // field the renderer reads to mount the build-progress card.
+  meta?: { build?: CoordinatorBuildMarker } & Record<string, unknown>;
+}
+
+/**
+ * Safely read the async-build marker off a coordinator message's `meta.build`.
+ * Mirrors the backend's `buildMarkerFromMeta`: returns `undefined` unless a
+ * well-formed marker (string ids) is present, so a malformed payload can never
+ * mount the card. Pure helper, used by CoordinatorPanel.
+ */
+export function buildMarkerOf(
+  message: Pick<CoordinatorMessageRecord, "meta">,
+): CoordinatorBuildMarker | undefined {
+  const build = message.meta?.build;
+  if (!build || typeof build !== "object") return undefined;
+  if (typeof build.projectId !== "string" || typeof build.projectSlug !== "string") {
+    return undefined;
+  }
+  return {
+    projectId: build.projectId,
+    projectSlug: build.projectSlug,
+    started: build.started === true,
+    alreadyRunning: build.alreadyRunning === true,
+  };
 }
 export interface CoordinatorChatResult {
   mode: "intake" | "answer";
@@ -953,6 +990,20 @@ export const Api = {
   notifications: (signal?: AbortSignal) =>
     api<LocalNotificationRecord[]>("/notifications", { signal }),
   runs: (signal?: AbortSignal) => api<RunRecord[]>("/runs", { signal }),
+  /** Single run by id; resolves `null` on a 404 (run not found). */
+  getRun: async (id: string, signal?: AbortSignal): Promise<RunRecord | null> => {
+    try {
+      return await api<RunRecord>(`/runs?id=${encodeURIComponent(id)}`, { signal });
+    } catch (err) {
+      // The server returns 404 with `{ error: "run not found" }`; `api()` throws
+      // a message prefixed with the status. Treat that one case as "absent".
+      if (err instanceof Error && /^404\b/.test(err.message)) return null;
+      throw err;
+    }
+  },
+  /** Runs for one project, oldest-first (build-progress poller). */
+  runsByProject: (projectId: string, signal?: AbortSignal) =>
+    api<RunRecord[]>(`/runs?project=${encodeURIComponent(projectId)}`, { signal }),
   agents: (signal?: AbortSignal) => api<AgentDefinition[]>("/agents", { signal }),
   capabilities: (signal?: AbortSignal) => api<CapabilityDefinition[]>("/capabilities", { signal }),
   artifacts: (signal?: AbortSignal) => api<ArtifactRecord[]>("/artifacts", { signal }),
