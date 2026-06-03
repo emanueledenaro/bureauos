@@ -2263,6 +2263,32 @@ describe("API server", () => {
     await expect(response.json()).resolves.toEqual([]);
   });
 
+  it("accepts a bracketed IPv6 loopback origin (::1)", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    // new URL("http://[::1]:4173").hostname returns "[::1]" with brackets.
+    // The CORS guard must strip the brackets before the loopback check.
+    const response = await rawRequest(`${server.url}/clients`, {
+      headers: { Origin: "http://[::1]:4173" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers["access-control-allow-origin"]).toBe("http://[::1]:4173");
+  });
+
+  it("rejects a non-loopback IPv6 origin", async () => {
+    server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
+
+    const response = await rawRequest(`${server.url}/clients`, {
+      headers: { Origin: "http://[2001:db8::1]:4173" },
+    });
+
+    expect(response.status).toBe(403);
+    expect(JSON.parse(response.body)).toMatchObject({
+      error: "forbidden: cross-origin request rejected",
+    });
+  });
+
   it("allows same-process requests without an Origin header", async () => {
     server = await startApiServer({ workspaceRoot: dir, config: defaultConfig("agency") });
 
