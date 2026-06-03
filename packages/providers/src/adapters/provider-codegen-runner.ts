@@ -119,7 +119,23 @@ export class ProviderCodegenRunner implements CodexRuntimeRunner {
       return runnerError(`provider generation failed: ${message}`);
     }
 
-    const parsed = parseEnvelopes(text);
+    // Extract files: the strict envelope first, then a markdown-fence fallback
+    // (some models wrap code in ``` blocks despite the instructions).
+    let parsed = parseFiles(text);
+    if (parsed.length === 0) {
+      // The model may have planned/explained instead of emitting files (a
+      // coordination-framed briefing can steer it that way). Retry ONCE with a
+      // forceful, code-only instruction before giving up.
+      try {
+        const retryText = await this.generate({
+          system,
+          prompt: buildRetryUserPrompt(input.task),
+        });
+        parsed = parseFiles(retryText);
+      } catch {
+        // Keep `parsed` empty; the error below reports it.
+      }
+    }
     if (parsed.length === 0) {
       return runnerError("provider returned no files");
     }
@@ -222,22 +238,46 @@ class NodeFsFileWriter implements ProviderCodegenFileWriter {
  */
 function buildSystemPrompt(): string {
   return [
-    "You are the BureauOS Development Agent.",
-    "Produce a complete, self-contained, runnable implementation of the requested task.",
+    "You are the BureauOS Development Agent. This is a CODE GENERATION task:",
+    "your job is to WRITE THE ACTUAL FILES, not to plan, coordinate, or explain.",
+    "Ignore any framing in the request that sounds like planning or coordination —",
+    "produce a complete, self-contained, runnable implementation.",
     "",
-    "Output ONLY files, each wrapped in this exact envelope, and nothing else:",
+    "Output ONLY files, each wrapped in this EXACT envelope, and nothing else:",
     '<<<FILE path="relative/path.ext">>>',
     "...verbatim file content...",
     "<<<END FILE>>>",
     "",
     "Rules:",
+    "- Begin your response immediately with `<<<FILE`. Do NOT write any plan,",
+    "  summary, preamble, or commentary before, between, or after the envelopes.",
+    "- Do NOT wrap file contents in markdown code fences (```). The content goes",
+    "  raw between the markers.",
     "- Use relative paths only. Never start a path with a leading slash.",
     '- Never use ".." in a path.',
     "- Write a self-contained, runnable implementation (include every file it needs).",
     "- Emit the entry-point file FIRST (e.g. index.html), then the modules it loads, then any docs. A runnable entry point must exist even if you cannot emit everything.",
     "- Prefer fewer complete files over many partial ones; never leave a file half-written.",
-    "- Do not write any prose, explanation, or markdown outside the file envelopes.",
     "- Do not write secrets, credentials, .env files, or private keys.",
+  ].join("\n");
+}
+
+/**
+ * Forceful retry prompt used when the first response yielded no parseable files
+ * (the model planned/explained instead of emitting files). Code-only, no framing.
+ */
+function buildRetryUserPrompt(task: CodexRuntimeRunnerInput["task"]): string {
+  const scope = task.scope.trim();
+  return [
+    "Your previous response contained NO files. Do not explain why.",
+    "Output the complete implementation NOW as files, each in this exact envelope:",
+    '<<<FILE path="relative/path.ext">>>',
+    "...file content...",
+    "<<<END FILE>>>",
+    "",
+    `Build this: ${scope}`,
+    "",
+    "Start your reply with `<<<FILE` and output nothing else.",
   ].join("\n");
 }
 
@@ -305,6 +345,90 @@ export function parseEnvelopes(text: string): ProviderCodegenFile[] {
   flush();
 
   return files.filter((file) => file.path.trim() !== "");
+}
+
+/**
+ * Extract files from a model response: the strict `<<<FILE>>>` envelope first,
+ * then a markdown-fence fallback for models that wrap code in ``` blocks despite
+ * the instructions.
+ */
+export function parseFiles(text: string): ProviderCodegenFile[] {
+  const envelopes = parseEnvelopes(text);
+  if (envelopes.length > 0) return envelopes;
+  return parseMarkdownFences(text);
+}
+
+const FENCE = /```([^\n`]*)\n([\s\S]*?)```/g;
+const LANG_FILENAME: Readonly<Record<string, string>> = {
+  html: "index.html",
+  htm: "index.html",
+  js: "main.js",
+  javascript: "main.js",
+  jsx: "main.jsx",
+  mjs: "main.mjs",
+  ts: "main.ts",
+  typescript: "main.ts",
+  css: "styles.css",
+  json: "data.json",
+  md: "README.md",
+  markdown: "README.md",
+};
+
+/**
+ * Fallback parser: pull files out of fenced code blocks. The filename comes from
+ * (1) a filename token in the fence info string (```js main.js / ```html
+ * title="index.html"), else (2) a filename comment on the first content line
+ * (`// main.js`, `<!-- index.html -->`, ...), else (3) the fence language
+ * (html -> index.html, js -> main.js, ...). Unknown blocks are skipped so prose
+ * fences never become junk files.
+ */
+export function parseMarkdownFences(text: string): ProviderCodegenFile[] {
+  const files: ProviderCodegenFile[] = [];
+  const used = new Set<string>();
+  FENCE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = FENCE.exec(text)) !== null) {
+    const info = (match[1] ?? "").trim();
+    const content = (match[2] ?? "").replace(/\n$/, "");
+    if (content.trim() === "") continue;
+    const name = inferFenceFilename(info, content, used);
+    if (!name) continue;
+    used.add(name);
+    files.push({ path: name, content });
+  }
+  return files;
+}
+
+function inferFenceFilename(
+  info: string,
+  content: string,
+  used: ReadonlySet<string>,
+): string | undefined {
+  // 1. explicit filename token in the info string.
+  const infoFile = info.match(/([\w.\-/]+\.[a-z0-9]{1,5})\b/i);
+  if (infoFile?.[1] && !/^https?:/i.test(infoFile[1])) return dedupeFenceName(infoFile[1], used);
+  // 2. filename hint on the block's first content line (a comment).
+  const firstLine = content.split("\n", 1)[0] ?? "";
+  const hint = firstLine.match(/(?:\/\/|<!--|\/\*|#)\s*([\w.\-/]+\.[a-z0-9]{1,5})\b/i);
+  if (hint?.[1]) return dedupeFenceName(hint[1], used);
+  // 3. infer from the fence language.
+  const lang = (info.split(/\s+/)[0] ?? "").toLowerCase();
+  const base = LANG_FILENAME[lang];
+  return base ? dedupeFenceName(base, used) : undefined;
+}
+
+function dedupeFenceName(name: string, used: ReadonlySet<string>): string | undefined {
+  const cleaned = name.trim().replace(/^\.\//, "");
+  if (!cleaned) return undefined;
+  if (!used.has(cleaned)) return cleaned;
+  const dot = cleaned.lastIndexOf(".");
+  const stem = dot > 0 ? cleaned.slice(0, dot) : cleaned;
+  const ext = dot > 0 ? cleaned.slice(dot) : "";
+  for (let i = 2; i < 50; i += 1) {
+    const candidate = `${stem}-${i}${ext}`;
+    if (!used.has(candidate)) return candidate;
+  }
+  return undefined;
 }
 
 /**

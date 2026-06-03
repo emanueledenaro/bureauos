@@ -106,7 +106,13 @@ export type {
   HostCommandResult,
   WorkspaceDiffInspector,
 } from "./adapters/codex-host-runner.js";
-export { ProviderCodegenRunner, parseEnvelopes, confinePath } from "./adapters/provider-codegen-runner.js";
+export {
+  ProviderCodegenRunner,
+  parseEnvelopes,
+  parseFiles,
+  parseMarkdownFences,
+  confinePath,
+} from "./adapters/provider-codegen-runner.js";
 export type {
   ProviderCodegenRunnerOptions,
   ProviderCodegenFile,

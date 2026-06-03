@@ -4,7 +4,13 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { CodexRuntimeAdapter } from "./codex.js";
 import type { CodexRuntimeRunnerInput } from "./codex.js";
-import { confinePath, parseEnvelopes, ProviderCodegenRunner } from "./provider-codegen-runner.js";
+import {
+  confinePath,
+  parseEnvelopes,
+  parseFiles,
+  parseMarkdownFences,
+  ProviderCodegenRunner,
+} from "./provider-codegen-runner.js";
 
 function input(
   workspaceRoot: string,
@@ -63,6 +69,49 @@ describe("ProviderCodegenRunner", () => {
     expect(html).toContain("Pokeball");
     const js = await readFile(join(dir, "src", "main.js"), "utf8");
     expect(js).toContain("new THREE.Scene()");
+  });
+
+  it("retries once with a stricter prompt when the first response has no files", async () => {
+    const calls: string[] = [];
+    const runner = new ProviderCodegenRunner({
+      generate: async ({ prompt }) => {
+        calls.push(prompt);
+        // First response: the model "plans" instead of emitting files.
+        if (calls.length === 1) return "Here is my plan: 1) set up the scene. 2) add lights.";
+        // Retry: it emits the actual file.
+        return envelope("index.html", "<!doctype html>\n<title>Built on retry</title>");
+      },
+      diff: emptyDiff,
+    });
+
+    const result = await runner.execute(input(dir));
+
+    expect(calls.length).toBe(2); // retried exactly once
+    expect(result.ok).toBe(true);
+    expect(result.changedFiles).toEqual(["index.html"]);
+    expect(await readFile(join(dir, "index.html"), "utf8")).toContain("Built on retry");
+  });
+
+  it("falls back to markdown code fences when the model wraps files in ``` blocks", async () => {
+    const text = [
+      "Sure! Here is the site.",
+      "```html",
+      "<!doctype html>",
+      '<script type="module" src="./main.js"></script>',
+      "```",
+      "```js",
+      "import * as THREE from 'three';",
+      "const scene = new THREE.Scene();",
+      "```",
+    ].join("\n");
+
+    const runner = new ProviderCodegenRunner({ generate: async () => text, diff: emptyDiff });
+    const result = await runner.execute(input(dir));
+
+    expect(result.ok).toBe(true);
+    expect(result.changedFiles).toEqual(["index.html", "main.js"]);
+    expect(await readFile(join(dir, "index.html"), "utf8")).toContain("module");
+    expect(await readFile(join(dir, "main.js"), "utf8")).toContain("new THREE.Scene()");
   });
 
   it("passes the task scope and briefing into the user prompt", async () => {
@@ -326,5 +375,48 @@ describe("confinePath", () => {
     expect(confinePath("keys/id_rsa", root)).toBeUndefined();
     expect(confinePath("certs/server.pem", root)).toBeUndefined();
     expect(confinePath("secrets/token.txt", root)).toBeUndefined();
+  });
+});
+
+describe("parseMarkdownFences", () => {
+  it("infers filenames from the fence language", () => {
+    const text = "```html\n<x/>\n```\n```js\ncode\n```\n```css\n.a{}\n```\n```md\n# hi\n```";
+    expect(parseMarkdownFences(text)).toEqual([
+      { path: "index.html", content: "<x/>" },
+      { path: "main.js", content: "code" },
+      { path: "styles.css", content: ".a{}" },
+      { path: "README.md", content: "# hi" },
+    ]);
+  });
+
+  it("uses an explicit filename token in the fence info string", () => {
+    const text = "```js src/app.js\nconsole.log(1)\n```";
+    expect(parseMarkdownFences(text)).toEqual([{ path: "src/app.js", content: "console.log(1)" }]);
+  });
+
+  it("uses a filename comment on the first content line", () => {
+    const text = "```js\n// utils.js\nexport const x = 1;\n```";
+    expect(parseMarkdownFences(text)).toEqual([
+      { path: "utils.js", content: "// utils.js\nexport const x = 1;" },
+    ]);
+  });
+
+  it("dedupes repeated inferred names and skips unknown/empty blocks", () => {
+    const text = "```js\na\n```\n```js\nb\n```\n```\n\n```\n```wat\nc\n```";
+    expect(parseMarkdownFences(text)).toEqual([
+      { path: "main.js", content: "a" },
+      { path: "main-2.js", content: "b" },
+    ]);
+  });
+});
+
+describe("parseFiles", () => {
+  it("prefers the envelope and ignores fences when both appear", () => {
+    const text = `${envelope("index.html", "<env/>")}\n\n\`\`\`js\nshould not be used\n\`\`\``;
+    expect(parseFiles(text)).toEqual([{ path: "index.html", content: "<env/>" }]);
+  });
+
+  it("falls back to fences when there is no envelope", () => {
+    expect(parseFiles("```html\n<x/>\n```")).toEqual([{ path: "index.html", content: "<x/>" }]);
   });
 });
