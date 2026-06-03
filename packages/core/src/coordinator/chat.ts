@@ -148,8 +148,15 @@ interface CompanyStatusSnapshot {
   runs: RunRecord[];
 }
 
-const DEFAULT_PROVIDER_TIMEOUT_MS = 12_000;
-const DEFAULT_TOOL_PLANNING_TIMEOUT_MS = 3_000;
+// Reasoning models (e.g. OpenAI Codex `gpt-5.x` with reasoning effort) "think"
+// before emitting the first token, which often takes well over 12s. These are
+// per-chunk inactivity timeouts, so they must cover the time-to-first-token of a
+// reasoning model — otherwise a slow-but-healthy provider is mistaken for a dead
+// one and chat falls back. The renderer caps the whole stream at 90s, so 45s
+// stays comfortably within that. Tool-planning gets less, but 3s was far too
+// short for any reasoning model to classify.
+const DEFAULT_PROVIDER_TIMEOUT_MS = 45_000;
+const DEFAULT_TOOL_PLANNING_TIMEOUT_MS = 12_000;
 const DEFAULT_TOOL_PLANNING_DEGRADED_TTL_MS = 30_000;
 
 interface ToolPlanningDegradedState {
