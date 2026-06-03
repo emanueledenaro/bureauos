@@ -527,6 +527,14 @@ export function buildBuildDispatcher(
         projectSlug: input.projectSlug,
         runType: "feature",
         scope: input.scope,
+        // This is the EXPLICIT owner build path (chat dispatch_build). The owner's
+        // request is the authorization and the tracked work item, so mark the
+        // dispatch as an owner build: the run is stamped with a recorded
+        // `owner_build` work item that satisfies the development agent's
+        // `linked_issue` gate traceably (AB-U5). Reached only when provider
+        // codegen is enabled (this builder returns undefined otherwise), so the
+        // relaxation never touches command-mode or non-owner dispatches.
+        ownerBuild: true,
       }));
 
   return async ({ projectId, projectSlug, scope }) => {

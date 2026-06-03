@@ -34,6 +34,11 @@ import { RunEngine, type RunRecord, type RunType } from "../runs/engine.js";
 import { AGENT_INDEX, type AgentDefinition } from "../agents/roles.js";
 import { agentHandoffBody, agentHandoffMetadata } from "../agents/handoff.js";
 import type { ProjectTestRunnerFactory } from "../agents/runtime.js";
+import {
+  ownerBuildSourceWorkItem,
+  sourceWorkItemFromTriggerSource,
+  type SourceWorkItemInput,
+} from "../work-items/source.js";
 
 export interface ProjectDispatchInput {
   projectSlug: string;
@@ -41,6 +46,22 @@ export interface ProjectDispatchInput {
   scope?: string;
   briefing?: string;
   source?: string;
+  /**
+   * Marks this dispatch as an EXPLICIT owner build (the chat `dispatch_build`
+   * path, AB-U5). When true the run is stamped with a recorded `owner_build`
+   * work item (derived from the project/opportunity) so the development agent's
+   * `linked_issue` gate is satisfied traceably — the explicit owner request is
+   * both the authorization and the tracked work item. Left unset for
+   * autonomous/scheduler/non-owner dispatches, which therefore still fail-close
+   * on `linked_issue` + approval. An explicit `source` work item (e.g.
+   * `linear://issue/...`) still takes precedence when supplied.
+   */
+  ownerBuild?: boolean;
+  /**
+   * Opportunity the owner build belongs to, when known, recorded in the
+   * owner-build work-item id for traceability. Ignored unless `ownerBuild`.
+   */
+  opportunityId?: string;
 }
 
 export interface AgentHandoff {
@@ -337,6 +358,24 @@ export class ProjectDispatchService {
       input.briefing?.trim() ||
       `Coordinate ${project.name} through ${runType} work using project-scoped memory.`;
 
+    // Resolve the run's tracked work item. An explicit `source` work item (e.g.
+    // `linear://issue/SER-242`) always wins. Otherwise, an EXPLICIT owner build
+    // (AB-U5) is stamped with a recorded `owner_build` work item derived from the
+    // project/opportunity, so the development agent's `linked_issue` gate is
+    // satisfied traceably by a recorded reference — never by removing the gate.
+    // Autonomous/scheduler dispatches pass neither and still fail-close.
+    const explicitSourceWorkItem = input.source
+      ? sourceWorkItemFromTriggerSource(input.source)
+      : undefined;
+    const sourceWorkItem: SourceWorkItemInput | undefined =
+      explicitSourceWorkItem ??
+      (input.ownerBuild
+        ? ownerBuildSourceWorkItem({
+            projectId: project.id,
+            ...(input.opportunityId ? { opportunityId: input.opportunityId } : {}),
+          })
+        : undefined);
+
     const run = await this.runs.start({
       type: runType,
       triggerType: "owner_request",
@@ -345,6 +384,7 @@ export class ProjectDispatchService {
       createdBy: ownership.manager_agent_id,
       ...(client ? { clientId: client.id } : {}),
       projectId: project.id,
+      ...(sourceWorkItem ? { sourceWorkItem } : {}),
     });
     // This service's RunEngine has no dispatcher, so `start()` stub-completes the
     // run immediately. The real pipeline runs below (dispatchRun) for a long time
@@ -352,6 +392,20 @@ export class ProjectDispatchService {
     // GET /runs) see it running, not instantly "completed". Final status is set
     // after the pipeline finishes.
     await this.runs.patch(run.id, { status: "in_progress" });
+
+    // Traceability for an explicit owner build (AB-U5): record WHAT authorized
+    // the code edit (the owner build request + the work item the run carries) as
+    // a durable artifact + audit line, so the relaxed `linked_issue` gate is
+    // always backed by an inspectable authorization record, not an opaque bypass.
+    if (input.ownerBuild && sourceWorkItem) {
+      await this.recordOwnerBuildAuthorization({
+        project,
+        ...(client ? { client } : {}),
+        run,
+        sourceWorkItem,
+        scope,
+      });
+    }
 
     const sourceArtifacts = await this.artifacts.list({ project_id: project.id });
     const pendingApprovals = pendingProjectApprovals(await this.approvals.listPending(), project);
@@ -600,6 +654,80 @@ export class ProjectDispatchService {
       artifacts: [packet, ...handoffs.map((handoff) => handoff.artifact)],
       ...(delivery ? { delivery } : {}),
     };
+  }
+
+  /**
+   * Record the authorization for an explicit owner build (AB-U5): a durable
+   * artifact plus an audit line stating that the owner's explicit build request
+   * is what authorized the development agent to edit code for this run, and which
+   * recorded work item the run carries to satisfy `linked_issue`. This keeps the
+   * relaxed gate fully traceable — the chain from owner request -> work item ->
+   * code edit is inspectable, and the relaxation never applies to a run without
+   * this record. Never throws out of the dispatch path.
+   */
+  private async recordOwnerBuildAuthorization(args: {
+    project: ProjectRecord;
+    client?: ClientRecord;
+    run: RunRecord;
+    sourceWorkItem: SourceWorkItemInput;
+    scope: string;
+  }): Promise<void> {
+    const { project, client, run, sourceWorkItem, scope } = args;
+    try {
+      const artifact = await this.artifacts.write({
+        type: "decision-record",
+        createdBy: "supreme_coordinator",
+        runId: run.id,
+        projectId: project.id,
+        ...(client ? { clientId: client.id } : {}),
+        metadata: {
+          authorization: "owner_build_request",
+          trigger_type: run.trigger_type,
+          source_work_item_type: sourceWorkItem.type,
+          source_work_item_id: sourceWorkItem.identifier,
+          satisfies_gate: "linked_issue",
+          authorizes_capability: "codex.edit_code",
+        },
+        body: `# Owner Build Authorization
+
+The owner explicitly asked the Coordinator to build this work. That explicit
+request is both the authorization for the development agent to edit code in the
+run's isolated worktree AND the tracked work item for this run.
+
+- Run: ${run.id}
+- Trigger: ${run.trigger_type}
+- Project: ${project.name} (${project.id})
+- Scope: ${scope}
+- Tracked work item: ${sourceWorkItem.type}:${sourceWorkItem.identifier}
+
+## Scope of this authorization
+
+- Satisfies the \`linked_issue\` capability gate via the recorded work item above.
+- Authorizes \`codex.edit_code\` (local edits in the run's isolated worktree) ONLY.
+- Does NOT authorize push, pull request, merge, deploy, billing, secrets, or any
+  client/public action — those remain policy-gated as usual.
+`,
+      });
+      await this.audit.append({
+        actor: "supreme_coordinator",
+        action: "project.dispatch.owner_build_authorized",
+        target: run.id,
+        artifact_id: artifact.id,
+        capability: "codex.edit_code",
+        result: "ok",
+      });
+    } catch (error) {
+      // Traceability recording must never mask or fail the dispatch. Audit the
+      // recording failure and continue; the run's `source_work_item_*` (already
+      // persisted on the run record) remains the authoritative trace.
+      await this.audit.append({
+        actor: "supreme_coordinator",
+        action: "project.dispatch.owner_build_authorization_failed",
+        target: run.id,
+        result: "error",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   /**

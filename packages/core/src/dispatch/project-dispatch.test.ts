@@ -166,6 +166,130 @@ describe("ProjectDispatchService", () => {
     expect(auditLog).toMatch(/tests_required|linked_issue/);
   }, 60_000);
 
+  /**
+   * Provider-codegen config the owner-build relaxation gates on, with the codex
+   * runtime writing a real file (the deterministic dev-edit stand-in, mirroring
+   * the orchestration e2e). `push_commits` (edit_code) + `observe_signals`
+   * (run_tests) are on so the ONLY remaining dev gate is `linked_issue` — exactly
+   * what an owner build is meant to satisfy.
+   */
+  async function ownerBuildConfig() {
+    const config = defaultConfig("agency");
+    config.runtime.codex.enabled = true;
+    config.runtime.codex.codegen_mode = "provider";
+    config.runtime.codex.commands = [
+      {
+        command: "node",
+        args: ["-e", "require('fs').writeFileSync('feature.ts','// built by the dev agent\\n')"],
+        label: "edit",
+      },
+    ];
+    config.autonomy.push_commits = true;
+    config.autonomy.observe_signals = true;
+    return config;
+  }
+
+  async function seedBaselineCommit() {
+    await run("git", ["init", "-q"], { cwd: dir });
+    await run("git", ["config", "user.email", "ci@bureauos.test"], { cwd: dir });
+    await run("git", ["config", "user.name", "BureauOS CI"], { cwd: dir });
+    await run("git", ["add", "."], { cwd: dir });
+    await run("git", ["commit", "-q", "-m", "baseline"], { cwd: dir });
+  }
+
+  it("owner build (AB-U5): an explicit owner build satisfies linked_issue traceably so the dev agent edits code", async () => {
+    const config = await ownerBuildConfig();
+    const intake = await new CoordinatorIntakeService(dir, { config }).process({
+      clientName: "Pizzeria Aurora",
+      message: "Vuole un sito con prenotazioni.",
+      source: "owner_chat",
+    });
+    await seedBaselineCommit();
+
+    const result = await new ProjectDispatchService(dir, { config }).dispatch({
+      projectSlug: intake.project.slug,
+      runType: "feature",
+      scope: "Build the booking page",
+      // The explicit owner-build authorization (what the chat dispatch_build path
+      // passes). No `source`/`linkedWorkItem` is supplied — the relaxation must
+      // come from the owner-build signal alone.
+      ownerBuild: true,
+    });
+
+    // The run carries a RECORDED owner-build work item (traceable), derived from
+    // the project — `linked_issue` is satisfied by a recorded reference, not by
+    // removing the gate.
+    expect(result.run.source_work_item_type).toBe("owner_build");
+    expect(result.run.source_work_item_id).toBe(`owner-build/${intake.project.id}`);
+
+    const auditLog = await readFile(workspacePaths(dir).auditLog, "utf8");
+    // The dev agent's edit_code/run_tests gates were NOT blocked on linked_issue:
+    // the runtime actually executed the edit (not the fail-closed block).
+    expect(auditLog).toContain("agent.development.runtime_executed");
+    expect(auditLog).not.toContain("agent.development.runtime_blocked");
+    // No capability use was blocked for the development agent's edit_code gate.
+    expect(auditLog).not.toMatch(/"action":"capability\.use\.blocked"[^\n]*linked_issue/);
+
+    // The authorization is recorded for traceability: what authorized the edit
+    // (the owner build request + the work item) is an inspectable artifact + audit.
+    expect(auditLog).toContain("project.dispatch.owner_build_authorized");
+    // ArtifactStore.list returns the record (front matter) directly.
+    const artifacts = await new ArtifactStore(dir).list({ run_id: result.run.id });
+    const authorization = artifacts.find(
+      (artifact) => artifact["authorization"] === "owner_build_request",
+    );
+    expect(authorization?.type).toBe("decision-record");
+    expect(authorization?.["satisfies_gate"]).toBe("linked_issue");
+    expect(authorization?.["authorizes_capability"]).toBe("codex.edit_code");
+    expect(authorization?.["source_work_item_id"]).toBe(`owner-build/${intake.project.id}`);
+
+    // The dev agent committed its edit onto the run branch — code was written.
+    const repo = join(dir, "workspaces", intake.project.slug);
+    const branch = `bureauos/${intake.project.slug}/${result.run.id}`;
+    const committedFiles = (
+      await run("git", ["show", "--name-only", "--pretty=format:", branch], { cwd: repo })
+    ).stdout;
+    expect(committedFiles).toContain("feature.ts");
+  }, 60_000);
+
+  it("SAFETY (AB-U5): a NON-owner feature run with the SAME config still fail-closes on linked_issue", async () => {
+    // Identical provider-codegen config and pipeline as the owner build above —
+    // the ONLY difference is that `ownerBuild` is not set (an autonomous /
+    // scheduler / non-owner dispatch). The relaxation must NOT apply: the dev
+    // agent still blocks on linked_issue and writes no code.
+    const config = await ownerBuildConfig();
+    const intake = await new CoordinatorIntakeService(dir, { config }).process({
+      clientName: "Trattoria Belluno",
+      message: "Vuole un sito con prenotazioni.",
+      source: "owner_chat",
+    });
+    await seedBaselineCommit();
+
+    const result = await new ProjectDispatchService(dir, { config }).dispatch({
+      projectSlug: intake.project.slug,
+      runType: "feature",
+      scope: "Build the booking page",
+      // No ownerBuild signal: this stands in for a non-owner-initiated build.
+    });
+
+    // No work item was stamped — the run has no traceable authorization, so the
+    // gate stays closed.
+    expect(result.run.source_work_item_type).toBe("");
+    expect(result.run.source_work_item_id).toBe("");
+
+    const auditLog = await readFile(workspacePaths(dir).auditLog, "utf8");
+    // The dev runtime was BLOCKED on linked_issue and no edit was applied.
+    expect(auditLog).toContain("agent.development.runtime_blocked");
+    expect(auditLog).not.toContain("agent.development.runtime_executed");
+    expect(auditLog).toMatch(/linked_issue/);
+    // No owner-build authorization was ever recorded for a non-owner run.
+    expect(auditLog).not.toContain("project.dispatch.owner_build_authorized");
+
+    // The development step is reported as blocked (fail-closed), not completed.
+    const devStep = result.dispatch.steps.find((step) => step.role === "development");
+    expect(devStep?.ok).toBe(false);
+  }, 60_000);
+
   it("provisions an isolated worktree for a dispatched code run and releases it (SER-243/241)", async () => {
     const config = defaultConfig("agency");
     config.runtime.codex.enabled = true;

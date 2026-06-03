@@ -15,6 +15,36 @@ export function linearIssueSourceWorkItem(identifier: string, url?: string): Sou
   };
 }
 
+/** Work-item type stamped on a run authorized by an explicit owner build request. */
+export const OWNER_BUILD_WORK_ITEM_TYPE = "owner_build";
+
+/**
+ * Synthetic, recorded work item for a run the OWNER explicitly asked the
+ * Coordinator to build (the chat `dispatch_build` path, AB-U5). The explicit
+ * owner request both authorizes the work AND is the tracked item, so this gives
+ * the run a real `source_work_item_*` reference — satisfying the `linked_issue`
+ * capability gate by a recorded artifact, NOT by removing the gate. Derived from
+ * the project (and, when present, the opportunity) the build belongs to so the
+ * run/audit stays traceable to what authorized the code edit.
+ *
+ * This is created ONLY for explicit owner builds; autonomous/scheduler runs
+ * never carry it and therefore still fail-close on `linked_issue` + approval.
+ */
+export function ownerBuildSourceWorkItem(args: {
+  projectId: string;
+  opportunityId?: string;
+}): SourceWorkItemInput {
+  const projectId = args.projectId.trim();
+  const opportunityId = args.opportunityId?.trim();
+  const identifier = opportunityId
+    ? `owner-build/${projectId}/${opportunityId}`
+    : `owner-build/${projectId}`;
+  return {
+    type: OWNER_BUILD_WORK_ITEM_TYPE,
+    identifier,
+  };
+}
+
 export function sourceWorkItemFromTriggerSource(
   triggerSource: string,
 ): SourceWorkItemInput | undefined {
