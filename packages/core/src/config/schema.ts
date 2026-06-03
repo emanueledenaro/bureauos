@@ -336,6 +336,12 @@ const RuntimeConfig = z
         // no fixed `commands` are configured (e.g. ["codex", "exec", "--full-auto"]).
         // Empty keeps the runner verify-only; its binary is auto-allow-listed.
         codegen_command: z.array(z.string()).default([]),
+        // How the Development Agent generates code. `command` (the default) runs
+        // the host coding-tool/verify commands above. `provider` asks the
+        // connected model provider to emit files directly via
+        // `ProviderCodegenRunner`, behind the same `CodexRuntimeAdapter` safety
+        // boundary. Default preserves current behavior.
+        codegen_mode: z.enum(["command", "provider"]).default("command"),
         max_changed_files: z.number().int().positive().default(25),
         timeout_ms: z.number().int().positive().default(120_000),
         max_output_chars: z.number().int().positive().default(12_000),

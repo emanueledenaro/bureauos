@@ -431,7 +431,7 @@ export class ProjectDispatchService {
     // capability checker as a pair, or its edit_code/run_tests gates fail closed
     // (SER-239). Built from config off this service's own policy/approvals/audit
     // so the run/dispatch paths share one construction (see buildDevelopmentExecution).
-    const { developmentRuntime, capabilityUse } = buildDevelopmentExecution(
+    const { developmentRuntime, capabilityUse } = await buildDevelopmentExecution(
       this.workspaceRoot,
       this.config,
       {
@@ -439,6 +439,7 @@ export class ProjectDispatchService {
         approvals: this.approvals,
         policy: this.policy,
         audit: this.audit,
+        env: this.providerEnv,
       },
     );
     // Provision an isolated git worktree for a code run so the development agent

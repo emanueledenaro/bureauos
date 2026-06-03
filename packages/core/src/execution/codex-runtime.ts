@@ -1,6 +1,7 @@
 import {
   CodexRuntimeAdapter,
   HostCodexRuntimeRunner,
+  ProviderCodegenRunner,
   type HostCodexCommand,
   type HostCommandExecutor,
   type RuntimeAdapter,
@@ -27,6 +28,15 @@ export interface BuildCodexRuntimeOptions {
   diff?: WorkspaceDiffInspector;
   /** Adapter id; defaults to `codex-host`. */
   id?: string;
+  /**
+   * LLM call used by {@link ProviderCodegenRunner} when
+   * `runtime.codex.codegen_mode === "provider"`. The providers package stays
+   * router-free: core builds this closure from the provider router + the
+   * development-role selection and passes it in. When the mode is `"provider"`
+   * but no closure is supplied, this falls back to the host (command) path so
+   * the runtime never silently does nothing.
+   */
+  providerGenerate?: (req: { system: string; prompt: string }) => Promise<string>;
 }
 
 export function buildCodexRuntimeFromConfig(
@@ -35,6 +45,24 @@ export function buildCodexRuntimeFromConfig(
 ): RuntimeAdapter | undefined {
   const codex = config?.runtime?.codex;
   if (!codex || !codex.enabled) return undefined;
+
+  const id = options.id ?? "codex-host";
+
+  // Provider-LLM codegen: ask the connected model to emit files directly. Only
+  // taken when the closure is actually supplied; otherwise fall through to the
+  // host (command) path so the runtime never silently produces nothing.
+  if (codex.codegen_mode === "provider" && options.providerGenerate) {
+    const providerRunner = new ProviderCodegenRunner({
+      generate: options.providerGenerate,
+      maxFiles: codex.max_changed_files,
+      maxOutputChars: codex.max_output_chars,
+      ...(options.diff ? { diff: options.diff } : {}),
+    });
+    return new CodexRuntimeAdapter(id, {
+      runner: providerRunner,
+      maxChangedFiles: codex.max_changed_files,
+    });
+  }
 
   // The codegen tool's own binary must be on the allow-list, so add it
   // automatically when codegen is configured (the owner shouldn't have to
@@ -55,7 +83,7 @@ export function buildCodexRuntimeFromConfig(
     ...(options.diff ? { diff: options.diff } : {}),
   });
 
-  return new CodexRuntimeAdapter(options.id ?? "codex-host", {
+  return new CodexRuntimeAdapter(id, {
     runner,
     maxChangedFiles: codex.max_changed_files,
   });

@@ -1,23 +1,38 @@
-import type { RuntimeAdapter } from "@bureauos/providers";
+import {
+  buildConfiguredProviderRouter,
+  type ProviderEnv,
+  type RuntimeAdapter,
+} from "@bureauos/providers";
 import type { ArtifactStore } from "../artifacts/store.js";
 import type { AuditLog } from "../audit/log.js";
 import type { BureauConfig } from "../config/schema.js";
 import type { PolicyEngine } from "../policy/engine.js";
 import type { ApprovalRegistry } from "../registries/approval.js";
+import { configureAgentProviderRouting, selectAgentModel } from "../agents/provider-routing.js";
 import { CapabilityUseService } from "../capabilities/usage.js";
-import { buildCodexRuntimeFromConfig } from "./codex-runtime.js";
+import { buildCodexRuntimeFromConfig, type BuildCodexRuntimeOptions } from "./codex-runtime.js";
 
 export interface DevelopmentExecutionDeps {
   artifacts: ArtifactStore;
   approvals: ApprovalRegistry;
   policy: PolicyEngine;
   audit: AuditLog;
+  /**
+   * Provider environment used to resolve the model provider when
+   * `runtime.codex.codegen_mode === "provider"`. Defaults to `process.env`.
+   */
+  env?: ProviderEnv;
 }
 
 export interface DevelopmentExecution {
   developmentRuntime?: RuntimeAdapter;
   capabilityUse?: CapabilityUseService;
 }
+
+// Generous output ceiling for a single provider codegen turn (a small site is
+// well under this). The runner also caps total bytes via maxOutputChars.
+const PROVIDER_CODEGEN_MAX_TOKENS = 8000;
+const PROVIDER_CODEGEN_TEMPERATURE = 0.2;
 
 /**
  * Build the development-execution wiring from config: the policy-gated Codex
@@ -27,14 +42,33 @@ export interface DevelopmentExecution {
  * without a gate. Returns `{}` when `runtime.codex.enabled` is false (the dev
  * agent then stays template-only).
  *
+ * When `runtime.codex.codegen_mode === "provider"`, this also resolves the
+ * connected model provider (development role) and passes a `generate` closure to
+ * {@link buildCodexRuntimeFromConfig} so the runtime asks the LLM to emit files
+ * directly (still behind the `CodexRuntimeAdapter` safety boundary). If no
+ * provider is available or selection fails, it behaves exactly like today
+ * (template-only / command path) rather than throwing — the providers package
+ * stays router-free; only this core seam knows about routing.
+ *
  * Single source of truth so the CLI run/dispatch paths cannot drift (SER-239).
  */
-export function buildDevelopmentExecution(
+export async function buildDevelopmentExecution(
   workspaceRoot: string,
   config: BureauConfig,
   deps: DevelopmentExecutionDeps,
-): DevelopmentExecution {
-  const developmentRuntime = buildCodexRuntimeFromConfig(config);
+): Promise<DevelopmentExecution> {
+  const codex = config.runtime?.codex;
+  if (!codex || !codex.enabled) return {};
+
+  const runtimeOptions: BuildCodexRuntimeOptions = {};
+  if (codex.codegen_mode === "provider") {
+    const providerGenerate = await buildProviderGenerate(workspaceRoot, config, deps.env);
+    if (providerGenerate) runtimeOptions.providerGenerate = providerGenerate;
+    // If no provider is available the runtime falls back to the host path; the
+    // dev agent then degrades to command/template behavior, never throwing.
+  }
+
+  const developmentRuntime = buildCodexRuntimeFromConfig(config, runtimeOptions);
   if (!developmentRuntime) return {};
   return {
     developmentRuntime,
@@ -46,4 +80,34 @@ export function buildDevelopmentExecution(
       audit: deps.audit,
     }),
   };
+}
+
+/**
+ * Resolve the development-role provider and wrap a `generate` closure for the
+ * provider codegen runner. Returns `undefined` (so the caller falls back to the
+ * command path) when no provider is configured/available or any step fails.
+ */
+async function buildProviderGenerate(
+  workspaceRoot: string,
+  config: BureauConfig,
+  env: ProviderEnv = process.env,
+): Promise<((req: { system: string; prompt: string }) => Promise<string>) | undefined> {
+  try {
+    const { router } = await buildConfiguredProviderRouter(workspaceRoot, env, config);
+    configureAgentProviderRouting(router, config, ["development"]);
+    const selection = await selectAgentModel(router, config, "development");
+    if (!selection) return undefined;
+    return async ({ system, prompt }) => {
+      const result = await selection.provider.generateText({
+        model: selection.model,
+        system,
+        prompt,
+        temperature: PROVIDER_CODEGEN_TEMPERATURE,
+        maxTokens: PROVIDER_CODEGEN_MAX_TOKENS,
+      });
+      return result.text;
+    };
+  } catch {
+    return undefined;
+  }
 }

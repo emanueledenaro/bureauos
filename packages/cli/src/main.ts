@@ -962,12 +962,16 @@ const handleRunNew: Handler = async (args) => {
   const audit = new AuditLog(workspacePaths(process.cwd()).auditLog);
   const policy = new PolicyEngine(config, approvals);
   const artifacts = new ArtifactStore(process.cwd());
-  const { developmentRuntime, capabilityUse } = buildDevelopmentExecution(process.cwd(), config, {
-    artifacts,
-    approvals,
-    policy,
-    audit,
-  });
+  const { developmentRuntime, capabilityUse } = await buildDevelopmentExecution(
+    process.cwd(),
+    config,
+    {
+      artifacts,
+      approvals,
+      policy,
+      audit,
+    },
+  );
   const dispatcher =
     flags.stub === true
       ? undefined
