@@ -128,7 +128,7 @@ test.describe("Operating Room portfolio modes", () => {
     await workspace.close();
   });
 
-  test("renders workload gantt kanban tabs and stable filters from local state", async ({
+  test("renders portfolio map workload timeline kanban tabs and stable filters from local state", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -143,14 +143,14 @@ test.describe("Operating Room portfolio modes", () => {
     await expect(main).toContainText("Development");
     await expectNoHorizontalOverflow(page);
 
-    await main.getByRole("tab", { name: /Gantt/i }).click();
-    await expect(main).toContainText("Timeline evidence");
+    await main.getByRole("tab", { name: /Activity timeline/i }).click();
     await expect(main).toContainText("Acme Website Refresh");
+    await expect(main).toContainText("Activity span");
     await expectNoHorizontalOverflow(page);
 
     await main.getByRole("tab", { name: /Kanban/i }).click();
     await expect(main).toContainText("In Progress");
-    await expect(main).toContainText("Feature");
+    await expect(main).toContainText("Acme Website Refresh");
     await expectNoHorizontalOverflow(page);
 
     await main.getByRole("button", { name: /Active only/i }).click();

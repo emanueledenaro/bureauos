@@ -331,11 +331,15 @@ function hostnameOf(authority: string): string {
 /** True when a hostname resolves to the local machine without DNS. */
 function isLoopbackHostname(hostname: string): boolean {
   if (!hostname) return false;
-  if (hostname === "localhost" || hostname === "::1" || hostname === "0:0:0:0:0:0:0:1") {
+  // URL.hostname returns IPv6 literals bracketed (e.g. "[::1]"); strip the
+  // brackets so the loopback check works for both the Host-header and Origin paths.
+  const normalized =
+    hostname.startsWith("[") && hostname.endsWith("]") ? hostname.slice(1, -1) : hostname;
+  if (normalized === "localhost" || normalized === "::1" || normalized === "0:0:0:0:0:0:0:1") {
     return true;
   }
   // Any address in 127.0.0.0/8 is loopback.
-  return /^127(?:\.\d{1,3}){3}$/.test(hostname);
+  return /^127(?:\.\d{1,3}){3}$/.test(normalized);
 }
 
 /** True when the `Host` header (authority) targets the loopback interface. */
