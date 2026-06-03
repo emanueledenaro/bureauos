@@ -5,7 +5,13 @@ import { ActionBanner } from "../dashboard/ActionBanner";
 import { StatusPill } from "../dashboard/StatusPill";
 import { MessageBubble } from "./MessageBubble";
 import { ReasoningBlock } from "./ReasoningBlock";
+import { LiveDelegationCard } from "./LiveDelegationCard";
 import { Composer } from "./Composer";
+import {
+  EMPTY_DELEGATION,
+  reduceDelegationEvent,
+  type LiveDelegation,
+} from "../../lib/live-delegation";
 import { buildTodayActions } from "../../lib/builders";
 import {
   lastOwnerMessage,
@@ -90,6 +96,8 @@ export function CoordinatorPanel({
   const [reasoningStatus, setReasoningStatus] = useState<
     Extract<CoordinatorChatStreamEvent, { type: "status" }>["status"] | undefined
   >();
+  const [reasoningLines, setReasoningLines] = useState<string[]>([]);
+  const [liveDelegation, setLiveDelegation] = useState<LiveDelegation>(EMPTY_DELEGATION);
   const attachmentsRef = useRef<ChatAttachment[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastScrollHeightRef = useRef(0);
@@ -174,6 +182,8 @@ export function CoordinatorPanel({
     setBusy(true);
     setError(undefined);
     setReasoningStatus("started");
+    setReasoningLines([]);
+    setLiveDelegation(EMPTY_DELEGATION);
     const controller = new AbortController();
     abortRef.current = controller;
 
@@ -207,6 +217,10 @@ export function CoordinatorPanel({
             {
               signal: controller.signal,
               onStatus: (status) => setReasoningStatus(status),
+              onReasoning: (text) => setReasoningLines((current) => [...current, text]),
+              onDelegation: (event) => setLiveDelegation((s) => reduceDelegationEvent(s, event)),
+              onRunStatus: (event) => setLiveDelegation((s) => reduceDelegationEvent(s, event)),
+              onArtifact: (event) => setLiveDelegation((s) => reduceDelegationEvent(s, event)),
               onDelta: (text) => {
                 streamedText += text;
                 setStreamingMessageId(assistantStreamId);
@@ -373,7 +387,12 @@ export function CoordinatorPanel({
           />
         ))}
 
-        {busy && !streamingMessageId ? <ReasoningBlock status={reasoningStatus} active /> : null}
+        {busy ? (
+          <div className="flex flex-col gap-2">
+            <ReasoningBlock status={reasoningStatus} active lines={reasoningLines} />
+            <LiveDelegationCard delegation={liveDelegation} />
+          </div>
+        ) : null}
 
         {error ? (
           <ActionBanner

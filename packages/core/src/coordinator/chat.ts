@@ -28,6 +28,7 @@ import {
   type CoordinatorMessageAttachment,
   type CoordinatorMessageRecord,
 } from "./messages.js";
+import { intakeToStreamEvents } from "./stream-events.js";
 import { coordinatorIdentityAnswer, coordinatorIdleAnswer } from "./idle.js";
 import { sanitizeCoordinatorVisibleText } from "./sanitize.js";
 import { CoordinatorToolRuntime } from "./tool-runtime.js";
@@ -67,6 +68,21 @@ export interface CoordinatorChatResult {
 
 export type CoordinatorChatStreamEvent =
   | { type: "status"; status: "started" | "provider_streaming" | "persisting" }
+  | { type: "reasoning"; text: string }
+  // Delegation/run/artifact events are derived from the completed intake result
+  // (see stream-events.ts), emitted before `final`. Phases beyond "dispatched"
+  // and the optional `detail` fields are reserved for the future
+  // during-execution emission refinement.
+  | {
+      type: "delegation";
+      phase: "planned" | "dispatched" | "running" | "completed" | "escalated";
+      label: string;
+      runId?: string;
+      agentRole?: string;
+      detail?: string;
+    }
+  | { type: "run_status"; runId: string; status: string; detail?: string }
+  | { type: "artifact"; artifactId: string; artifactType: string; status?: string }
   | { type: "delta"; text: string }
   | { type: "final"; result: CoordinatorChatResult };
 
@@ -1176,6 +1192,7 @@ export class CoordinatorChatService {
 
   async *stream(input: CoordinatorChatInput): AsyncGenerator<CoordinatorChatStreamEvent> {
     yield { type: "status", status: "started" };
+    yield { type: "reasoning", text: "Reading company context" };
     const message = input.message.trim();
     if (!message) throw new Error("coordinator chat requires a message");
     const attachments = input.attachments ?? [];
@@ -1186,7 +1203,11 @@ export class CoordinatorChatService {
       hasCoordinatorToolIntent(message, attachments) ||
       isLowContextMessage(message, attachments)
     ) {
+      yield { type: "reasoning", text: "Planning the work" };
       const result = await this.process(input);
+      if (result.result) {
+        for (const event of intakeToStreamEvents(result.result)) yield event;
+      }
       for (const text of visibleDeltas(result.coordinatorMessage.text)) {
         yield { type: "delta", text };
       }
@@ -1201,6 +1222,10 @@ export class CoordinatorChatService {
     });
     const recent = await this.messages.list(12);
     const memory = memoryMeta(packet);
+    for (const hit of packet.topHits.slice(0, 3)) {
+      yield { type: "reasoning", text: `Reviewed ${hit.path}` };
+    }
+    yield { type: "reasoning", text: "Drafting the reply" };
 
     let answer = "";
     let provider = providerMeta("unavailable", undefined, undefined, "no_valid_provider_route");

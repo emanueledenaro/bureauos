@@ -44,6 +44,23 @@ test.describe("Coordinator chat experience", () => {
     await composer.fill("Give me today's operating focus");
     await composer.press("Enter");
 
+    // The live reasoning transcript shows the coordinator's work while busy.
+    // "Coordinator work" / "Lavoro del coordinatore" is the static header of the
+    // ReasoningBlock component — it renders the entire time `busy` is true (from
+    // the first SSE event until the stream completes). Even in the no-provider
+    // deterministic offline path the turn involves real async I/O (memory
+    // assembly, message persistence), so this element is visible for long enough
+    // that Playwright's polling reliably catches it.
+    //
+    // NOTE: if this assertion proves flaky in CI (e.g. on a very fast machine
+    // where the entire stream completes before Playwright polls), the durable
+    // signal is the Copy button below — and the core unit tests in chat.test.ts
+    // already assert that `reasoning` events are emitted in the generator. If you
+    // observe flakiness, remove the toBeVisible assertion and keep the comment.
+    await expect(page.getByText(/Coordinator work|Lavoro del coordinatore/i).first()).toBeVisible({
+      timeout: 15_000,
+    });
+
     // A coordinator reply always renders (deterministic fallback even without a
     // live model). Its action row (Copy button) becomes visible once the turn is
     // persisted and the streaming message is replaced by the final record.

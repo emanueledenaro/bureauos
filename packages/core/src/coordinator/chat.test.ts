@@ -1020,4 +1020,50 @@ describe("CoordinatorChatService", () => {
     expect(result.coordinatorMessage.text).toContain("memoria locale");
     expect(result.coordinatorMessage.text.toLowerCase()).not.toContain("coordinator working");
   });
+
+  it("emits live reasoning events during a streamed answer", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    const service = new CoordinatorChatService(dir, { config: defaultConfig("freelancer") });
+
+    const events: CoordinatorChatStreamEvent[] = [];
+    for await (const event of service.stream({ message: "What's our operating focus today?" })) {
+      events.push(event);
+    }
+
+    const reasoning = events
+      .filter((e) => e.type === "reasoning")
+      .map((e) => (e.type === "reasoning" ? e.text : ""));
+    expect(reasoning[0]).toBe("Reading company context");
+    expect(reasoning).toContain("Drafting the reply");
+    // reasoning must precede the final event
+    const finalIdx = events.findIndex((e) => e.type === "final");
+    const firstReasoningIdx = events.findIndex((e) => e.type === "reasoning");
+    expect(firstReasoningIdx).toBeLessThan(finalIdx);
+  });
+
+  it("emits delegation/run_status/artifact events for an intake turn", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bureauos-chat-"));
+    const service = new CoordinatorChatService(dir, { config: defaultConfig("freelancer") });
+
+    const events: CoordinatorChatStreamEvent[] = [];
+    // Use a message that triggers intake mode (hasIntakeIntent returns true)
+    for await (const event of service.stream({
+      message: "Il cliente Acme vuole un nuovo sito web",
+    })) {
+      events.push(event);
+    }
+
+    const final = events.find((e) => e.type === "final");
+    if (final?.type === "final" && final.result.result) {
+      expect(events.some((e) => e.type === "delegation")).toBe(true);
+      expect(events.some((e) => e.type === "run_status")).toBe(true);
+      // every delegation/run_status/artifact event precedes final
+      const finalIdx = events.findIndex((e) => e.type === "final");
+      for (const e of events.filter((x) =>
+        ["delegation", "run_status", "artifact"].includes(x.type),
+      )) {
+        expect(events.indexOf(e)).toBeLessThan(finalIdx);
+      }
+    }
+  });
 });

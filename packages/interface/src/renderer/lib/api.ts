@@ -497,11 +497,26 @@ export interface CoordinatorChatResult {
 }
 export type CoordinatorChatStreamEvent =
   | { type: "status"; status: "started" | "provider_streaming" | "persisting" }
+  | { type: "reasoning"; text: string }
+  | {
+      type: "delegation";
+      phase: "planned" | "dispatched" | "running" | "completed" | "escalated";
+      label: string;
+      runId?: string;
+      agentRole?: string;
+      detail?: string;
+    }
+  | { type: "run_status"; runId: string; status: string; detail?: string }
+  | { type: "artifact"; artifactId: string; artifactType: string; status?: string }
   | { type: "delta"; text: string }
   | { type: "final"; result: CoordinatorChatResult }
   | { type: "error"; error: string };
 export interface CoordinatorChatStreamHandlers {
   onStatus?: (status: Extract<CoordinatorChatStreamEvent, { type: "status" }>["status"]) => void;
+  onReasoning?: (text: string) => void;
+  onDelegation?: (event: Extract<CoordinatorChatStreamEvent, { type: "delegation" }>) => void;
+  onRunStatus?: (event: Extract<CoordinatorChatStreamEvent, { type: "run_status" }>) => void;
+  onArtifact?: (event: Extract<CoordinatorChatStreamEvent, { type: "artifact" }>) => void;
   onDelta?: (text: string) => void;
   /** Optional external cancellation (composer Stop). Aborting ends the stream cleanly. */
   signal?: AbortSignal;
@@ -1020,6 +1035,10 @@ export const Api = {
           if (!parsed) continue;
           const event = parsed.data as CoordinatorChatStreamEvent;
           if (event.type === "status") handlers.onStatus?.(event.status);
+          if (event.type === "reasoning") handlers.onReasoning?.(event.text);
+          if (event.type === "delegation") handlers.onDelegation?.(event);
+          if (event.type === "run_status") handlers.onRunStatus?.(event);
+          if (event.type === "artifact") handlers.onArtifact?.(event);
           if (event.type === "delta") handlers.onDelta?.(event.text);
           if (event.type === "final") finalResult = event.result;
           if (event.type === "error") throw new Error(event.error);
