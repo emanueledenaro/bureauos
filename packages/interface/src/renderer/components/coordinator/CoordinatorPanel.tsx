@@ -97,7 +97,7 @@ export function CoordinatorPanel({
   const [modelOverride, setModelOverride] = useState<CoordinatorModelOverride | undefined>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
-  const [streamingMessageId, setStreamingMessageId] = useState<string | undefined>();
+  const [, setStreamingMessageId] = useState<string | undefined>();
   const abortRef = useRef<AbortController | undefined>(undefined);
   const [reasoningStatus, setReasoningStatus] = useState<
     Extract<CoordinatorChatStreamEvent, { type: "status" }>["status"] | undefined
