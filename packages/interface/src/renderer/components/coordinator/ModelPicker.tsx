@@ -29,14 +29,14 @@ export function ModelPicker({
   // Re-sync the displayed label after an external provider refresh (e.g. a connect in Settings),
   // but only when no session override has been chosen (label still matches the default).
   useEffect(() => {
+    // Derive from `providers` inside the effect so it's the only dependency.
     const defaultLabel = activeModelLabel(providers);
+    const opts = buildModelOptions(providers);
     // Only reset if the label is currently showing the old default (not a chosen override).
     setLabel((current) => {
-      // If options still contain an option with exactly the current label, keep it.
-      const stillValid = options.some((o) => `${o.providerName} · ${o.model}` === current);
+      const stillValid = opts.some((o) => `${o.providerName} · ${o.model}` === current);
       return stillValid ? current : defaultLabel;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [providers]);
 
   const choose = (provider: string, model: string, optionLabel: string): void => {
