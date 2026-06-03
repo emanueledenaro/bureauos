@@ -25,6 +25,7 @@ import {
   type CoordinatorChatStreamEvent,
   type CoordinatorChatStreamHandlers,
   type CoordinatorMessageRecord,
+  type CoordinatorModelOverride,
 } from "../../lib/api";
 import type { ChatAttachment, DashboardState } from "../../lib/types";
 import { useT } from "../../i18n/i18n";
@@ -73,11 +74,13 @@ export function CoordinatorPanel({
   onMessage: (
     message: string,
     attachments?: CoordinatorAttachmentInput[],
+    modelOverride?: CoordinatorModelOverride,
   ) => Promise<CoordinatorChatResult>;
   onStreamMessage?: (
     message: string,
     attachments: CoordinatorAttachmentInput[] | undefined,
     handlers: CoordinatorChatStreamHandlers,
+    modelOverride?: CoordinatorModelOverride,
   ) => Promise<CoordinatorChatResult>;
   /**
    * Optional header control rendered next to the status pills. The coordinator
@@ -89,6 +92,7 @@ export function CoordinatorPanel({
   const [messages, setMessages] = useState<CoordinatorMessageRecord[]>([]);
   const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const [modelOverride, setModelOverride] = useState<CoordinatorModelOverride | undefined>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [streamingMessageId, setStreamingMessageId] = useState<string | undefined>();
@@ -239,10 +243,12 @@ export function CoordinatorPanel({
                 });
               },
             },
+            modelOverride,
           )
         : await onMessage(
             messageText || t("coordinatorPanel.attachedFiles", "Attached files"),
             payload,
+            modelOverride,
           );
       setMessages((current) => [
         ...current.filter(
@@ -414,6 +420,7 @@ export function CoordinatorPanel({
         onStop={stop}
         busy={busy}
         providers={state.providers}
+        onModelSelect={setModelOverride}
         placeholder={t(
           "coordinatorPanel.composerPlaceholder",
           "Message a decision, client, project, or priority...",

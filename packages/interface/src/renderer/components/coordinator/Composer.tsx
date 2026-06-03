@@ -22,6 +22,7 @@ export function Composer({
   busy = false,
   placeholder,
   providers,
+  onModelSelect,
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -34,6 +35,8 @@ export function Composer({
   placeholder?: string;
   // Intentionally optional only until Task 17 wires `state.providers` from the panel.
   providers?: DashboardState["providers"];
+  /** Called when the user picks a provider/model in the ModelPicker (session override). */
+  onModelSelect?: (override: { provider: string; model: string } | undefined) => void;
 }) {
   const t = useT();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -122,7 +125,7 @@ export function Composer({
               </TooltipTrigger>
               <TooltipContent>{t("composer.attachFiles", "Attach files")}</TooltipContent>
             </Tooltip>
-            <ModelPicker providers={providers ?? []} />
+            <ModelPicker providers={providers ?? []} onSelect={onModelSelect} />
           </div>
 
           {busy && onStop ? (

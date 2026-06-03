@@ -42,6 +42,7 @@ import {
   type CoordinatorAttachmentInput,
   type CoordinatorChatResult,
   type CoordinatorChatStreamHandlers,
+  type CoordinatorModelOverride,
   type GrowthContentPipelineResult,
   type GrowthReviewResult,
   type MemoryTriggerResult,
@@ -132,10 +133,12 @@ export function App() {
   const onCoordinatorMessage = async (
     message: string,
     attachments?: CoordinatorAttachmentInput[],
+    modelOverride?: CoordinatorModelOverride,
   ): Promise<CoordinatorChatResult> => {
     const result = await Api.coordinatorChat({
       message,
       ...(attachments?.length ? { attachments } : {}),
+      ...(modelOverride ? { modelOverride } : {}),
     });
     await refresh();
     return result;
@@ -145,11 +148,13 @@ export function App() {
     message: string,
     attachments: CoordinatorAttachmentInput[] | undefined,
     handlers: CoordinatorChatStreamHandlers,
+    modelOverride?: CoordinatorModelOverride,
   ): Promise<CoordinatorChatResult> => {
     const result = await Api.coordinatorChatStream(
       {
         message,
         ...(attachments?.length ? { attachments } : {}),
+        ...(modelOverride ? { modelOverride } : {}),
       },
       handlers,
     );
@@ -459,11 +464,13 @@ function DashboardLayout({
   onCoordinatorMessage: (
     message: string,
     attachments?: CoordinatorAttachmentInput[],
+    modelOverride?: CoordinatorModelOverride,
   ) => Promise<CoordinatorChatResult>;
   onCoordinatorMessageStream: (
     message: string,
     attachments: CoordinatorAttachmentInput[] | undefined,
     handlers: CoordinatorChatStreamHandlers,
+    modelOverride?: CoordinatorModelOverride,
   ) => Promise<CoordinatorChatResult>;
   onGenerateReport: () => Promise<BusinessReportResult>;
   onProviderLogin: (input: {

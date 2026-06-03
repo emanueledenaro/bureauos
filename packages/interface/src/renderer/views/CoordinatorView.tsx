@@ -31,6 +31,7 @@ import type {
   CoordinatorAttachmentInput,
   CoordinatorChatResult,
   CoordinatorChatStreamHandlers,
+  CoordinatorModelOverride,
 } from "../lib/api";
 import type { AdaptiveMode, DashboardState } from "../lib/types";
 
@@ -53,11 +54,13 @@ export function CoordinatorView({
   onMessage: (
     message: string,
     attachments?: CoordinatorAttachmentInput[],
+    modelOverride?: CoordinatorModelOverride,
   ) => Promise<CoordinatorChatResult>;
   onStreamMessage?: (
     message: string,
     attachments: CoordinatorAttachmentInput[] | undefined,
     handlers: CoordinatorChatStreamHandlers,
+    modelOverride?: CoordinatorModelOverride,
   ) => Promise<CoordinatorChatResult>;
   onModeChange: (mode: AdaptiveMode) => void;
 }) {
