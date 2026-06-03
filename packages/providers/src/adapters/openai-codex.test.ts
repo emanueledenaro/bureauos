@@ -73,6 +73,35 @@ describe("OpenAICodexOAuthAdapter", () => {
     expect(validation.ok).toBe(true);
   });
 
+  it("retries with the default model when the backend rejects the model as unsupported", async () => {
+    const bodies: Array<{ model?: string }> = [];
+    let call = 0;
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      call += 1;
+      bodies.push(JSON.parse(String(init?.body)) as { model?: string });
+      if (call === 1) {
+        return new Response(
+          JSON.stringify({
+            detail:
+              "The 'gpt-5.3-codex' model is not supported when using Codex with a ChatGPT account.",
+          }),
+          { status: 400, headers: { "content-type": "application/json" } },
+        );
+      }
+      return sseResponse("ok from default");
+    };
+    const adapter = new OpenAICodexOAuthAdapter("openai-codex-test", {
+      accessToken: accessToken(),
+      fetch: fetchImpl,
+    });
+
+    const result = await adapter.generateText({ model: "gpt-5.3-codex", prompt: "hi" });
+    expect(result.text).toBe("ok from default");
+    expect(call).toBe(2);
+    expect(bodies[0]?.model).toBe("gpt-5.3-codex");
+    expect(bodies[1]?.model).toBe("gpt-5.5");
+  });
+
   it("calls the ChatGPT Codex backend with OAuth headers and no OpenAI API-key fallback", async () => {
     const previousApiKey = process.env["OPENAI_API_KEY"];
     process.env["OPENAI_API_KEY"] = "sk-should-not-be-used";

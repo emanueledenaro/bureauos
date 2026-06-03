@@ -12,6 +12,7 @@ import {
 import {
   listOpenAICodexOAuthModelIDs,
   normalizeOpenAICodexOAuthModel,
+  OPENAI_CODEX_OAUTH_DEFAULT_MODEL,
 } from "../openai-codex-models.js";
 
 const CODEX_RESPONSES_URL = "https://chatgpt.com/backend-api/codex/responses";
@@ -364,11 +365,28 @@ export class OpenAICodexOAuthAdapter implements ProviderAdapter {
       throw new OpenAICodexOAuthError("OpenAI Codex OAuth token is missing ChatGPT account id");
     }
     const fetchImpl = this.options.fetch ?? fetch;
-    const response = await fetchImpl(CODEX_RESPONSES_URL, {
-      method: "POST",
-      headers: headers(accessToken, accountId),
-      body: JSON.stringify(buildRequestBody(options)),
-    });
+    const send = (model: string): Promise<Response> =>
+      fetchImpl(CODEX_RESPONSES_URL, {
+        method: "POST",
+        headers: headers(accessToken, accountId),
+        body: JSON.stringify(buildRequestBody({ ...options, model })),
+      });
+
+    const requested = normalizeOpenAICodexOAuthModel(options.model);
+    let response = await send(requested);
+    // The ChatGPT-account Codex backend rejects some models (notably the
+    // "-codex" variants) with HTTP 400 "... model is not supported when using
+    // Codex with a ChatGPT account". The default model is always a ChatGPT-
+    // account-supported chat model, so retry once with it rather than failing
+    // the whole turn over a model the router happened to pick (SER-203).
+    if (response.status === 400 && requested !== OPENAI_CODEX_OAUTH_DEFAULT_MODEL) {
+      const text = await response.text().catch(() => "");
+      if (/not supported/i.test(text)) {
+        response = await send(OPENAI_CODEX_OAUTH_DEFAULT_MODEL);
+      } else {
+        throw new OpenAICodexOAuthError(`OpenAI Codex backend request failed: 400 ${text}`.trim());
+      }
+    }
     if (!response.ok) {
       const text = await response.text().catch(() => "");
       throw new OpenAICodexOAuthError(
