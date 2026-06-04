@@ -126,9 +126,7 @@ export async function dispatchRun(
       // (runtime.codex.allow_missing_tests). Threaded into the QA agent so it
       // can soft-pass the missing-test gate; default false preserves the hard
       // gate (SER bugfix: owner build blocked by QA when the project has no tests).
-      ...(deps.config?.runtime?.codex?.allow_missing_tests
-        ? { allowMissingTests: true }
-        : {}),
+      ...(deps.config?.runtime?.codex?.allow_missing_tests ? { allowMissingTests: true } : {}),
     });
   const memory = deps.memory ?? new MemoryBoundaryService(input.workspaceRoot);
   const pipeline = pipelineForRunType(input.run.type);

@@ -27,10 +27,7 @@ import { PolicyExplainService } from "../policy/explain.js";
 import { RunEngine } from "../runs/engine.js";
 import { AGENT_ROLES } from "../agents/roles.js";
 import type { CoordinatorAttachmentInput } from "../coordinator/intake.js";
-import {
-  CoordinatorChatService,
-  type CoordinatorBuildDispatcher,
-} from "../coordinator/chat.js";
+import { CoordinatorChatService, type CoordinatorBuildDispatcher } from "../coordinator/chat.js";
 import { parseModelOverride } from "../coordinator/model-override.js";
 import { CoordinatorMessageStore } from "../coordinator/messages.js";
 import { CoordinatorToolRuntime } from "../coordinator/tool-runtime.js";
@@ -493,10 +490,7 @@ const TERMINAL_RUN_STATUSES: ReadonlySet<string> = new Set(["completed", "failed
  */
 export interface BuildDispatcherSeams {
   runs?: Pick<RunEngine, "list">;
-  runProjectDispatch?: (input: {
-    projectSlug: string;
-    scope: string;
-  }) => Promise<unknown>;
+  runProjectDispatch?: (input: { projectSlug: string; scope: string }) => Promise<unknown>;
 }
 
 /**
